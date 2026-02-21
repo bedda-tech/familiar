@@ -34,6 +34,9 @@ export interface Channel {
   /** Send a simple text reply */
   sendText(chatId: string, text: string, replyContext: unknown): Promise<void>;
 
+  /** Send typing indicator, repeating every 4s. Returns a stop function. */
+  startTyping(chatId: string): () => void;
+
   /** Start the channel */
   start(): Promise<void>;
 

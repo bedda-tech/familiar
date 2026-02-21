@@ -107,14 +107,22 @@ export class Bridge {
       },
     };
 
+    // Show typing indicator while Claude is processing
+    const stopTyping = this.channel.startTyping(msg.chatId);
+
     // Stream response from Claude
     let fullText = "";
     let toolsUsed: string[] = [];
+    let typingStopped = false;
 
     try {
       for await (const event of this.claude.send(request)) {
         switch (event.type) {
           case "text_delta":
+            if (!typingStopped) {
+              stopTyping();
+              typingStopped = true;
+            }
             fullText += event.text;
             await appendToDraft(draft, draftCtx, event.text);
             break;
@@ -166,6 +174,7 @@ export class Bridge {
         }
       }
     } catch (e) {
+      stopTyping();
       log.error({ err: e, chatId: msg.chatId }, "error processing message");
       const errorText = `Error: ${e instanceof Error ? e.message : "Unknown error"}\n\nTry /new to start a fresh session.`;
       const chunks = chunkMessage(errorText);

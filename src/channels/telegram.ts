@@ -95,6 +95,24 @@ export class TelegramChannel implements Channel {
     }
   }
 
+  startTyping(chatId: string): () => void {
+    let active = true;
+
+    const sendAction = () => {
+      if (!active) return;
+      this.bot.api.sendChatAction(Number(chatId), "typing").catch(() => {});
+    };
+
+    // Send immediately, then repeat every 4s (Telegram typing expires after ~5s)
+    sendAction();
+    const interval = setInterval(sendAction, 4000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }
+
   async start(): Promise<void> {
     log.info("starting Telegram bot");
     this.bot.start({
