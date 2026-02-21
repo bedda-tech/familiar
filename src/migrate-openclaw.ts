@@ -50,6 +50,16 @@ interface OpenClawConfig {
       model?: { primary?: string };
     }>;
   };
+  media?: {
+    audio?: {
+      enabled?: boolean;
+      models?: Array<{
+        provider?: string;
+        model?: string;
+      }>;
+    };
+  };
+  env?: Record<string, string>;
 }
 
 interface OpenClawCronFile {
@@ -369,37 +379,64 @@ export async function migrateFromOpenClaw(): Promise<void> {
     }
   }
 
-  // 5. Create Familiar config
+  // 5. Extract OpenAI API key if available
+  const openaiKey = oc.config.env?.OPENAI_API_KEY;
+  const whisperModel = oc.config.media?.audio?.models?.[0]?.model;
+  if (openaiKey) {
+    console.log("\nOpenAI API key found — enabling voice transcription");
+  }
+
+  // 6. Extract failover chain if configured
+  const fallbacks = oc.config.agents?.defaults?.model?.fallbacks;
+  const failoverChain = fallbacks?.length
+    ? [model, ...fallbacks.map(mapModel)]
+    : undefined;
+  if (failoverChain) {
+    console.log(`Failover chain: ${failoverChain.join(" -> ")}`);
+  }
+
+  // 7. Create Familiar config
   const configDir = getConfigDir();
   mkdirSync(configDir, { recursive: true });
+
+  const claudeConfig: Record<string, unknown> = {
+    workingDirectory: workspace,
+    model,
+    systemPrompt,
+    allowedTools: [
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+    ],
+    maxTurns: 25,
+  };
+  if (failoverChain) {
+    claudeConfig.failoverChain = failoverChain;
+  }
 
   const familiarConfig: Record<string, unknown> = {
     telegram: {
       botToken: botToken ?? "YOUR_BOT_TOKEN_HERE",
       allowedUsers: allowedUsers.length > 0 ? allowedUsers : [0],
     },
-    claude: {
-      workingDirectory: workspace,
-      model,
-      systemPrompt,
-      allowedTools: [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "WebFetch",
-        "WebSearch",
-      ],
-      maxTurns: 25,
-    },
+    claude: claudeConfig,
     sessions: {
       inactivityTimeout: "24h",
       rotateAfterMessages: 200,
     },
     ...(cronJobs.length > 0 && {
       cron: { jobs: cronJobs },
+    }),
+    ...(openaiKey && {
+      openai: {
+        apiKey: openaiKey,
+        ...(whisperModel && { whisperModel }),
+      },
     }),
     log: {
       level: "info",
@@ -437,8 +474,14 @@ export async function migrateFromOpenClaw(): Promise<void> {
   console.log(`  + CLAUDE.md at ${workspace}`);
   console.log(`  + Telegram bot token and user allowlist`);
   console.log(`  + Model selection (${model})`);
+  if (failoverChain) {
+    console.log(`  + Model failover chain (${failoverChain.join(" -> ")})`);
+  }
   if (cronJobs.length > 0) {
     console.log(`  + ${cronJobs.length} cron job(s)`);
+  }
+  if (openaiKey) {
+    console.log(`  + OpenAI API key (voice transcription enabled)`);
   }
   console.log(`  + All existing governing docs left untouched`);
 
@@ -448,7 +491,6 @@ export async function migrateFromOpenClaw(): Promise<void> {
   }
   console.log("  - OpenClaw's vector memory DB — not used by Familiar");
   console.log("  - Skills / plugins — use Claude Code MCP tools instead");
-  console.log("  - Webhook endpoints — planned feature");
   console.log("  - Sub-agent configs — planned feature");
   console.log("  - Browser profiles — planned feature");
 

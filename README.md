@@ -19,14 +19,19 @@ Telegram  ──>  Familiar (bridge)  ──>  claude -p --resume <session>
 
 - **Streaming responses** — Edit-in-place message streaming, just like ChatGPT
 - **Session persistence** — SQLite-backed sessions survive restarts, auto-rotate on inactivity or message count
-- **Thinking blocks** — Extended reasoning streamed as italicized messages before the response
-- **Typing indicators** — Bot shows "typing..." while Claude is processing
+- **Thinking blocks** — Extended reasoning streamed as italicized messages before the response, toggleable via `/thinking`
+- **Typing indicators** — Bot shows "typing..." while Claude is processing, including during tool execution
+- **Tool visibility** — Tool calls shown in Telegram as inline code blocks so you can see what Claude is doing
+- **Voice transcription** — Voice messages transcribed via OpenAI Whisper API before sending to Claude
+- **Cost tracking** — `/cost` shows session, today, 24h, and all-time usage costs
+- **Model failover** — Automatic failover chain (opus → sonnet → haiku) when a model errors before producing output
 - **Cron scheduler** — Schedule recurring jobs with cron expressions, timezone support, and isolated execution
 - **Webhooks** — HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
 - **Runtime model switching** — `/model opus`, `/model sonnet`, `/model haiku` — switch without restart
 - **Config hot-reload** — Edit config.json and changes apply live (model, log level)
+- **File responses** — Send photos and documents back to user from Claude via `sendFile`
 - **TUI mode** — `familiar tui` opens the full Claude Code TUI, resuming the same Telegram session
-- **OpenClaw migration** — `familiar migrate-from-openclaw` migrates config, cron jobs, and workspace
+- **OpenClaw migration** — `familiar migrate-from-openclaw` migrates config, cron jobs, OpenAI key, failover chain
 - **Governing docs** — Personality system via SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md
 - **First-run onboarding** — BOOTSTRAP.md walks new users through naming and configuring their familiar
 
@@ -167,8 +172,11 @@ If `familiar install-service` creates a service that can't find `claude`:
 | `claude.systemPrompt` | string | *(generic)* | System prompt prepended to every `claude -p` invocation |
 | `claude.allowedTools` | string[] | *(see below)* | Claude Code tools to enable via `--allowedTools` |
 | `claude.maxTurns` | number | `25` | Max agentic turns per message via `--max-turns` |
+| `claude.failoverChain` | string[] | `["opus","sonnet","haiku"]` | Model failover order — tries next on error |
 | `sessions.inactivityTimeout` | string | `"24h"` | Reset session after this much inactivity. Format: `"30m"`, `"24h"`, `"7d"` |
 | `sessions.rotateAfterMessages` | number | `200` | Start fresh session after this many messages |
+| `openai.apiKey` | string | — | OpenAI API key for Whisper voice transcription |
+| `openai.whisperModel` | string | `"whisper-1"` | Whisper model to use |
 | `log.level` | string | `"info"` | Log level: `"debug"`, `"info"`, `"warn"`, `"error"` |
 
 ### Cron Jobs
@@ -260,6 +268,9 @@ Opens the full Claude Code interactive TUI, resuming the same session that Teleg
 - `/model` — Show current model
 - `/model opus` / `/model sonnet` / `/model haiku` — Switch model at runtime
 - `/model reset` — Revert to config default
+- `/cost` — Show usage costs (session, today, 24h, all time)
+- `/thinking on` / `/thinking off` — Toggle thinking block display
+- Send a voice message — auto-transcribed via Whisper before processing
 
 ## Workspace & Governing Docs
 

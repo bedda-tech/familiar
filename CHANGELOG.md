@@ -2,6 +2,25 @@
 
 All notable changes to Familiar are documented here.
 
+## [0.3.0] — 2026-02-22
+
+### Added
+- **Voice transcription** — Voice messages auto-transcribed via OpenAI Whisper API (with ffmpeg .ogg→.mp3 conversion). Transcription shown to user before processing. Falls back to sending audio directly on failure. ([#4](https://github.com/bedda-tech/familiar/issues/4))
+- **Cost tracking** — `/cost` command shows session, today, 24h, and all-time usage costs from SQLite message_log. ([#9](https://github.com/bedda-tech/familiar/issues/9))
+- **Model failover chain** — Automatic retry with next model when primary fails before producing content. Default chain: opus → sonnet → haiku. Configurable via `claude.failoverChain`. ([#19](https://github.com/bedda-tech/familiar/issues/19))
+- **Thinking mode control** — `/thinking on` / `/thinking off` to toggle thinking block display. ([#34](https://github.com/bedda-tech/familiar/issues/34))
+- **Tool visibility** — Tool calls shown in Telegram as inline code blocks. Typing indicator restarts during tool execution.
+- **File responses** — `sendFile` added to Channel interface for sending photos/documents back to user. ([#26](https://github.com/bedda-tech/familiar/issues/26))
+- **OpenAI config section** — `openai.apiKey` and `openai.whisperModel` for Whisper integration.
+
+### Changed
+- **Thinking blocks now stream in real-time** via `content_block_delta` events instead of waiting for the final `assistant` event.
+- **Markdown escaping** fixed for thinking blocks — was using MarkdownV2 escape with Markdown v1 parser.
+- **Migration script** now migrates OpenAI API key, Whisper model, and model failover chain from OpenClaw config.
+
+### Dependencies
+- No new runtime dependencies — Whisper uses `fetch` (built-in) and `ffmpeg` (system).
+
 ## [0.2.0] — 2026-02-21
 
 ### Added
