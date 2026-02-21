@@ -35,6 +35,8 @@ export interface CronJobEntry {
   workingDirectory?: string;
   deliverTo?: string;
   announce?: boolean;
+  /** Regex pattern — if the result text matches, suppress delivery (useful for HEARTBEAT_OK) */
+  suppressPattern?: string;
   enabled?: boolean;
 }
 

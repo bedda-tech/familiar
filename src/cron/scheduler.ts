@@ -217,12 +217,25 @@ export class CronScheduler {
         if (next) this.updateNextRun(config.id, next.toISOString());
       }
 
-      // Deliver result
+      // Deliver result (unless suppressed by pattern match)
       if (config.announce !== false && this.deliveryHandler) {
-        try {
-          await this.deliveryHandler(config.id, result, config);
-        } catch (e) {
-          log.error({ jobId: config.id, err: e }, "delivery failed");
+        let suppressed = false;
+        if (config.suppressPattern) {
+          try {
+            suppressed = new RegExp(config.suppressPattern).test(result.text);
+          } catch {
+            log.warn({ jobId: config.id, pattern: config.suppressPattern }, "invalid suppressPattern");
+          }
+        }
+
+        if (suppressed) {
+          log.info({ jobId: config.id }, "delivery suppressed by pattern match");
+        } else {
+          try {
+            await this.deliveryHandler(config.id, result, config);
+          } catch (e) {
+            log.error({ jobId: config.id, err: e }, "delivery failed");
+          }
         }
       }
 
