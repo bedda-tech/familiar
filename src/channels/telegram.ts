@@ -95,6 +95,31 @@ export class TelegramChannel implements Channel {
     }
   }
 
+  async sendFile(chatId: string, filePath: string, caption?: string): Promise<void> {
+    try {
+      const { createReadStream } = await import("node:fs");
+      const { InputFile } = await import("grammy");
+      const stream = createReadStream(filePath);
+      const inputFile = new InputFile(stream, filePath.split("/").pop());
+
+      // Detect if image by extension
+      const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+      const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
+
+      if (imageExts.includes(ext)) {
+        await this.bot.api.sendPhoto(Number(chatId), inputFile, {
+          caption: caption ?? undefined,
+        });
+      } else {
+        await this.bot.api.sendDocument(Number(chatId), inputFile, {
+          caption: caption ?? undefined,
+        });
+      }
+    } catch (e) {
+      log.error({ err: e, chatId, filePath }, "failed to send file");
+    }
+  }
+
   async sendDirectMessage(chatId: string, text: string): Promise<void> {
     const chunks = this.splitForTelegram(text);
     for (const chunk of chunks) {
@@ -210,6 +235,22 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    this.bot.command("cost", async (ctx) => {
+      const handler = this.commandHandlers.get("cost");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
+    this.bot.command("thinking", async (ctx) => {
+      const handler = this.commandHandlers.get("thinking");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
@@ -217,7 +258,9 @@ export class TelegramChannel implements Channel {
         "Commands:\n" +
         "/new — Start a fresh conversation\n" +
         "/status — Session info\n" +
-        "/model — Switch model",
+        "/model — Switch model\n" +
+        "/cost — Usage costs\n" +
+        "/thinking — Toggle thinking display",
       );
     });
 

@@ -40,6 +40,9 @@ export interface Channel {
   /** Send a message directly to a chat (no reply context needed). Used by cron, etc. */
   sendDirectMessage(chatId: string, text: string): Promise<void>;
 
+  /** Send a file to a chat */
+  sendFile(chatId: string, filePath: string, caption?: string): Promise<void>;
+
   /** Start the channel */
   start(): Promise<void>;
 

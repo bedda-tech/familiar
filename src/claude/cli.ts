@@ -65,6 +65,11 @@ export class ClaudeCLI {
     let result: BackendResult | null = null;
     let accumulatedText = "";
 
+    // Track thinking blocks being streamed via content_block_delta
+    const thinkingBlocks = new Set<number>();
+    let thinkingBuffer = "";
+    const yieldedThinking = new Set<string>(); // Dedup against assistant event
+
     for await (const line of rl) {
       if (!line.trim()) continue;
 
@@ -81,12 +86,26 @@ export class ClaudeCLI {
           if (event.delta?.type === "text_delta" && event.delta.text) {
             accumulatedText += event.delta.text;
             yield { type: "text_delta", text: event.delta.text };
+          } else if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
+            thinkingBuffer += event.delta.thinking;
           }
           break;
 
         case "content_block_start":
           if (event.content_block?.type === "tool_use" && event.content_block.name) {
             yield { type: "tool_use", name: event.content_block.name };
+          } else if (event.content_block?.type === "thinking") {
+            thinkingBlocks.add(event.index);
+            thinkingBuffer = "";
+          }
+          break;
+
+        case "content_block_stop":
+          if (thinkingBlocks.has(event.index) && thinkingBuffer.length > 0) {
+            yield { type: "thinking", text: thinkingBuffer };
+            yieldedThinking.add(thinkingBuffer.slice(0, 100));
+            thinkingBlocks.delete(event.index);
+            thinkingBuffer = "";
           }
           break;
 
@@ -95,7 +114,10 @@ export class ClaudeCLI {
           if (event.message?.content) {
             for (const block of event.message.content) {
               if (block.type === "thinking" && block.thinking) {
-                yield { type: "thinking", text: block.thinking };
+                // Only yield if we didn't already stream this thinking block
+                if (!yieldedThinking.has(block.thinking.slice(0, 100))) {
+                  yield { type: "thinking", text: block.thinking };
+                }
               } else if (block.type === "text" && block.text) {
                 // Only yield if we haven't already streamed this text via deltas
                 if (!accumulatedText.includes(block.text)) {

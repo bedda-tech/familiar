@@ -13,6 +13,8 @@ import { getLogger } from "./util/logger.js";
 const log = getLogger("bridge");
 
 export class Bridge {
+  private showThinking = true;
+
   constructor(
     private channel: Channel,
     private claude: ClaudeCLI,
@@ -84,6 +86,40 @@ export class Bridge {
       }
     });
 
+    // Handle /cost — show usage costs
+    this.channel.onCommand("cost", async (msg) => {
+      const summary = this.sessions.getCostSummary(msg.chatId);
+      const fmt = (n: number) => `$${n.toFixed(4)}`;
+      const text = [
+        `*Usage Costs*`,
+        ``,
+        `Session: ${fmt(summary.session.cost)} (${summary.session.messages} msgs)`,
+        `Today: ${fmt(summary.today.cost)} (${summary.today.messages} msgs)`,
+        `Last 24h: ${fmt(summary.last24h)}`,
+        `All time: ${fmt(summary.allTime.cost)} (${summary.allTime.messages} msgs)`,
+      ].join("\n");
+      await this.channel.sendText(msg.chatId, text, msg.replyContext);
+    });
+
+    // Handle /thinking — toggle thinking block display
+    this.channel.onCommand("thinking", async (msg) => {
+      const arg = msg.text.trim().toLowerCase();
+      if (arg === "on") {
+        this.showThinking = true;
+        await this.channel.sendText(msg.chatId, "Thinking blocks *enabled*. You'll see reasoning before responses.", msg.replyContext);
+      } else if (arg === "off") {
+        this.showThinking = false;
+        await this.channel.sendText(msg.chatId, "Thinking blocks *disabled*.", msg.replyContext);
+      } else {
+        const state = this.showThinking ? "ON" : "OFF";
+        await this.channel.sendText(
+          msg.chatId,
+          `Thinking display: *${state}*\nUsage: \`/thinking on\`, \`/thinking off\``,
+          msg.replyContext,
+        );
+      }
+    });
+
     log.info("bridge wired up");
   }
 
@@ -125,7 +161,7 @@ export class Bridge {
     };
 
     // Show typing indicator while Claude is processing
-    const stopTyping = this.channel.startTyping(msg.chatId);
+    let stopTyping = this.channel.startTyping(msg.chatId);
 
     // Stream response from Claude
     let fullText = "";
@@ -146,13 +182,15 @@ export class Bridge {
 
           case "thinking":
             // Send thinking as a separate message in italics
-            if (event.text.length > 0) {
+            if (this.showThinking && event.text.length > 0) {
               const preview = event.text.length > 3000
                 ? event.text.slice(0, 3000) + "..."
                 : event.text;
+              // Escape for Telegram Markdown v1: only _ * ` [ need escaping
+              const escaped = preview.replace(/[_*`\[]/g, "\\$&");
               await this.channel.sendDirectMessage(
                 msg.chatId,
-                `_${preview.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")}_`,
+                `_${escaped}_`,
               );
             }
             break;
@@ -160,10 +198,25 @@ export class Bridge {
           case "tool_use":
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
+            // Show tool usage to the user
+            await this.channel.sendDirectMessage(
+              msg.chatId,
+              `\`${event.name}\``,
+            );
+            // Restart typing during tool execution
+            if (typingStopped) {
+              stopTyping = this.channel.startTyping(msg.chatId);
+              typingStopped = false;
+            }
             break;
 
           case "done": {
             const { result } = event;
+            // Stop typing if still active
+            if (!typingStopped) {
+              stopTyping();
+              typingStopped = true;
+            }
 
             // Store/update session
             if (result.sessionId) {

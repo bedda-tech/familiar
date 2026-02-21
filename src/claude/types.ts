@@ -24,8 +24,9 @@ export interface ContentBlockDeltaEvent {
   type: "content_block_delta";
   index: number;
   delta: {
-    type: "text_delta";
-    text: string;
+    type: "text_delta" | "thinking_delta";
+    text?: string;
+    thinking?: string;
   };
 }
 

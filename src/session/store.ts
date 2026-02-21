@@ -142,7 +142,55 @@ export class SessionStore {
       .run(chatId, role, content.slice(0, 10000), costUsd);
   }
 
+  /** Get cost summary for a chat */
+  getCostSummary(chatId: string): CostSummary {
+    const sessionCost = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total, COUNT(*) as count
+         FROM message_log WHERE chat_id = ? AND role = 'assistant'
+         AND created_at >= (SELECT COALESCE(created_at, '1970-01-01') FROM sessions WHERE chat_id = ?)`,
+      )
+      .get(chatId, chatId) as { total: number; count: number };
+
+    const todayCost = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total, COUNT(*) as count
+         FROM message_log WHERE chat_id = ? AND role = 'assistant'
+         AND created_at >= date('now')`,
+      )
+      .get(chatId) as { total: number; count: number };
+
+    const allTimeCost = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total, COUNT(*) as count
+         FROM message_log WHERE chat_id = ? AND role = 'assistant'`,
+      )
+      .get(chatId) as { total: number; count: number };
+
+    const last24h = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total
+         FROM message_log WHERE chat_id = ? AND role = 'assistant'
+         AND created_at >= datetime('now', '-1 day')`,
+      )
+      .get(chatId) as { total: number };
+
+    return {
+      session: { cost: sessionCost.total, messages: sessionCost.count },
+      today: { cost: todayCost.total, messages: todayCost.count },
+      last24h: last24h.total,
+      allTime: { cost: allTimeCost.total, messages: allTimeCost.count },
+    };
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+export interface CostSummary {
+  session: { cost: number; messages: number };
+  today: { cost: number; messages: number };
+  last24h: number;
+  allTime: { cost: number; messages: number };
 }
