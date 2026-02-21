@@ -79,10 +79,12 @@ export class ClaudeCLI {
           break;
 
         case "assistant":
-          // Full assistant message — extract text from content blocks
+          // Full assistant message — extract text and thinking from content blocks
           if (event.message?.content) {
             for (const block of event.message.content) {
-              if (block.type === "text" && block.text) {
+              if (block.type === "thinking" && block.thinking) {
+                yield { type: "thinking", text: block.thinking };
+              } else if (block.type === "text" && block.text) {
                 // Only yield if we haven't already streamed this text via deltas
                 if (!accumulatedText.includes(block.text)) {
                   accumulatedText += block.text;

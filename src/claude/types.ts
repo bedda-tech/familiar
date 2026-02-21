@@ -62,8 +62,9 @@ export type StreamEvent =
   | SystemEvent;
 
 export interface ContentBlock {
-  type: "text" | "tool_use" | "tool_result";
+  type: "text" | "tool_use" | "tool_result" | "thinking";
   text?: string;
+  thinking?: string;
   id?: string;
   name?: string;
   input?: unknown;
@@ -89,9 +90,14 @@ export interface ToolUseInfo {
   name: string;
 }
 
+export interface ThinkingDelta {
+  type: "thinking";
+  text: string;
+}
+
 export interface StreamDone {
   type: "done";
   result: BackendResult;
 }
 
-export type StreamYield = TextDelta | ToolUseInfo | StreamDone;
+export type StreamYield = TextDelta | ToolUseInfo | ThinkingDelta | StreamDone;

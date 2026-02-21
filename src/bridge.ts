@@ -127,6 +127,19 @@ export class Bridge {
             await appendToDraft(draft, draftCtx, event.text);
             break;
 
+          case "thinking":
+            // Send thinking as a separate message in italics
+            if (event.text.length > 0) {
+              const preview = event.text.length > 3000
+                ? event.text.slice(0, 3000) + "..."
+                : event.text;
+              await this.channel.sendDirectMessage(
+                msg.chatId,
+                `_${preview.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")}_`,
+              );
+            }
+            break;
+
           case "tool_use":
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
