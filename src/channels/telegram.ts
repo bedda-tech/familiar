@@ -95,6 +95,39 @@ export class TelegramChannel implements Channel {
     }
   }
 
+  async sendDirectMessage(chatId: string, text: string): Promise<void> {
+    const chunks = this.splitForTelegram(text);
+    for (const chunk of chunks) {
+      try {
+        await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "Markdown" });
+      } catch {
+        try {
+          await this.bot.api.sendMessage(Number(chatId), chunk);
+        } catch (e) {
+          log.error({ err: e, chatId }, "failed to send direct message");
+        }
+      }
+    }
+  }
+
+  private splitForTelegram(text: string): string[] {
+    const MAX = 4000;
+    if (text.length <= MAX) return [text];
+    const parts: string[] = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+      if (remaining.length <= MAX) {
+        parts.push(remaining);
+        break;
+      }
+      const idx = remaining.lastIndexOf("\n", MAX);
+      const splitAt = idx > MAX * 0.3 ? idx : MAX;
+      parts.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+    return parts;
+  }
+
   startTyping(chatId: string): () => void {
     let active = true;
 

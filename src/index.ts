@@ -16,6 +16,8 @@ import { SessionStore } from "./session/store.js";
 import { ClaudeCLI } from "./claude/cli.js";
 import { TelegramChannel } from "./channels/telegram.js";
 import { Bridge } from "./bridge.js";
+import { CronScheduler } from "./cron/scheduler.js";
+import type { CronJobConfig, CronRunResult } from "./cron/types.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +30,8 @@ familiar — Your AI Familiar
 Usage:
   familiar start                Start the bot
   familiar tui                  Open interactive TUI (resumes Telegram session)
+  familiar cron list            List configured cron jobs and their state
+  familiar cron run <id>        Manually trigger a cron job
   familiar init                 Initialize config and workspace
   familiar migrate-from-openclaw  Migrate an existing OpenClaw assistant
   familiar install-service      Install systemd user service
@@ -200,6 +204,69 @@ function cmdTui(): void {
   process.exit(result.status ?? 1);
 }
 
+async function cmdCron(subArgs: string[]): Promise<void> {
+  const config = loadConfig();
+  const subcommand = subArgs[0];
+  const jobs = (config.cron?.jobs ?? []) as CronJobConfig[];
+
+  if (!subcommand || subcommand === "list") {
+    if (jobs.length === 0) {
+      console.log("No cron jobs configured. Add jobs to the 'cron.jobs' array in config.json.");
+      return;
+    }
+
+    const scheduler = new CronScheduler(jobs, config.claude);
+    const list = scheduler.listJobs();
+    scheduler.stop();
+
+    console.log(`\n  Cron Jobs (${list.length})\n`);
+    for (const job of list) {
+      const enabled = job.enabled !== false ? "ON" : "OFF";
+      const model = job.model ?? config.claude.model ?? "default";
+      console.log(`  ${enabled === "OFF" ? "  " : "* "}${job.id}`);
+      console.log(`    Label:    ${job.label ?? "-"}`);
+      console.log(`    Schedule: ${job.schedule} (${job.timezone ?? "UTC"})`);
+      console.log(`    Model:    ${model}`);
+      console.log(`    Runs:     ${job.runCount}`);
+      console.log(`    Last run: ${job.lastRun ?? "never"}`);
+      console.log(`    Next run: ${job.nextRun ?? "N/A"}`);
+      console.log(`    Enabled:  ${enabled}`);
+      console.log();
+    }
+    return;
+  }
+
+  if (subcommand === "run") {
+    const jobId = subArgs[1];
+    if (!jobId) {
+      console.error("Usage: familiar cron run <job-id>");
+      process.exit(1);
+    }
+
+    const jobConfig = jobs.find((j) => j.id === jobId);
+    if (!jobConfig) {
+      console.error(`Job not found: ${jobId}`);
+      console.error(`Available jobs: ${jobs.map((j) => j.id).join(", ")}`);
+      process.exit(1);
+    }
+
+    initLogger(config.log.level);
+    console.log(`Running job: ${jobId}...`);
+    const { runCronJob } = await import("./cron/runner.js");
+    const result = await runCronJob(jobConfig, config.claude);
+    console.log(`\nResult (${result.isError ? "ERROR" : "OK"}):`);
+    console.log(`Duration: ${result.durationMs}ms`);
+    console.log(`Cost: $${result.costUsd.toFixed(4)}`);
+    console.log(`Turns: ${result.numTurns}`);
+    console.log(`\n${result.text}`);
+    return;
+  }
+
+  console.error(`Unknown cron subcommand: ${subcommand}`);
+  console.log("Usage: familiar cron [list|run <id>]");
+  process.exit(1);
+}
+
 async function cmdStart(configPath?: string): Promise<void> {
   const config = loadConfig(configPath);
   initLogger(config.log.level);
@@ -224,9 +291,29 @@ async function cmdStart(configPath?: string): Promise<void> {
   bridge.start();
   await telegram.start();
 
+  // Start cron scheduler if jobs are configured
+  let cron: CronScheduler | null = null;
+  if (config.cron?.jobs && config.cron.jobs.length > 0) {
+    const defaultChatId = String(config.telegram.allowedUsers[0]);
+    cron = new CronScheduler(config.cron.jobs as CronJobConfig[], config.claude);
+
+    cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig) => {
+      const chatId = jobConfig.deliverTo ?? defaultChatId;
+      const label = jobConfig.label ?? jobConfig.id;
+      const prefix = result.isError ? `*Cron Error — ${label}*` : `*Cron — ${label}*`;
+      const meta = `_${result.durationMs}ms | $${result.costUsd.toFixed(4)} | ${result.numTurns} turns_`;
+      const text = `${prefix}\n${meta}\n\n${result.text}`;
+      await telegram.sendDirectMessage(chatId, text);
+    });
+
+    cron.start();
+    log.info({ jobs: config.cron.jobs.length }, "cron scheduler started");
+  }
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
+    if (cron) cron.stop();
     await telegram.stop();
     sessions.close();
     process.exit(0);
@@ -271,6 +358,13 @@ switch (command) {
 
   case "migrate-from-openclaw":
     migrateFromOpenClaw().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "cron":
+    cmdCron(args.slice(1)).catch((e) => {
       console.error("Error:", e instanceof Error ? e.message : e);
       process.exit(1);
     });

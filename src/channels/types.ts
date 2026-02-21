@@ -37,6 +37,9 @@ export interface Channel {
   /** Send typing indicator, repeating every 4s. Returns a stop function. */
   startTyping(chatId: string): () => void;
 
+  /** Send a message directly to a chat (no reply context needed). Used by cron, etc. */
+  sendDirectMessage(chatId: string, text: string): Promise<void>;
+
   /** Start the channel */
   start(): Promise<void>;
 

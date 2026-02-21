@@ -17,7 +17,13 @@
     "start": "node dist/index.js start",
     "dev": "tsc --watch"
   },
-  "keywords": ["claude", "telegram", "ai", "assistant", "claude-code"],
+  "keywords": [
+    "claude",
+    "telegram",
+    "ai",
+    "assistant",
+    "claude-code"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -31,14 +37,15 @@
     "access": "public"
   },
   "dependencies": {
-    "grammy": "^1.35.0",
     "better-sqlite3": "^11.0.0",
-    "pino": "^9.0.0",
-    "p-queue": "^8.0.0"
+    "croner": "^10.0.1",
+    "grammy": "^1.35.0",
+    "p-queue": "^8.0.0",
+    "pino": "^9.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/better-sqlite3": "^7.6.0",
-    "@types/node": "^22.0.0"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.11",
+    "typescript": "5.7"
   }
 }

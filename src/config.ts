@@ -24,10 +24,29 @@ export interface LogConfig {
   level: string;
 }
 
+export interface CronJobEntry {
+  id: string;
+  label?: string;
+  schedule: string;
+  timezone?: string;
+  prompt: string;
+  model?: string;
+  maxTurns?: number;
+  workingDirectory?: string;
+  deliverTo?: string;
+  announce?: boolean;
+  enabled?: boolean;
+}
+
+export interface CronConfig {
+  jobs: CronJobEntry[];
+}
+
 export interface FamiliarConfig {
   telegram: TelegramConfig;
   claude: ClaudeConfig;
   sessions: SessionConfig;
+  cron?: CronConfig;
   log: LogConfig;
 }
 
