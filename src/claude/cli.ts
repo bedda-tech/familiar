@@ -34,7 +34,7 @@ export class ClaudeCLI {
     const proc = spawn("claude", args, {
       cwd: this.config.workingDirectory,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
+      env: cleanEnv(),
     });
 
     // Write prompt to stdin and close
@@ -187,6 +187,13 @@ export class ClaudeCLI {
       isError: event.is_error ?? false,
     };
   }
+}
+
+/** Strip env vars that prevent claude from running inside another Claude Code session. */
+function cleanEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  return env;
 }
 
 function waitForExit(proc: ChildProcess): Promise<number> {

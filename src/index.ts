@@ -125,6 +125,9 @@ async function cmdInit(): Promise<void> {
 }
 
 function cmdInstallService(): void {
+  // Build PATH from current process — ensures claude CLI and node are reachable
+  const path = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin";
+
   const serviceContent = `[Unit]
 Description=Familiar — AI Assistant Bridge
 After=network-online.target
@@ -137,6 +140,7 @@ Restart=always
 RestartSec=10
 Environment=HOME=${homedir()}
 Environment=NODE_ENV=production
+Environment=PATH=${path}
 
 [Install]
 WantedBy=default.target
@@ -184,9 +188,13 @@ function cmdTui(): void {
     console.log("No active session found — starting fresh.");
   }
 
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+
   const result = spawnSync("claude", args, {
     cwd: config.claude.workingDirectory,
     stdio: "inherit",
+    env,
   });
 
   process.exit(result.status ?? 1);

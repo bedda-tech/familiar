@@ -125,6 +125,10 @@ If `familiar start` crashes:
 - `"Config missing required 'telegram.botToken'"` → edit `~/.familiar/config.json`, set `botToken`
 - `"Config missing required 'telegram.allowedUsers'"` → set `allowedUsers` to your Telegram user ID
 - `ENOENT` on `claude` → Claude Code CLI not installed or not in PATH
+- `"Claude Code cannot be launched inside another Claude Code session"` → familiar strips the `CLAUDECODE` env var automatically, but if you see this, make sure you're running `familiar start` from a normal terminal, not from inside `claude`
+
+If `familiar install-service` creates a service that can't find `claude`:
+- The service file captures your current `PATH` at install time. If you install `claude` or `node` to a new location later, re-run `familiar install-service` to regenerate the service file with the updated PATH.
 
 ## Config Reference
 
