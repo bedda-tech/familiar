@@ -1,4 +1,12 @@
-# Familiar
+<p align="center">
+  <img src="banner.png" alt="Familiar" width="600">
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@bedda/familiar"><img src="https://img.shields.io/npm/v/@bedda/familiar" alt="npm"></a>
+  <a href="https://github.com/bedda-tech/familiar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bedda-tech/familiar" alt="license"></a>
+  <a href="https://github.com/orgs/bedda-tech/projects/3"><img src="https://img.shields.io/badge/project-roadmap-blue" alt="roadmap"></a>
+</p>
 
 A bridge between Telegram and Claude Code (`claude -p`). Gives you a persistent AI assistant on Telegram backed by Claude Code's full toolset — Bash, file ops, web search, MCP servers, session memory.
 
@@ -229,6 +237,12 @@ systemctl --user stop familiar
   templates/        # Workspace template files copied by `familiar init`
   dist/             # Compiled JS (after `npm run build`)
 ```
+
+## Roadmap & Contributing
+
+See the [project board](https://github.com/orgs/bedda-tech/projects/3) for tracked issues and priorities, and [ROADMAP.md](ROADMAP.md) for the full plan.
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). AI-authored contributions are welcome as long as they are tagged with `Co-Authored-By`.
 
 ## License
 
