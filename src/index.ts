@@ -287,7 +287,7 @@ async function cmdStart(configPath?: string): Promise<void> {
 
   const claude = new ClaudeCLI(config.claude);
   const telegram = new TelegramChannel(config.telegram);
-  const bridge = new Bridge(telegram, claude, sessions);
+  const bridge = new Bridge(telegram, claude, sessions, config.openai);
 
   // Wire up and start
   bridge.start();

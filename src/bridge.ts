@@ -1,6 +1,8 @@
 import type { Channel, IncomingMessage } from "./channels/types.js";
 import type { ClaudeCLI, ClaudeRequest } from "./claude/cli.js";
 import type { SessionStore } from "./session/store.js";
+import type { OpenAIConfig } from "./config.js";
+import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import {
   createDraft,
@@ -14,12 +16,16 @@ const log = getLogger("bridge");
 
 export class Bridge {
   private showThinking = true;
+  private openai: OpenAIConfig | undefined;
 
   constructor(
     private channel: Channel,
     private claude: ClaudeCLI,
     private sessions: SessionStore,
-  ) {}
+    openai?: OpenAIConfig,
+  ) {
+    this.openai = openai;
+  }
 
   /** Wire up the channel to the Claude backend */
   start(): void {
@@ -129,21 +135,40 @@ export class Bridge {
     }
 
     log.info(
-      { chatId: msg.chatId, textLen: msg.text.length, files: msg.filePaths?.length ?? 0 },
+      { chatId: msg.chatId, textLen: msg.text.length, files: msg.filePaths?.length ?? 0, isVoice: msg.isVoice },
       "incoming message",
     );
+
+    // Transcribe voice messages if OpenAI is configured
+    let prompt = msg.text;
+    if (msg.isVoice && msg.filePaths?.length && this.openai) {
+      try {
+        const transcription = await transcribeAudio(msg.filePaths[0], this.openai);
+        prompt = transcription;
+        // Show transcription to user
+        await this.channel.sendDirectMessage(msg.chatId, `_Voice: ${transcription}_`);
+        // Don't pass audio file to Claude — the transcription is the prompt
+        msg.filePaths = undefined;
+      } catch (e) {
+        log.error({ err: e }, "voice transcription failed");
+        await this.channel.sendDirectMessage(
+          msg.chatId,
+          "Voice transcription failed. Sending audio file to Claude directly.",
+        );
+      }
+    }
 
     // Look up session
     const sessionId = this.sessions.getSession(msg.chatId);
 
     const request: ClaudeRequest = {
-      prompt: msg.text,
+      prompt,
       sessionId: sessionId ?? undefined,
       filePaths: msg.filePaths,
     };
 
     // Log the user message
-    this.sessions.logMessage(msg.chatId, "user", msg.text);
+    this.sessions.logMessage(msg.chatId, "user", prompt);
 
     // Set up draft streaming
     const draft = createDraft();

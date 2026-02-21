@@ -13,6 +13,8 @@ export interface ClaudeConfig {
   systemPrompt?: string;
   allowedTools?: string[];
   maxTurns?: number;
+  /** Model failover chain — tries each in order on failure. Default: ["opus", "sonnet", "haiku"] */
+  failoverChain?: string[];
 }
 
 export interface SessionConfig {
@@ -44,6 +46,11 @@ export interface CronConfig {
   jobs: CronJobEntry[];
 }
 
+export interface OpenAIConfig {
+  apiKey: string;
+  whisperModel?: string; // default: "whisper-1"
+}
+
 export interface WebhookServerConfig {
   /** Port to listen on */
   port: number;
@@ -59,6 +66,7 @@ export interface FamiliarConfig {
   sessions: SessionConfig;
   cron?: CronConfig;
   webhooks?: WebhookServerConfig;
+  openai?: OpenAIConfig;
   log: LogConfig;
 }
 

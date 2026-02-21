@@ -354,6 +354,7 @@ export class TelegramChannel implements Channel {
 
   private async normalizeVoiceMessage(ctx: Context): Promise<IncomingMessage> {
     const msg = this.normalizeMessage(ctx);
+    msg.isVoice = true;
     const voice = ctx.message?.voice;
     if (voice) {
       const filePath = await this.downloadFile(voice.file_id, `voice_${Date.now()}.ogg`);

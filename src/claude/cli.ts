@@ -17,10 +17,18 @@ export interface ClaudeRequest {
   filePaths?: string[];
 }
 
+/** Default failover chain: try opus, fall back to sonnet, then haiku */
+const DEFAULT_FAILOVER = ["opus", "sonnet", "haiku"];
+
 export class ClaudeCLI {
   private modelOverride: string | null = null;
+  private failoverChain: string[] = DEFAULT_FAILOVER;
 
-  constructor(private config: ClaudeConfig) {}
+  constructor(private config: ClaudeConfig) {
+    if (config.failoverChain?.length) {
+      this.failoverChain = config.failoverChain;
+    }
+  }
 
   /** Override the model at runtime. Pass null to revert to config default. */
   setModel(model: string | null): void {
@@ -32,12 +40,47 @@ export class ClaudeCLI {
     return this.modelOverride ?? this.config.model ?? "sonnet";
   }
 
+  /** Get failover models after the current model */
+  private getFailoverModels(): string[] {
+    const current = this.getModel();
+    const idx = this.failoverChain.indexOf(current);
+    if (idx < 0) return this.failoverChain.filter((m) => m !== current);
+    return this.failoverChain.slice(idx + 1);
+  }
+
   /**
-   * Send a message to Claude via `claude -p` and stream back results.
-   * Yields TextDelta events as text arrives, and a final StreamDone with the result.
+   * Send with model failover — tries current model, falls back through chain on failure.
+   * Only fails over if the model errors before producing any content.
    */
   async *send(request: ClaudeRequest): AsyncGenerator<StreamYield> {
-    const args = this.buildArgs(request);
+    const models = [this.getModel(), ...this.getFailoverModels()];
+
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+      const isLast = i === models.length - 1;
+      let hasContent = false;
+
+      for await (const event of this.sendOnce(request, model)) {
+        if (event.type === "text_delta" || event.type === "thinking") {
+          hasContent = true;
+        }
+
+        // If error with no content and more models to try, failover
+        if (event.type === "done" && event.result.isError && !hasContent && !isLast) {
+          log.warn({ model, nextModel: models[i + 1] }, "model failed, trying failover");
+          break; // Try next model
+        }
+
+        yield event;
+
+        if (event.type === "done") return;
+      }
+    }
+  }
+
+  /** Send a message to a specific model. Core implementation. */
+  private async *sendOnce(request: ClaudeRequest, model: string): AsyncGenerator<StreamYield> {
+    const args = this.buildArgs(request, model);
     const prompt = this.buildPrompt(request);
 
     log.info({ sessionId: request.sessionId, prompt: prompt.slice(0, 100) }, "spawning claude");
@@ -174,17 +217,14 @@ export class ClaudeCLI {
     yield { type: "done", result };
   }
 
-  private buildArgs(request: ClaudeRequest): string[] {
+  private buildArgs(request: ClaudeRequest, model: string): string[] {
     const args = ["-p", "--output-format", "stream-json", "--verbose"];
 
     if (request.sessionId) {
       args.push("--resume", request.sessionId);
     }
 
-    const model = this.modelOverride ?? this.config.model;
-    if (model) {
-      args.push("--model", model);
-    }
+    args.push("--model", model);
 
     if (this.config.systemPrompt) {
       args.push("--append-system-prompt", this.config.systemPrompt);

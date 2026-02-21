@@ -4,6 +4,8 @@ export interface IncomingMessage {
   userId: string;
   text: string;
   filePaths?: string[];
+  /** True if the message is a voice/audio message */
+  isVoice?: boolean;
   /** Channel-specific context for sending replies */
   replyContext: unknown;
 }
