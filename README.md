@@ -15,9 +15,24 @@ Telegram  ──>  Familiar (bridge)  ──>  claude -p --resume <session>
           <──                     <──  --output-format stream-json
 ```
 
+## Features
+
+- **Streaming responses** — Edit-in-place message streaming, just like ChatGPT
+- **Session persistence** — SQLite-backed sessions survive restarts, auto-rotate on inactivity or message count
+- **Thinking blocks** — Extended reasoning streamed as italicized messages before the response
+- **Typing indicators** — Bot shows "typing..." while Claude is processing
+- **Cron scheduler** — Schedule recurring jobs with cron expressions, timezone support, and isolated execution
+- **Webhooks** — HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
+- **Runtime model switching** — `/model opus`, `/model sonnet`, `/model haiku` — switch without restart
+- **Config hot-reload** — Edit config.json and changes apply live (model, log level)
+- **TUI mode** — `familiar tui` opens the full Claude Code TUI, resuming the same Telegram session
+- **OpenClaw migration** — `familiar migrate-from-openclaw` migrates config, cron jobs, and workspace
+- **Governing docs** — Personality system via SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md
+- **First-run onboarding** — BOOTSTRAP.md walks new users through naming and configuring their familiar
+
 ## Setup
 
-There are two paths: **fresh install** or **migrate from OpenClaw**. Choose one.
+Two paths: **fresh install** or **migrate from OpenClaw**.
 
 ### Path A: Fresh Install
 
@@ -84,24 +99,31 @@ If `~/.openclaw/` exists with a previous OpenClaw/ClawdBot setup:
 # 1. Install globally from npm
 npm install -g @bedda/familiar
 
-# 2. Run migration — reads OpenClaw config, creates Familiar config, adds CLAUDE.md to workspace
+# 2. Run migration — reads OpenClaw config, cron jobs, creates Familiar config, adds CLAUDE.md
 familiar migrate-from-openclaw
 ```
 
 The migration reads from these OpenClaw paths:
 - Config: `~/.openclaw/openclaw.json` or `~/.openclaw/clawdbot.json`
 - Allowed users: `~/.openclaw/credentials/telegram-default-allowFrom.json`
+- Cron jobs: `~/.openclaw/cron/jobs.json`
 
 It creates:
-- `~/.familiar/config.json` — pointing at the existing OpenClaw workspace
+- `~/.familiar/config.json` — with Telegram config, model, workspace, and migrated cron jobs
 - `CLAUDE.md` in the workspace — Claude Code's auto-loaded root instruction file
 
 All existing governing docs (SOUL.md, IDENTITY.md, USER.md, etc.) are left untouched.
 
-**Not migrated** (OpenClaw-specific, not used by Familiar):
+**What's migrated:**
+- Telegram bot token and user allowlist
+- Model selection
+- Cron jobs (cron expressions and interval schedules converted to Familiar format)
+- System prompt derived from IDENTITY.md
+
+**Not migrated** (planned features):
+- Other channels (Discord, WhatsApp, Signal) — Familiar is Telegram-only for now
 - Vector memory SQLite DB
-- WhatsApp channel config
-- Cron jobs / heartbeats
+- Skills/plugins — use Claude Code MCP tools instead
 - Sub-agent configs
 
 ```bash
@@ -134,24 +156,88 @@ If `familiar install-service` creates a service that can't find `claude`:
 
 **File**: `~/.familiar/config.json`
 
+### Core
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `telegram.botToken` | string | **required** | Telegram bot token from BotFather |
 | `telegram.allowedUsers` | number[] | **required** | Telegram user IDs allowed to use the bot |
-| `claude.workingDirectory` | string | `~/familiar-workspace` | Directory where Claude Code runs; govering docs live here |
+| `claude.workingDirectory` | string | `~/familiar-workspace` | Directory where Claude Code runs; governing docs live here |
 | `claude.model` | string | `"sonnet"` | Model: `"sonnet"`, `"opus"`, or `"haiku"` |
-| `claude.systemPrompt` | string | *(see above)* | System prompt prepended to every `claude -p` invocation |
-| `claude.allowedTools` | string[] | *(see above)* | Claude Code tools to enable via `--allowedTools` |
+| `claude.systemPrompt` | string | *(generic)* | System prompt prepended to every `claude -p` invocation |
+| `claude.allowedTools` | string[] | *(see below)* | Claude Code tools to enable via `--allowedTools` |
 | `claude.maxTurns` | number | `25` | Max agentic turns per message via `--max-turns` |
 | `sessions.inactivityTimeout` | string | `"24h"` | Reset session after this much inactivity. Format: `"30m"`, `"24h"`, `"7d"` |
 | `sessions.rotateAfterMessages` | number | `200` | Start fresh session after this many messages |
 | `log.level` | string | `"info"` | Log level: `"debug"`, `"info"`, `"warn"`, `"error"` |
+
+### Cron Jobs
+
+```json
+{
+  "cron": {
+    "jobs": [
+      {
+        "id": "heartbeat",
+        "label": "Heartbeat",
+        "schedule": "0 * * * *",
+        "timezone": "Europe/Rome",
+        "prompt": "Check system health. If nothing needs attention, reply HEARTBEAT_OK.",
+        "model": "sonnet",
+        "maxTurns": 10,
+        "announce": true,
+        "suppressPattern": "HEARTBEAT_OK"
+      }
+    ]
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | string | **required** | Unique job identifier |
+| `label` | string | — | Human-readable name |
+| `schedule` | string | **required** | Cron expression (5-field) |
+| `timezone` | string | `"UTC"` | IANA timezone |
+| `prompt` | string | **required** | Prompt sent to `claude -p` |
+| `model` | string | config default | Model override for this job |
+| `maxTurns` | number | config default | Max turns for this job |
+| `workingDirectory` | string | config default | Working directory override |
+| `deliverTo` | string | first allowed user | Telegram chat ID for delivery |
+| `announce` | boolean | `true` | Whether to deliver results to Telegram |
+| `suppressPattern` | string | — | Regex — if output matches, suppress delivery |
+| `enabled` | boolean | `true` | Enable/disable without removing |
+
+### Webhooks
+
+```json
+{
+  "webhooks": {
+    "port": 3100,
+    "bind": "127.0.0.1",
+    "token": "your-secret-token"
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `port` | number | **required** | Port to listen on |
+| `bind` | string | `"127.0.0.1"` | Bind address |
+| `token` | string | **required** | Bearer token for authentication |
+
+**Endpoints:**
+- `POST /hooks/wake` — Inject a message into a session. Body: `{ "message": "...", "chatId?": "..." }`
+- `POST /hooks/agent` — Run an isolated agent turn, returns result. Body: `{ "prompt": "...", "model?": "...", "maxTurns?": 10 }`
+- `GET /health` — Health check (no auth required). Returns: `{ "status": "ok", "uptime": 12345 }`
 
 ## CLI Commands
 
 ```
 familiar start                  Start the Telegram bot (foreground)
 familiar tui                    Open Claude Code TUI, resuming the active Telegram session
+familiar cron list              List configured cron jobs and their state
+familiar cron run <id>          Manually trigger a cron job
 familiar init                   Create ~/.familiar/config.json and workspace with templates
 familiar migrate-from-openclaw  Migrate from an existing OpenClaw setup
 familiar install-service        Install systemd user service for background running
@@ -171,7 +257,9 @@ Opens the full Claude Code interactive TUI, resuming the same session that Teleg
 
 - `/new` — Clear current session, start fresh
 - `/status` — Show session info (session ID, message count, age)
-- `/model` — Show which model is configured
+- `/model` — Show current model
+- `/model opus` / `/model sonnet` / `/model haiku` — Switch model at runtime
+- `/model reset` — Revert to config default
 
 ## Workspace & Governing Docs
 
@@ -213,29 +301,37 @@ systemctl --user stop familiar
 
 ## Architecture
 
-~15 files. 4 runtime dependencies (`grammy`, `better-sqlite3`, `pino`, `p-queue`).
+5 runtime dependencies (`grammy`, `better-sqlite3`, `pino`, `p-queue`, `croner`).
 
 ```
 ~/.familiar/
-  config.json       # Config
-  familiar.db       # SQLite — session mappings and message log
+  config.json       # Config (hot-reloaded)
+  familiar.db       # SQLite — sessions, message log, cron state
 
 ~/familiar/         # Source repo
   src/
-    index.ts        # CLI entry point (start, tui, init, migrate, install-service)
+    index.ts        # CLI entry point (start, tui, init, migrate, cron, install-service)
     config.ts       # Config loader with defaults and validation
+    config-watcher.ts # Hot-reload via fs.watch
     bridge.ts       # Message router: channel <-> Claude
+    migrate-openclaw.ts # OpenClaw migration (config + cron jobs)
     claude/
-      cli.ts        # Spawns `claude -p`, parses stream-json output
-      types.ts      # Stream event types
+      cli.ts        # Spawns `claude -p`, parses stream-json, model override
+      types.ts      # Stream event types (text, thinking, tool_use, done)
     channels/
-      telegram.ts   # grammY Telegram bot
+      telegram.ts   # grammY Telegram bot (typing, direct messages, chunking)
       types.ts      # Channel interface
     session/
       store.ts      # SQLite session store (better-sqlite3)
     streaming/
       chunker.ts    # Splits long responses into 4096-char Telegram messages
       draft.ts      # Edit-in-place streaming (updates message as response streams in)
+    cron/
+      scheduler.ts  # Cron scheduling with croner, SQLite state, suppress pattern
+      runner.ts     # Isolated job execution (spawns claude -p per job)
+      types.ts      # Cron job types
+    webhooks/
+      server.ts     # HTTP webhook server (wake, agent, health)
     util/
       logger.ts     # pino logger
   templates/        # Workspace template files copied by `familiar init`
@@ -244,7 +340,7 @@ systemctl --user stop familiar
 
 ## Roadmap & Contributing
 
-See the [project board](https://github.com/orgs/bedda-tech/projects/3) for tracked issues and priorities, and [ROADMAP.md](ROADMAP.md) for the full plan.
+See the [project board](https://github.com/orgs/bedda-tech/projects/3) for tracked issues and priorities, and [CHANGELOG.md](CHANGELOG.md) for release history.
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). AI-authored contributions are welcome as long as they are tagged with `Co-Authored-By`.
 
