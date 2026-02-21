@@ -251,6 +251,22 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    this.bot.command("spawn", async (ctx) => {
+      const handler = this.commandHandlers.get("spawn");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
+    this.bot.command("agents", async (ctx) => {
+      const handler = this.commandHandlers.get("agents");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
@@ -260,7 +276,9 @@ export class TelegramChannel implements Channel {
         "/status — Session info\n" +
         "/model — Switch model\n" +
         "/cost — Usage costs\n" +
-        "/thinking — Toggle thinking display",
+        "/thinking — Toggle thinking display\n" +
+        "/spawn — Spawn a sub-agent for a task\n" +
+        "/agents — List/kill/info sub-agents",
       );
     });
 

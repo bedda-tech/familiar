@@ -20,6 +20,8 @@ import { CronScheduler } from "./cron/scheduler.js";
 import type { CronJobConfig, CronRunResult } from "./cron/types.js";
 import { WebhookServer } from "./webhooks/server.js";
 import { ConfigWatcher } from "./config-watcher.js";
+import { AgentRegistry } from "./agents/registry.js";
+import { AgentManager } from "./agents/manager.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -287,7 +289,22 @@ async function cmdStart(configPath?: string): Promise<void> {
 
   const claude = new ClaudeCLI(config.claude);
   const telegram = new TelegramChannel(config.telegram);
-  const bridge = new Bridge(telegram, claude, sessions, config.openai);
+
+  // Initialize sub-agent system
+  const agentRegistry = new AgentRegistry(sessions.getDb());
+  const agentManager = new AgentManager(agentRegistry, config.claude);
+
+  // Deliver sub-agent results back to Telegram
+  agentManager.onDelivery(async (agent, resultText, costUsd, durationMs) => {
+    const label = agent.label ?? agent.id;
+    const status = agent.status === "completed" ? "done" : agent.status;
+    const meta = `_${(durationMs / 1000).toFixed(1)}s | $${costUsd.toFixed(4)}_`;
+    const preview = resultText.length > 3000 ? resultText.slice(0, 3000) + "..." : resultText;
+    const text = `*Sub-agent ${status} — ${label}*\n${meta}\n\n${preview}`;
+    await telegram.sendDirectMessage(agent.chatId, text);
+  });
+
+  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager);
 
   // Wire up and start
   bridge.start();
@@ -364,6 +381,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
     configWatcher.stop();
+    agentManager.killAll();
     if (webhooks) webhooks.stop();
     if (cron) cron.stop();
     await telegram.stop();

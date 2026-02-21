@@ -24,6 +24,7 @@ Telegram  ──>  Familiar (bridge)  ──>  claude -p --resume <session>
 - **Tool visibility** — Tool calls shown in Telegram as inline code blocks so you can see what Claude is doing
 - **Voice transcription** — Voice messages transcribed via OpenAI Whisper API before sending to Claude
 - **Cost tracking** — `/cost` shows session, today, 24h, and all-time usage costs
+- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes; `/agents` to list, kill, inspect. SQLite-tracked with concurrency limits
 - **Model failover** — Automatic failover chain (opus → sonnet → haiku) when a model errors before producing output
 - **Cron scheduler** — Schedule recurring jobs with cron expressions, timezone support, and isolated execution
 - **Webhooks** — HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
@@ -270,6 +271,10 @@ Opens the full Claude Code interactive TUI, resuming the same session that Teleg
 - `/model reset` — Revert to config default
 - `/cost` — Show usage costs (session, today, 24h, all time)
 - `/thinking on` / `/thinking off` — Toggle thinking block display
+- `/spawn <task>` — Spawn a background sub-agent (optional `--model`, `--label`)
+- `/agents` — List active/recent sub-agents
+- `/agents kill <id|all>` — Kill running sub-agents
+- `/agents info <id>` — Show sub-agent details and result
 - Send a voice message — auto-transcribed via Whisper before processing
 
 ## Workspace & Governing Docs
@@ -341,8 +346,13 @@ systemctl --user stop familiar
       scheduler.ts  # Cron scheduling with croner, SQLite state, suppress pattern
       runner.ts     # Isolated job execution (spawns claude -p per job)
       types.ts      # Cron job types
+    agents/
+      registry.ts   # SQLite sub-agent tracking (status, cost, results)
+      manager.ts    # Sub-agent lifecycle (spawn, kill, delivery callbacks)
     webhooks/
       server.ts     # HTTP webhook server (wake, agent, health)
+    voice/
+      transcribe.ts # Whisper API transcription with ffmpeg conversion
     util/
       logger.ts     # pino logger
   templates/        # Workspace template files copied by `familiar init`

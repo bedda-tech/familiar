@@ -37,6 +37,11 @@ export class SessionStore {
     log.info({ path, inactivityTimeout, rotateAfterMessages }, "session store initialized");
   }
 
+  /** Expose the underlying database for shared use (e.g. sub-agent registry) */
+  getDb(): Database.Database {
+    return this.db;
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (

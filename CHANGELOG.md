@@ -11,6 +11,7 @@ All notable changes to Familiar are documented here.
 - **Thinking mode control** — `/thinking on` / `/thinking off` to toggle thinking block display. ([#34](https://github.com/bedda-tech/familiar/issues/34))
 - **Tool visibility** — Tool calls shown in Telegram as inline code blocks. Typing indicator restarts during tool execution.
 - **File responses** — `sendFile` added to Channel interface for sending photos/documents back to user. ([#26](https://github.com/bedda-tech/familiar/issues/26))
+- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes. `/agents` to list, kill, and inspect. SQLite-backed registry tracks status, cost, and results. Configurable concurrency limit. Results delivered back to Telegram on completion. ([#11](https://github.com/bedda-tech/familiar/issues/11))
 - **OpenAI config section** — `openai.apiKey` and `openai.whisperModel` for Whisper integration.
 
 ### Changed

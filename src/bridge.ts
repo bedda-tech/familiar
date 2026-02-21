@@ -2,6 +2,7 @@ import type { Channel, IncomingMessage } from "./channels/types.js";
 import type { ClaudeCLI, ClaudeRequest } from "./claude/cli.js";
 import type { SessionStore } from "./session/store.js";
 import type { OpenAIConfig } from "./config.js";
+import type { AgentManager } from "./agents/manager.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import {
@@ -17,14 +18,17 @@ const log = getLogger("bridge");
 export class Bridge {
   private showThinking = true;
   private openai: OpenAIConfig | undefined;
+  private agents: AgentManager | undefined;
 
   constructor(
     private channel: Channel,
     private claude: ClaudeCLI,
     private sessions: SessionStore,
     openai?: OpenAIConfig,
+    agents?: AgentManager,
   ) {
     this.openai = openai;
+    this.agents = agents;
   }
 
   /** Wire up the channel to the Claude backend */
@@ -121,6 +125,136 @@ export class Bridge {
         await this.channel.sendText(
           msg.chatId,
           `Thinking display: *${state}*\nUsage: \`/thinking on\`, \`/thinking off\``,
+          msg.replyContext,
+        );
+      }
+    });
+
+    // Handle /spawn — spawn a sub-agent with a task
+    this.channel.onCommand("spawn", async (msg) => {
+      if (!this.agents) {
+        await this.channel.sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
+        return;
+      }
+      const text = msg.text.trim();
+      if (!text) {
+        await this.channel.sendText(
+          msg.chatId,
+          `Usage: \`/spawn <task>\`\nOptional flags: \`--model sonnet\`, \`--label name\`\n\nExample: \`/spawn Research the top 5 TypeScript ORMs\``,
+          msg.replyContext,
+        );
+        return;
+      }
+
+      // Parse optional flags
+      let task = text;
+      let model: string | undefined;
+      let label: string | undefined;
+      const modelMatch = text.match(/--model\s+(\S+)/);
+      if (modelMatch) {
+        model = modelMatch[1];
+        task = task.replace(modelMatch[0], "").trim();
+      }
+      const labelMatch = text.match(/--label\s+"([^"]+)"|--label\s+(\S+)/);
+      if (labelMatch) {
+        label = labelMatch[1] ?? labelMatch[2];
+        task = task.replace(labelMatch[0], "").trim();
+      }
+
+      const result = await this.agents.spawn({ task, label, model, chatId: msg.chatId });
+      if ("error" in result) {
+        await this.channel.sendText(msg.chatId, result.error, msg.replyContext);
+      } else {
+        const display = label ? `*${label}* (\`${result.id}\`)` : `\`${result.id}\``;
+        await this.channel.sendText(
+          msg.chatId,
+          `Sub-agent spawned: ${display}\nModel: ${model ?? "sonnet"}\nTask: ${task.slice(0, 200)}`,
+          msg.replyContext,
+        );
+      }
+    });
+
+    // Handle /agents — list, kill, info
+    this.channel.onCommand("agents", async (msg) => {
+      if (!this.agents) {
+        await this.channel.sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
+        return;
+      }
+      const args = msg.text.trim().split(/\s+/);
+      const sub = args[0]?.toLowerCase();
+
+      if (!sub || sub === "list") {
+        const active = this.agents.listActive(msg.chatId);
+        const recent = this.agents.listRecent(msg.chatId, 5);
+        const lines: string[] = [];
+
+        if (active.length > 0) {
+          lines.push(`*Active (${active.length}):*`);
+          for (const a of active) {
+            const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
+            lines.push(`  \`${a.id}\` ${a.label ?? ""} (${a.model}, ${elapsed}s) — ${a.task.slice(0, 60)}`);
+          }
+        } else {
+          lines.push("No active sub-agents.");
+        }
+
+        const completed = recent.filter((r) => r.status !== "running");
+        if (completed.length > 0) {
+          lines.push("");
+          lines.push(`*Recent:*`);
+          for (const r of completed) {
+            const cost = r.costUsd ? ` $${r.costUsd.toFixed(4)}` : "";
+            lines.push(`  \`${r.id}\` ${r.status} (${r.model}${cost}) — ${r.task.slice(0, 50)}`);
+          }
+        }
+
+        await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+      } else if (sub === "kill") {
+        const target = args[1];
+        if (!target) {
+          await this.channel.sendText(msg.chatId, "Usage: `/agents kill <id>` or `/agents kill all`", msg.replyContext);
+          return;
+        }
+        if (target === "all") {
+          const count = this.agents.killAll();
+          await this.channel.sendText(msg.chatId, `Killed ${count} sub-agent(s).`, msg.replyContext);
+        } else {
+          const killed = this.agents.kill(target);
+          await this.channel.sendText(
+            msg.chatId,
+            killed ? `Killed sub-agent \`${target}\`.` : `No running sub-agent matching \`${target}\`.`,
+            msg.replyContext,
+          );
+        }
+      } else if (sub === "info") {
+        const target = args[1];
+        if (!target) {
+          await this.channel.sendText(msg.chatId, "Usage: `/agents info <id>`", msg.replyContext);
+          return;
+        }
+        const agent = this.agents.getInfo(target);
+        if (!agent) {
+          await this.channel.sendText(msg.chatId, `No sub-agent matching \`${target}\`.`, msg.replyContext);
+          return;
+        }
+        const lines = [
+          `*Sub-Agent \`${agent.id}\`*`,
+          `Status: ${agent.status}`,
+          `Model: ${agent.model}`,
+          `Task: ${agent.task.slice(0, 500)}`,
+          `Created: ${agent.createdAt}`,
+        ];
+        if (agent.endedAt) lines.push(`Ended: ${agent.endedAt}`);
+        if (agent.costUsd) lines.push(`Cost: $${agent.costUsd.toFixed(4)}`);
+        if (agent.durationMs) lines.push(`Duration: ${agent.durationMs}ms`);
+        if (agent.resultText) {
+          lines.push(`\nResult:\n${agent.resultText.slice(0, 2000)}`);
+        }
+        await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+      } else {
+        await this.channel.sendText(
+          msg.chatId,
+          "Usage: `/agents list`, `/agents kill <id|all>`, `/agents info <id>`",
           msg.replyContext,
         );
       }
