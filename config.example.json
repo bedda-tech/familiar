@@ -1,0 +1,20 @@
+{
+  "telegram": {
+    "botToken": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+    "allowedUsers": [12345678]
+  },
+  "claude": {
+    "workingDirectory": "/home/youruser/familiar-workspace",
+    "model": "sonnet",
+    "systemPrompt": "You are a helpful personal assistant communicating via Telegram. Keep responses concise and well-formatted for mobile reading.",
+    "allowedTools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
+    "maxTurns": 25
+  },
+  "sessions": {
+    "inactivityTimeout": "24h",
+    "rotateAfterMessages": 200
+  },
+  "log": {
+    "level": "info"
+  }
+}

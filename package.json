@@ -1,0 +1,44 @@
+{
+  "name": "@bedda-tech/familiar",
+  "version": "0.1.0",
+  "description": "Bridge between Telegram and Claude Code — your AI familiar",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "familiar": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "templates/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js start",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["claude", "telegram", "ai", "assistant", "claude-code"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bedda-tech/familiar.git"
+  },
+  "homepage": "https://github.com/bedda-tech/familiar#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "grammy": "^1.35.0",
+    "better-sqlite3": "^11.0.0",
+    "pino": "^9.0.0",
+    "p-queue": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
