@@ -19,6 +19,7 @@ import { Bridge } from "./bridge.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import type { CronJobConfig, CronRunResult } from "./cron/types.js";
 import { WebhookServer } from "./webhooks/server.js";
+import { ConfigWatcher } from "./config-watcher.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -326,9 +327,43 @@ async function cmdStart(configPath?: string): Promise<void> {
     log.info({ port: config.webhooks.port }, "webhook server started");
   }
 
+  // Watch config for hot-reload
+  const resolvedConfigPath = configPath ?? getConfigPath();
+  const configWatcher = new ConfigWatcher(resolvedConfigPath, config);
+  configWatcher.onChange((newConfig, oldConfig) => {
+    // Hot-reload model changes
+    if (newConfig.claude.model !== oldConfig.claude.model) {
+      claude.setModel(null); // Clear override, pick up new default
+      log.info({ model: newConfig.claude.model }, "model updated from config");
+    }
+
+    // Hot-reload log level
+    if (newConfig.log.level !== oldConfig.log.level) {
+      initLogger(newConfig.log.level);
+      log.info({ level: newConfig.log.level }, "log level updated from config");
+    }
+
+    // Notify about changes that require restart
+    const needsRestart: string[] = [];
+    if (newConfig.telegram.botToken !== oldConfig.telegram.botToken) {
+      needsRestart.push("telegram.botToken");
+    }
+    if (JSON.stringify(newConfig.cron) !== JSON.stringify(oldConfig.cron)) {
+      needsRestart.push("cron");
+    }
+    if (JSON.stringify(newConfig.webhooks) !== JSON.stringify(oldConfig.webhooks)) {
+      needsRestart.push("webhooks");
+    }
+    if (needsRestart.length > 0) {
+      log.warn({ fields: needsRestart }, "config changed — restart needed for these fields");
+    }
+  });
+  configWatcher.start();
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
+    configWatcher.stop();
     if (webhooks) webhooks.stop();
     if (cron) cron.stop();
     await telegram.stop();
