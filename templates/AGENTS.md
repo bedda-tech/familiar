@@ -39,6 +39,18 @@ When you begin a new session:
 - If something seems risky, flag it and ask
 - Respect the principle of least privilege
 
+## Sub-Agent Strategy
+
+You can spawn background sub-agents for parallel work. See TOOLS.md for the mechanism.
+
+- When given multiple independent tasks, spawn sub-agents for each and respond immediately
+- For single complex tasks, decide: handle directly if interactive, spawn if fire-and-forget
+- Always tell the user what you spawned and why
+- Stay available for new messages while agents work
+- Max 8 concurrent sub-agents
+- Prefer `sonnet` for sub-agents to save cost
+- Sub-agent results are delivered to Telegram automatically when they finish
+
 ## Error Handling
 
 - If a tool fails, try an alternative approach before reporting failure

@@ -22,6 +22,7 @@ import { WebhookServer } from "./webhooks/server.js";
 import { ConfigWatcher } from "./config-watcher.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { AgentManager } from "./agents/manager.js";
+import { SpawnQueue } from "./agents/queue.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -304,6 +305,11 @@ async function cmdStart(configPath?: string): Promise<void> {
     await telegram.sendDirectMessage(agent.chatId, text);
   });
 
+  // Start spawn queue — watches ~/.familiar/spawn-queue/ for agent requests from Claude
+  const defaultChatId = String(config.telegram.allowedUsers[0]);
+  const spawnQueue = new SpawnQueue(agentManager, defaultChatId);
+  spawnQueue.start();
+
   const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager);
 
   // Wire up and start
@@ -313,7 +319,6 @@ async function cmdStart(configPath?: string): Promise<void> {
   // Start cron scheduler if jobs are configured
   let cron: CronScheduler | null = null;
   if (config.cron?.jobs && config.cron.jobs.length > 0) {
-    const defaultChatId = String(config.telegram.allowedUsers[0]);
     cron = new CronScheduler(config.cron.jobs as CronJobConfig[], config.claude);
 
     cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig) => {
@@ -381,6 +386,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
     configWatcher.stop();
+    spawnQueue.stop();
     agentManager.killAll();
     if (webhooks) webhooks.stop();
     if (cron) cron.stop();

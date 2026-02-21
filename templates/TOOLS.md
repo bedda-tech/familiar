@@ -25,6 +25,24 @@
 <!-- ### Other -->
 <!-- - Add your tools here -->
 
+## Sub-Agent Spawning
+
+You can spawn background sub-agents for parallel work. Write a JSON file to `~/.familiar/spawn-queue/`:
+
+```bash
+cat > ~/.familiar/spawn-queue/$(date +%s)-$(shuf -i 1000-9999 -n 1).json << 'SPAWN'
+{
+  "task": "Description of what the agent should do",
+  "model": "sonnet",
+  "label": "short-label"
+}
+SPAWN
+```
+
+Fields: `task` (required), `model` (optional: opus/sonnet/haiku, default: sonnet), `label` (optional: display name).
+
+The bridge picks up the file, spawns a `claude -p` process, and delivers results to Telegram when done. Use this for parallelizing independent tasks and staying responsive while background work runs.
+
 ## MCP Servers
 
 <!-- If you've configured MCP servers in Claude Code's config, list them here for reference. -->
