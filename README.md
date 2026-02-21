@@ -17,7 +17,7 @@ There are two paths: **fresh install** or **migrate from OpenClaw**. Choose one.
 
 ```bash
 # 1. Install globally from npm
-npm install -g @bedda-tech/familiar
+npm install -g @bedda/familiar
 
 # 2. Initialize config and workspace
 familiar init
@@ -74,7 +74,7 @@ If `~/.openclaw/` exists with a previous OpenClaw/ClawdBot setup:
 
 ```bash
 # 1. Install globally from npm
-npm install -g @bedda-tech/familiar
+npm install -g @bedda/familiar
 
 # 2. Run migration — reads OpenClaw config, creates Familiar config, adds CLAUDE.md to workspace
 familiar migrate-from-openclaw

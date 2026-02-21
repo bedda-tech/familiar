@@ -1,5 +1,5 @@
 {
-  "name": "@bedda-tech/familiar",
+  "name": "@bedda/familiar",
   "version": "0.1.0",
   "description": "Bridge between Telegram and Claude Code — your AI familiar",
   "type": "module",
