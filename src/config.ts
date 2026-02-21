@@ -44,11 +44,21 @@ export interface CronConfig {
   jobs: CronJobEntry[];
 }
 
+export interface WebhookServerConfig {
+  /** Port to listen on */
+  port: number;
+  /** Bind address (default: "127.0.0.1") */
+  bind?: string;
+  /** Bearer token for authentication */
+  token: string;
+}
+
 export interface FamiliarConfig {
   telegram: TelegramConfig;
   claude: ClaudeConfig;
   sessions: SessionConfig;
   cron?: CronConfig;
+  webhooks?: WebhookServerConfig;
   log: LogConfig;
 }
 

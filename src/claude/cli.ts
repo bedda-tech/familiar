@@ -18,7 +18,19 @@ export interface ClaudeRequest {
 }
 
 export class ClaudeCLI {
+  private modelOverride: string | null = null;
+
   constructor(private config: ClaudeConfig) {}
+
+  /** Override the model at runtime. Pass null to revert to config default. */
+  setModel(model: string | null): void {
+    this.modelOverride = model;
+  }
+
+  /** Get the currently active model (override or config default). */
+  getModel(): string {
+    return this.modelOverride ?? this.config.model ?? "sonnet";
+  }
 
   /**
    * Send a message to Claude via `claude -p` and stream back results.
@@ -147,8 +159,9 @@ export class ClaudeCLI {
       args.push("--resume", request.sessionId);
     }
 
-    if (this.config.model) {
-      args.push("--model", this.config.model);
+    const model = this.modelOverride ?? this.config.model;
+    if (model) {
+      args.push("--model", model);
     }
 
     if (this.config.systemPrompt) {

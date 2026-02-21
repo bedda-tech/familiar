@@ -18,6 +18,7 @@ import { TelegramChannel } from "./channels/telegram.js";
 import { Bridge } from "./bridge.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import type { CronJobConfig, CronRunResult } from "./cron/types.js";
+import { WebhookServer } from "./webhooks/server.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -310,9 +311,25 @@ async function cmdStart(configPath?: string): Promise<void> {
     log.info({ jobs: config.cron.jobs.length }, "cron scheduler started");
   }
 
+  // Start webhook server if configured
+  let webhooks: WebhookServer | null = null;
+  if (config.webhooks?.token) {
+    webhooks = new WebhookServer(config.webhooks, config.claude);
+
+    // Wake handler — inject message into a chat (defaults to first allowed user)
+    webhooks.onWake(async (chatId, message) => {
+      const targetChat = chatId || String(config.telegram.allowedUsers[0]);
+      await telegram.sendDirectMessage(targetChat, message);
+    });
+
+    await webhooks.start();
+    log.info({ port: config.webhooks.port }, "webhook server started");
+  }
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
+    if (webhooks) webhooks.stop();
     if (cron) cron.stop();
     await telegram.stop();
     sessions.close();

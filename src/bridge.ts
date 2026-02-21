@@ -49,19 +49,36 @@ export class Bridge {
       await this.channel.sendText(msg.chatId, status, msg.replyContext);
     });
 
-    // Handle /model — just inform, model is set in config
+    // Handle /model — switch model at runtime or show current
     this.channel.onCommand("model", async (msg) => {
-      const text = msg.text.trim();
-      if (text) {
-        await this.channel.sendText(
-          msg.chatId,
-          `Model switching at runtime is not yet supported. Edit your config file to change the model.`,
-          msg.replyContext,
-        );
+      const requested = msg.text.trim().toLowerCase();
+      if (requested) {
+        const valid = ["opus", "sonnet", "haiku"];
+        if (valid.includes(requested)) {
+          this.claude.setModel(requested);
+          await this.channel.sendText(
+            msg.chatId,
+            `Model switched to *${requested}*. Use \`/model\` to check, or \`/model reset\` to revert to config default.`,
+            msg.replyContext,
+          );
+        } else if (requested === "reset") {
+          this.claude.setModel(null);
+          await this.channel.sendText(
+            msg.chatId,
+            `Model reverted to config default: *${this.claude.getModel()}*`,
+            msg.replyContext,
+          );
+        } else {
+          await this.channel.sendText(
+            msg.chatId,
+            `Unknown model: ${requested}\nAvailable: opus, sonnet, haiku\nUse \`/model reset\` to revert to config default.`,
+            msg.replyContext,
+          );
+        }
       } else {
         await this.channel.sendText(
           msg.chatId,
-          `Model is configured in ~/.familiar/config.json`,
+          `Current model: *${this.claude.getModel()}*\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model reset\``,
           msg.replyContext,
         );
       }
