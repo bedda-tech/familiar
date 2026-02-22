@@ -38,6 +38,9 @@ Usage:
   familiar tui                  Open interactive TUI (resumes Telegram session)
   familiar cron list            List configured cron jobs and their state
   familiar cron run <id>        Manually trigger a cron job
+  familiar recall <query>       Search memories semantically
+  familiar index-memory         Re-index memory files for search
+  familiar doctor               Run system diagnostics
   familiar init                 Initialize config and workspace
   familiar migrate-from-openclaw  Migrate an existing OpenClaw assistant
   familiar install-service      Install systemd user service
@@ -448,6 +451,71 @@ switch (command) {
 
   case "cron":
     cmdCron(args.slice(1)).catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "recall":
+    (async () => {
+      const query = args.slice(1).join(" ");
+      if (!query) {
+        console.error("Usage: familiar recall <query>");
+        process.exit(1);
+      }
+      const config = loadConfig();
+      if (!config.openai?.apiKey) {
+        console.error("OpenAI API key required for memory search. Set openai.apiKey in config.");
+        process.exit(1);
+      }
+      const { SessionStore } = await import("./session/store.js");
+      const { MemoryStore } = await import("./memory/store.js");
+      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
+      const memory = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      const results = await memory.search(query);
+      if (results.length === 0) {
+        console.log("No results found.");
+      } else {
+        for (const r of results) {
+          console.log(`\n--- ${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(3)}) ---`);
+          console.log(r.text.slice(0, 500));
+        }
+      }
+      sessions.close();
+    })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "index-memory":
+    (async () => {
+      const config = loadConfig();
+      if (!config.openai?.apiKey) {
+        console.error("OpenAI API key required for memory indexing. Set openai.apiKey in config.");
+        process.exit(1);
+      }
+      const { SessionStore } = await import("./session/store.js");
+      const { MemoryStore } = await import("./memory/store.js");
+      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
+      const memory = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      console.log("Indexing memory files...");
+      const result = await memory.indexAll();
+      console.log(`Done: ${result.indexed} indexed, ${result.skipped} unchanged.`);
+      const stats = memory.stats();
+      console.log(`Total: ${stats.chunks} chunks across ${stats.files} files.`);
+      sessions.close();
+    })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "doctor":
+    (async () => {
+      const { runDoctor } = await import("./doctor.js");
+      runDoctor();
+    })().catch((e) => {
       console.error("Error:", e instanceof Error ? e.message : e);
       process.exit(1);
     });

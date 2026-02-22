@@ -41,11 +41,12 @@
     "croner": "^10.0.1",
     "grammy": "^1.35.0",
     "p-queue": "^8.0.0",
-    "pino": "^9.0.0"
+    "pino": "^9.0.0",
+    "sqlite-vec": "^0.1.7-alpha.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.11",
-    "typescript": "5.7"
+    "typescript": "^5.9.3"
   }
 }

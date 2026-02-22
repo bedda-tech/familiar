@@ -298,14 +298,23 @@ export class Bridge {
     // Look up session
     const sessionId = this.sessions.getSession(msg.chatId);
 
-    // Pre-compaction flush: if context is getting long, inject save instruction
+    // Memory management: periodic saves and pre-compaction flush
     const flushEnabled = this.sessionConfig.preCompactionFlush !== false;
     if (flushEnabled && sessionId) {
       const info = this.sessions.getSessionInfo(msg.chatId);
-      const rotateAt = this.sessionConfig.rotateAfterMessages ?? 200;
-      if (info && info.messageCount > rotateAt * 0.8) {
-        prompt += "\n\n[SYSTEM: Context is getting long and may be compacted soon. Before answering, save any important pending context to memory/YYYY-MM-DD.md. Be brief — just capture what you'd need to continue if context resets.]";
-        log.info({ chatId: msg.chatId, messageCount: info.messageCount, rotateAt }, "injecting pre-compaction flush");
+      if (info) {
+        const rotateAt = this.sessionConfig.rotateAfterMessages ?? 200;
+        const count = info.messageCount;
+
+        if (count > rotateAt * 0.8) {
+          // Urgent: context is about to be compacted
+          prompt += "\n\n[SYSTEM: Context is getting long and may be compacted soon. Before answering, save any important pending context to memory/YYYY-MM-DD.md. Be brief — just capture what you'd need to continue if context resets.]";
+          log.info({ chatId: msg.chatId, messageCount: count, rotateAt }, "injecting pre-compaction flush");
+        } else if (count > 0 && count % 20 === 0) {
+          // Periodic: every 20 messages, nudge a lightweight memory save
+          prompt += "\n\n[SYSTEM: Periodic checkpoint — if you've accumulated important context, decisions, or learnings in this session that aren't yet saved, briefly update memory/YYYY-MM-DD.md. Skip if nothing new to save.]";
+          log.info({ chatId: msg.chatId, messageCount: count }, "injecting periodic memory checkpoint");
+        }
       }
     }
 
