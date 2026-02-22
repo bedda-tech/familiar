@@ -20,6 +20,7 @@ import { CronScheduler } from "./cron/scheduler.js";
 import type { CronJobConfig, CronRunResult } from "./cron/types.js";
 import { WebhookServer } from "./webhooks/server.js";
 import { ConfigWatcher } from "./config-watcher.js";
+import { DeliveryQueue } from "./delivery/queue.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { AgentManager } from "./agents/manager.js";
 import { SpawnQueue } from "./agents/queue.js";
@@ -291,18 +292,23 @@ async function cmdStart(configPath?: string): Promise<void> {
   const claude = new ClaudeCLI(config.claude);
   const telegram = new TelegramChannel(config.telegram);
 
+  // Initialize delivery queue — wraps sendDirectMessage with retry + persistence
+  const deliveryQueue = new DeliveryQueue(sessions.getDb());
+  deliveryQueue.onSend((chatId, text) => telegram.sendDirectMessage(chatId, text));
+  deliveryQueue.start();
+
   // Initialize sub-agent system
   const agentRegistry = new AgentRegistry(sessions.getDb());
   const agentManager = new AgentManager(agentRegistry, config.claude);
 
-  // Deliver sub-agent results back to Telegram
+  // Deliver sub-agent results via the delivery queue (retry-safe)
   agentManager.onDelivery(async (agent, resultText, costUsd, durationMs) => {
     const label = agent.label ?? agent.id;
     const status = agent.status === "completed" ? "done" : agent.status;
     const meta = `_${(durationMs / 1000).toFixed(1)}s | $${costUsd.toFixed(4)}_`;
     const preview = resultText.length > 3000 ? resultText.slice(0, 3000) + "..." : resultText;
     const text = `*Sub-agent ${status} — ${label}*\n${meta}\n\n${preview}`;
-    await telegram.sendDirectMessage(agent.chatId, text);
+    await deliveryQueue.deliver(agent.chatId, text);
   });
 
   // Start spawn queue — watches ~/.familiar/spawn-queue/ for agent requests from Claude
@@ -327,7 +333,7 @@ async function cmdStart(configPath?: string): Promise<void> {
       const prefix = result.isError ? `*Cron Error — ${label}*` : `*Cron — ${label}*`;
       const meta = `_${result.durationMs}ms | $${result.costUsd.toFixed(4)} | ${result.numTurns} turns_`;
       const text = `${prefix}\n${meta}\n\n${result.text}`;
-      await telegram.sendDirectMessage(chatId, text);
+      await deliveryQueue.deliver(chatId, text);
     });
 
     cron.start();
@@ -342,7 +348,7 @@ async function cmdStart(configPath?: string): Promise<void> {
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
       const targetChat = chatId || String(config.telegram.allowedUsers[0]);
-      await telegram.sendDirectMessage(targetChat, message);
+      await deliveryQueue.deliver(targetChat, message);
     });
 
     await webhooks.start();
@@ -386,6 +392,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const shutdown = async (signal: string) => {
     log.info({ signal }, "shutting down");
     configWatcher.stop();
+    deliveryQueue.stop();
     spawnQueue.stop();
     agentManager.killAll();
     if (webhooks) webhooks.stop();
