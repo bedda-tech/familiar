@@ -1,6 +1,6 @@
 {
   "name": "@bedda/familiar",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Bridge between Telegram and Claude Code — your AI familiar",
   "type": "module",
   "main": "dist/index.js",

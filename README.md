@@ -24,7 +24,11 @@ Telegram  ──>  Familiar (bridge)  ──>  claude -p --resume <session>
 - **Tool visibility** — Tool calls shown in Telegram as inline code blocks so you can see what Claude is doing
 - **Voice transcription** — Voice messages transcribed via OpenAI Whisper API before sending to Claude
 - **Cost tracking** — `/cost` shows session, today, 24h, and all-time usage costs
-- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes; `/agents` to list, kill, inspect. SQLite-tracked with concurrency limits
+- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes; `/agents` to list, kill, inspect. SQLite-tracked with concurrency limits. The familiar can also self-spawn agents via a file-based queue
+- **Semantic memory** — Hybrid FTS5 + vector search (sqlite-vec, OpenAI embeddings). `familiar recall <query>` for semantic search, `familiar index-memory` to re-index
+- **Delivery queue** — SQLite-backed retry with exponential backoff for all async Telegram deliveries (cron, sub-agents, webhooks). Survives restarts
+- **Memory management** — PreCompact hook backs up transcripts, periodic checkpoints every 20 messages, urgent flush at 80% of session rotation limit
+- **System diagnostics** — `familiar doctor` checks config, Claude CLI, DB integrity, workspace, systemd, disk space
 - **Model failover** — Automatic failover chain (opus → sonnet → haiku) when a model errors before producing output
 - **Cron scheduler** — Schedule recurring jobs with cron expressions, timezone support, and isolated execution
 - **Webhooks** — HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
@@ -126,11 +130,9 @@ All existing governing docs (SOUL.md, IDENTITY.md, USER.md, etc.) are left untou
 - Cron jobs (cron expressions and interval schedules converted to Familiar format)
 - System prompt derived from IDENTITY.md
 
-**Not migrated** (planned features):
+**Not migrated:**
 - Other channels (Discord, WhatsApp, Signal) — Familiar is Telegram-only for now
-- Vector memory SQLite DB
 - Skills/plugins — use Claude Code MCP tools instead
-- Sub-agent configs
 
 ```bash
 # 3. Verify config looks right
@@ -176,7 +178,8 @@ If `familiar install-service` creates a service that can't find `claude`:
 | `claude.failoverChain` | string[] | `["opus","sonnet","haiku"]` | Model failover order — tries next on error |
 | `sessions.inactivityTimeout` | string | `"24h"` | Reset session after this much inactivity. Format: `"30m"`, `"24h"`, `"7d"` |
 | `sessions.rotateAfterMessages` | number | `200` | Start fresh session after this many messages |
-| `openai.apiKey` | string | — | OpenAI API key for Whisper voice transcription |
+| `sessions.preCompactionFlush` | boolean | `true` | Inject memory-save prompt at 80% of rotation limit |
+| `openai.apiKey` | string | — | OpenAI API key for Whisper voice transcription and memory embeddings |
 | `openai.whisperModel` | string | `"whisper-1"` | Whisper model to use |
 | `log.level` | string | `"info"` | Log level: `"debug"`, `"info"`, `"warn"`, `"error"` |
 
@@ -247,6 +250,9 @@ familiar start                  Start the Telegram bot (foreground)
 familiar tui                    Open Claude Code TUI, resuming the active Telegram session
 familiar cron list              List configured cron jobs and their state
 familiar cron run <id>          Manually trigger a cron job
+familiar recall <query>         Semantic memory search (hybrid FTS + vector)
+familiar index-memory           Re-index all memory files for semantic search
+familiar doctor                 Run system diagnostics
 familiar init                   Create ~/.familiar/config.json and workspace with templates
 familiar migrate-from-openclaw  Migrate from an existing OpenClaw setup
 familiar install-service        Install systemd user service for background running
@@ -317,23 +323,25 @@ systemctl --user stop familiar
 
 ## Architecture
 
-5 runtime dependencies (`grammy`, `better-sqlite3`, `pino`, `p-queue`, `croner`).
+6 runtime dependencies (`grammy`, `better-sqlite3`, `pino`, `p-queue`, `croner`, `sqlite-vec`).
 
 ```
 ~/.familiar/
   config.json       # Config (hot-reloaded)
-  familiar.db       # SQLite — sessions, message log, cron state
+  familiar.db       # SQLite — sessions, message log, cron state, agents, delivery queue, memory vectors
+  spawn-queue/      # File-based queue for self-spawning sub-agents
 
 ~/familiar/         # Source repo
   src/
-    index.ts        # CLI entry point (start, tui, init, migrate, cron, install-service)
+    index.ts        # CLI entry point (start, tui, init, migrate, cron, doctor, recall, etc.)
     config.ts       # Config loader with defaults and validation
     config-watcher.ts # Hot-reload via fs.watch
-    bridge.ts       # Message router: channel <-> Claude
+    bridge.ts       # Message router: channel <-> Claude (with periodic memory checkpoints)
+    doctor.ts       # System diagnostics (config, CLI, DB, workspace, systemd, disk)
     migrate-openclaw.ts # OpenClaw migration (config + cron jobs)
     claude/
       cli.ts        # Spawns `claude -p`, parses stream-json, model override
-      types.ts      # Stream event types (text, thinking, tool_use, done)
+      types.ts      # Stream event types (text, thinking, tool_use, system, done)
     channels/
       telegram.ts   # grammY Telegram bot (typing, direct messages, chunking)
       types.ts      # Channel interface
@@ -349,6 +357,11 @@ systemctl --user stop familiar
     agents/
       registry.ts   # SQLite sub-agent tracking (status, cost, results)
       manager.ts    # Sub-agent lifecycle (spawn, kill, delivery callbacks)
+      queue.ts      # File-based spawn queue for self-spawning sub-agents
+    delivery/
+      queue.ts      # SQLite-backed retry with exponential backoff
+    memory/
+      store.ts      # Hybrid FTS5 + sqlite-vec semantic memory search
     webhooks/
       server.ts     # HTTP webhook server (wake, agent, health)
     voice/

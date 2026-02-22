@@ -2,6 +2,27 @@
 
 All notable changes to Familiar are documented here.
 
+## [0.4.0] — 2026-02-22
+
+### Added
+- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes. `/agents` to list, kill, and inspect. SQLite-backed registry tracks status, cost, and results. Results delivered back to Telegram on completion. ([#11](https://github.com/bedda-tech/familiar/issues/11))
+- **Self-spawning agents** — File-based spawn queue at `~/.familiar/spawn-queue/`. The familiar can write JSON files to spawn its own sub-agents, enabling parallel work without user intervention.
+- **Semantic memory** — Hybrid FTS5 + sqlite-vec vector search using OpenAI `text-embedding-3-small` embeddings (1536 dims). Reciprocal rank fusion merges full-text and vector results. `familiar recall <query>` for search, `familiar index-memory` to re-index. ([#18](https://github.com/bedda-tech/familiar/issues/18), [#28](https://github.com/bedda-tech/familiar/issues/28))
+- **Delivery queue** — SQLite-backed retry with exponential backoff (10s → 30s → 90s → 270s → 810s, max 5 attempts) for all async Telegram deliveries (cron, sub-agents, webhooks). Survives restarts. ([#21](https://github.com/bedda-tech/familiar/issues/21))
+- **Pre-compaction memory flush** — Bridge injects memory-save prompt at 80% of session rotation limit. Periodic checkpoints every 20 messages. ([#37](https://github.com/bedda-tech/familiar/issues/37))
+- **System diagnostics** — `familiar doctor` checks config, Claude CLI, Telegram token, database integrity, workspace, systemd service, disk space, and spawn queue. ([#41](https://github.com/bedda-tech/familiar/issues/41))
+- **System event forwarding** — Claude Code system events (compaction boundaries, session info) forwarded through the stream pipeline and logged.
+- **PreCompact hook** — `~/.claude/hooks.json` hook backs up transcripts before context compaction and writes compaction notices to daily memory.
+
+### Changed
+- Architecture section in README updated with new modules (agents, delivery, memory, doctor).
+- Config reference updated with `sessions.preCompactionFlush` and note about `openai.apiKey` also used for embeddings.
+- "Not migrated" section trimmed — vector memory and sub-agents now implemented.
+- CLI commands section updated with `recall`, `index-memory`, `doctor`.
+
+### Dependencies
+- Added `sqlite-vec` for vector similarity search in semantic memory.
+
 ## [0.3.0] — 2026-02-22
 
 ### Added
