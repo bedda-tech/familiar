@@ -19,6 +19,8 @@ export interface ClaudeConfig {
   maxTurns?: number;
   /** Model failover chain — tries each in order on failure. Default: ["opus", "sonnet", "haiku"] */
   failoverChain?: string[];
+  /** Path to MCP server config file, passed as --mcp-config to Claude CLI */
+  mcpConfig?: string;
 }
 
 export interface SessionConfig {

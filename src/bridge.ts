@@ -4,6 +4,8 @@ import type { SessionStore } from "./session/store.js";
 import type { OpenAIConfig, SessionConfig } from "./config.js";
 import type { AgentManager } from "./agents/manager.js";
 import type { MemoryStore } from "./memory/store.js";
+import type { DeliveryQueue } from "./delivery/queue.js";
+import type { CronScheduler } from "./cron/scheduler.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import {
@@ -21,6 +23,8 @@ export class Bridge {
   private openai: OpenAIConfig | undefined;
   private agents: AgentManager | undefined;
   private memoryStore: MemoryStore | undefined;
+  private deliveryQueue: DeliveryQueue | undefined;
+  private cronScheduler: CronScheduler | undefined;
   private sessionConfig: SessionConfig;
 
   constructor(
@@ -31,10 +35,14 @@ export class Bridge {
     agents?: AgentManager,
     sessionConfig?: SessionConfig,
     memoryStore?: MemoryStore,
+    deliveryQueue?: DeliveryQueue,
+    cronScheduler?: CronScheduler,
   ) {
     this.openai = openai;
     this.agents = agents;
     this.memoryStore = memoryStore;
+    this.deliveryQueue = deliveryQueue;
+    this.cronScheduler = cronScheduler;
     this.sessionConfig = sessionConfig ?? { inactivityTimeout: "24h" };
   }
 
@@ -318,6 +326,71 @@ export class Bridge {
 
       await this.channel.sendText(msg.chatId, results, msg.replyContext);
     });
+
+    // Handle /processes (aliased as /ps) — system status overview
+    const processesHandler = async (msg: IncomingMessage) => {
+      const lines: string[] = [];
+
+      // System uptime
+      const uptimeSec = process.uptime();
+      const hours = Math.floor(uptimeSec / 3600);
+      const minutes = Math.floor((uptimeSec % 3600) / 60);
+      const uptimeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+      lines.push("*System Status*");
+      lines.push(`Uptime: ${uptimeStr}`);
+
+      // Sub-agents
+      if (this.agents) {
+        const active = this.agents.listActive();
+        lines.push("");
+        lines.push(`*Sub-agents:* ${active.length} running`);
+        for (const a of active) {
+          const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
+          const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+          const label = a.label ? `"${a.label}"` : `"${a.task.slice(0, 40)}"`;
+          lines.push(`\u2022 \`${a.id}\` \u2014 ${label} (${elapsedStr})`);
+        }
+      } else {
+        lines.push("");
+        lines.push("*Sub-agents:* not configured");
+      }
+
+      // Delivery queue
+      if (this.deliveryQueue) {
+        const pending = this.deliveryQueue.pendingCount();
+        lines.push("");
+        lines.push(`*Delivery Queue:* ${pending} pending`);
+      } else {
+        lines.push("");
+        lines.push("*Delivery Queue:* not available");
+      }
+
+      // Cron jobs
+      if (this.cronScheduler) {
+        const jobs = this.cronScheduler.listJobs();
+        const enabledJobs = jobs.filter((j) => j.enabled !== false);
+        lines.push("");
+        lines.push(`*Cron Jobs:* ${enabledJobs.length} active`);
+        for (const job of enabledJobs) {
+          let nextStr = "unknown";
+          if (job.nextRun) {
+            const nextDate = new Date(job.nextRun);
+            nextStr = nextDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+          }
+          const label = job.label ?? job.id;
+          lines.push(`\u2022 ${label} \u2014 next: ${nextStr}`);
+        }
+      } else {
+        lines.push("");
+        lines.push("*Cron Jobs:* not configured");
+      }
+
+      await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+    };
+
+    this.channel.onCommand("processes", processesHandler);
+    this.channel.onCommand("ps", processesHandler);
 
     log.info("bridge wired up");
   }

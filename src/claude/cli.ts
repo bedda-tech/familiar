@@ -239,6 +239,10 @@ export class ClaudeCLI {
       args.push("--max-turns", String(this.config.maxTurns));
     }
 
+    if (this.config.mcpConfig) {
+      args.push("--mcp-config", this.config.mcpConfig);
+    }
+
     return args;
   }
 

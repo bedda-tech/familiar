@@ -181,7 +181,22 @@ If `familiar install-service` creates a service that can't find `claude`:
 | `sessions.preCompactionFlush` | boolean | `true` | Inject memory-save prompt at 80% of rotation limit |
 | `openai.apiKey` | string | — | OpenAI API key for Whisper voice transcription and memory embeddings |
 | `openai.whisperModel` | string | `"whisper-1"` | Whisper model to use |
+| `claude.mcpConfig` | string | — | Path to MCP server config file, passed as `--mcp-config` to Claude CLI |
 | `log.level` | string | `"info"` | Log level: `"debug"`, `"info"`, `"warn"`, `"error"` |
+
+### MCP Servers
+
+Familiar passes MCP server configuration directly to Claude Code. Create an MCP config file and reference it:
+
+```json
+{
+  "claude": {
+    "mcpConfig": "/path/to/mcp-servers.json"
+  }
+}
+```
+
+See [Claude Code MCP docs](https://docs.anthropic.com/en/docs/claude-code/mcp) for the config format.
 
 ### Cron Jobs
 

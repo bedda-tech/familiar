@@ -131,6 +131,10 @@ export class AgentManager {
       args.push("--append-system-prompt", this.claudeConfig.systemPrompt);
     }
 
+    if (this.claudeConfig.mcpConfig) {
+      args.push("--mcp-config", this.claudeConfig.mcpConfig);
+    }
+
     const env = { ...process.env };
     delete env.CLAUDECODE;
 

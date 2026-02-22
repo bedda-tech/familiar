@@ -33,6 +33,10 @@ export async function runCronJob(
 
   args.push("--max-turns", String(maxTurns));
 
+  if (defaultConfig.mcpConfig) {
+    args.push("--mcp-config", defaultConfig.mcpConfig);
+  }
+
   log.info({ jobId: job.id, model, workDir }, "running cron job");
 
   const env = { ...process.env };

@@ -335,12 +335,6 @@ async function cmdStart(configPath?: string): Promise<void> {
     }
   }
 
-  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions, memoryStore);
-
-  // Wire up and start
-  bridge.start();
-  await telegram.start();
-
   // Start cron scheduler if jobs are configured
   let cron: CronScheduler | null = null;
   if (config.cron?.jobs && config.cron.jobs.length > 0) {
@@ -358,6 +352,12 @@ async function cmdStart(configPath?: string): Promise<void> {
     cron.start();
     log.info({ jobs: config.cron.jobs.length }, "cron scheduler started");
   }
+
+  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions, memoryStore, deliveryQueue, cron ?? undefined);
+
+  // Wire up and start
+  bridge.start();
+  await telegram.start();
 
   // Start webhook server if configured
   let webhooks: WebhookServer | null = null;
