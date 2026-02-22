@@ -247,6 +247,8 @@ If `familiar install-service` creates a service that can't find `claude`:
 
 ```
 familiar start                  Start the Telegram bot (foreground)
+familiar start --daemon         Start in background (writes PID to ~/.familiar/familiar.pid)
+familiar stop                   Stop a daemon-mode process
 familiar tui                    Open Claude Code TUI, resuming the active Telegram session
 familiar cron list              List configured cron jobs and their state
 familiar cron run <id>          Manually trigger a cron job

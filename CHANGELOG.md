@@ -2,7 +2,7 @@
 
 All notable changes to Familiar are documented here.
 
-## [0.4.0] — 2026-02-22
+## [0.5.0] — 2026-02-22
 
 ### Added
 - **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes. `/agents` to list, kill, and inspect. SQLite-backed registry tracks status, cost, and results. Results delivered back to Telegram on completion. ([#11](https://github.com/bedda-tech/familiar/issues/11))
@@ -14,14 +14,23 @@ All notable changes to Familiar are documented here.
 - **System event forwarding** — Claude Code system events (compaction boundaries, session info) forwarded through the stream pipeline and logged.
 - **PreCompact hook** — `~/.claude/hooks.json` hook backs up transcripts before context compaction and writes compaction notices to daily memory.
 
+- **Daemon mode** — `familiar start --daemon` forks to background, writes PID file. `familiar stop` sends SIGTERM. Stale PID detection prevents duplicate instances. ([#2](https://github.com/bedda-tech/familiar/issues/2))
+- **Test suite** — 131 tests across 5 modules (chunker, config, session store, delivery queue, agent registry) using vitest. ([#10](https://github.com/bedda-tech/familiar/issues/10))
+- **CI/CD pipeline** — GitHub Actions: build + test on Node 20/22, npm publish on version tags. ([#54](https://github.com/bedda-tech/familiar/issues/54))
+- **Repo presentation** — CODE_OF_CONDUCT.md, SECURITY.md, GitHub issue/PR templates.
+
 ### Changed
 - Architecture section in README updated with new modules (agents, delivery, memory, doctor).
 - Config reference updated with `sessions.preCompactionFlush` and note about `openai.apiKey` also used for embeddings.
 - "Not migrated" section trimmed — vector memory and sub-agents now implemented.
-- CLI commands section updated with `recall`, `index-memory`, `doctor`.
+- CLI commands section updated with `recall`, `index-memory`, `doctor`, `start --daemon`, `stop`.
+
+### Fixed
+- **Delivery queue retry bug** — SELECT query used raw column names instead of aliases, causing `chatId` and `maxAttempts` to be `undefined` during retries.
 
 ### Dependencies
 - Added `sqlite-vec` for vector similarity search in semantic memory.
+- Added `vitest` (dev) for testing.
 
 ## [0.3.0] — 2026-02-22
 
@@ -32,7 +41,6 @@ All notable changes to Familiar are documented here.
 - **Thinking mode control** — `/thinking on` / `/thinking off` to toggle thinking block display. ([#34](https://github.com/bedda-tech/familiar/issues/34))
 - **Tool visibility** — Tool calls shown in Telegram as inline code blocks. Typing indicator restarts during tool execution.
 - **File responses** — `sendFile` added to Channel interface for sending photos/documents back to user. ([#26](https://github.com/bedda-tech/familiar/issues/26))
-- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes. `/agents` to list, kill, and inspect. SQLite-backed registry tracks status, cost, and results. Configurable concurrency limit. Results delivered back to Telegram on completion. ([#11](https://github.com/bedda-tech/familiar/issues/11))
 - **OpenAI config section** — `openai.apiKey` and `openai.whisperModel` for Whisper integration.
 
 ### Changed

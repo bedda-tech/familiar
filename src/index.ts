@@ -25,6 +25,7 @@ import { AgentRegistry } from "./agents/registry.js";
 import { AgentManager } from "./agents/manager.js";
 import { SpawnQueue } from "./agents/queue.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
+import { runConfigure } from "./configure.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +44,7 @@ Usage:
   familiar recall <query>       Search memories semantically
   familiar index-memory         Re-index memory files for search
   familiar doctor               Run system diagnostics
+  familiar configure             Interactive configuration wizard
   familiar init                 Initialize config and workspace
   familiar migrate-from-openclaw  Migrate an existing OpenClaw assistant
   familiar install-service      Install systemd user service
@@ -394,19 +396,63 @@ async function cmdStart(configPath?: string): Promise<void> {
   configWatcher.start();
 
   // Graceful shutdown
+  let shuttingDown = false;
+
   const shutdown = async (signal: string) => {
+    if (shuttingDown) {
+      log.warn({ signal }, "shutdown already in progress, ignoring");
+      return;
+    }
+    shuttingDown = true;
+
     log.info({ signal }, "shutting down");
-    configWatcher.stop();
-    deliveryQueue.stop();
-    spawnQueue.stop();
-    agentManager.killAll();
-    if (webhooks) webhooks.stop();
-    if (cron) cron.stop();
-    await telegram.stop();
-    sessions.close();
+
+    // Force exit after 10 seconds if graceful shutdown hangs
+    const forceTimeout = setTimeout(() => {
+      log.error("graceful shutdown timed out after 10s, forcing exit");
+      process.exit(1);
+    }, 10_000);
+    forceTimeout.unref();
+
+    try { configWatcher.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping config watcher");
+    }
+
+    try { deliveryQueue.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping delivery queue");
+    }
+
+    try { spawnQueue.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping spawn queue");
+    }
+
+    try { agentManager.killAll(); } catch (e) {
+      log.error({ err: e }, "error killing agents");
+    }
+
+    try { if (webhooks) webhooks.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping webhooks");
+    }
+
+    try { if (cron) cron.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping cron");
+    }
+
+    try { await telegram.stop(); } catch (e) {
+      log.error({ err: e }, "error stopping telegram");
+    }
+
+    try { sessions.close(); } catch (e) {
+      log.error({ err: e }, "error closing sessions");
+    }
+
     // Clean up PID file if it exists (daemon mode)
-    const pidFile = join(getConfigDir(), "familiar.pid");
-    try { unlinkSync(pidFile); } catch {}
+    try {
+      const pidFile = join(getConfigDir(), "familiar.pid");
+      unlinkSync(pidFile);
+    } catch {}
+
+    log.info("shutdown complete");
     process.exit(0);
   };
 
@@ -461,6 +507,13 @@ switch (command) {
     });
     break;
   }
+
+  case "configure":
+    runConfigure().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
 
   case "init":
     cmdInit().catch((e) => {
