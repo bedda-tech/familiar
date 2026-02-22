@@ -1,10 +1,15 @@
 /**
- * Webhook HTTP server for external triggering.
+ * Webhook HTTP server for external triggering + REST API.
  *
- * Endpoints:
+ * Webhook Endpoints:
  *   POST /hooks/wake   — inject a message into a session (like a Telegram DM)
  *   POST /hooks/agent  — run an isolated agent turn and return the result
- *   GET  /health       — simple health check
+ *
+ * REST API Endpoints:
+ *   GET  /health              — simple health check
+ *   GET  /api/cron/jobs       — list all cron jobs with state
+ *   GET  /api/cron/jobs/:id/runs — run history for a specific job
+ *   POST /api/cron/jobs/:id/run  — trigger a cron job manually
  *
  * Auth: Bearer token via Authorization header or x-familiar-token header.
  */
@@ -13,6 +18,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import type { ClaudeConfig } from "../config.js";
 import { runCronJob } from "../cron/runner.js";
 import type { CronJobConfig } from "../cron/types.js";
+import type { CronScheduler } from "../cron/scheduler.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("webhooks");
@@ -28,6 +34,7 @@ export type WakeHandler = (chatId: string, message: string) => Promise<void>;
 export class WebhookServer {
   private server: Server | null = null;
   private wakeHandler: WakeHandler | null = null;
+  private cronScheduler: CronScheduler | null = null;
 
   constructor(
     private config: WebhookConfig,
@@ -39,8 +46,24 @@ export class WebhookServer {
     this.wakeHandler = handler;
   }
 
+  /** Attach the cron scheduler for REST API access. */
+  setCronScheduler(scheduler: CronScheduler): void {
+    this.cronScheduler = scheduler;
+  }
+
   async start(): Promise<void> {
     this.server = createServer((req, res) => {
+      // CORS headers for web dashboard
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-familiar-token");
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       this.handleRequest(req, res).catch((e) => {
         log.error({ err: e }, "unhandled webhook error");
         sendJson(res, 500, { error: "Internal server error" });
@@ -79,12 +102,36 @@ export class WebhookServer {
       return;
     }
 
+    // REST API routes (GET)
+    if (method === "GET") {
+      if (url === "/api/cron/jobs") {
+        this.handleListCronJobs(res);
+        return;
+      }
+
+      const runsMatch = url.match(/^\/api\/cron\/jobs\/([^/]+)\/runs$/);
+      if (runsMatch) {
+        this.handleGetCronRuns(runsMatch[1], res);
+        return;
+      }
+
+      sendJson(res, 404, { error: "Not found" });
+      return;
+    }
+
     if (method !== "POST") {
       sendJson(res, 405, { error: "Method not allowed" });
       return;
     }
 
-    // Parse body
+    // POST routes
+    const runMatch = url.match(/^\/api\/cron\/jobs\/([^/]+)\/run$/);
+    if (runMatch) {
+      await this.handleTriggerCronJob(runMatch[1], res);
+      return;
+    }
+
+    // Parse body for webhook endpoints
     let body: Record<string, unknown>;
     try {
       body = await readJsonBody(req);
@@ -106,6 +153,57 @@ export class WebhookServer {
         sendJson(res, 404, { error: "Not found" });
     }
   }
+
+  // ── REST API: Cron Management ──────────────────────────────────────
+
+  /** GET /api/cron/jobs — list all cron jobs with their current state. */
+  private handleListCronJobs(res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const jobs = this.cronScheduler.listJobs();
+    sendJson(res, 200, { jobs });
+  }
+
+  /** GET /api/cron/jobs/:id/runs — get run history for a specific job. */
+  private handleGetCronRuns(jobId: string, res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const runs = this.cronScheduler.getRunHistory(jobId, 20);
+    sendJson(res, 200, { jobId, runs });
+  }
+
+  /** POST /api/cron/jobs/:id/run — manually trigger a cron job. */
+  private async handleTriggerCronJob(jobId: string, res: ServerResponse): Promise<void> {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    log.info({ jobId }, "manual cron trigger via API");
+
+    const result = await this.cronScheduler.runNow(jobId);
+    if (!result) {
+      sendJson(res, 404, { error: `Job '${jobId}' not found` });
+      return;
+    }
+
+    sendJson(res, 200, {
+      status: result.isError ? "error" : "ok",
+      jobId: result.jobId,
+      text: result.text,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+      numTurns: result.numTurns,
+    });
+  }
+
+  // ── Webhook Handlers ───────────────────────────────────────────────
 
   /**
    * POST /hooks/wake — inject a message into a session.

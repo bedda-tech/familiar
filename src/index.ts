@@ -364,6 +364,11 @@ async function cmdStart(configPath?: string): Promise<void> {
   if (config.webhooks?.token) {
     webhooks = new WebhookServer(config.webhooks, config.claude);
 
+    // Wire up cron scheduler for REST API
+    if (cron) {
+      webhooks.setCronScheduler(cron);
+    }
+
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
       const targetChat = chatId || String(config.telegram.allowedUsers[0]);
