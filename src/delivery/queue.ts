@@ -101,7 +101,9 @@ export class DeliveryQueue {
     if (!this.sender) return;
 
     const rows = this.db.prepare(`
-      SELECT * FROM delivery_queue
+      SELECT id, chat_id AS chatId, text, attempts, max_attempts AS maxAttempts,
+             next_attempt_at AS nextAttemptAt, created_at AS createdAt, last_error AS lastError
+      FROM delivery_queue
       WHERE next_attempt_at <= datetime('now')
       ORDER BY created_at ASC
       LIMIT 10
