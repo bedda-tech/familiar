@@ -3,6 +3,7 @@ import type { ClaudeCLI, ClaudeRequest } from "./claude/cli.js";
 import type { SessionStore } from "./session/store.js";
 import type { OpenAIConfig, SessionConfig } from "./config.js";
 import type { AgentManager } from "./agents/manager.js";
+import type { MemoryStore } from "./memory/store.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import {
@@ -19,6 +20,7 @@ export class Bridge {
   private showThinking = true;
   private openai: OpenAIConfig | undefined;
   private agents: AgentManager | undefined;
+  private memoryStore: MemoryStore | undefined;
   private sessionConfig: SessionConfig;
 
   constructor(
@@ -28,9 +30,11 @@ export class Bridge {
     openai?: OpenAIConfig,
     agents?: AgentManager,
     sessionConfig?: SessionConfig,
+    memoryStore?: MemoryStore,
   ) {
     this.openai = openai;
     this.agents = agents;
+    this.memoryStore = memoryStore;
     this.sessionConfig = sessionConfig ?? { inactivityTimeout: "24h" };
   }
 
@@ -261,6 +265,58 @@ export class Bridge {
           msg.replyContext,
         );
       }
+    });
+
+    // Handle /search — search message history and semantic memory
+    this.channel.onCommand("search", async (msg) => {
+      const query = msg.text.replace(/^\/search\s*/i, "").trim();
+      if (!query) {
+        await this.channel.sendText(msg.chatId, "Usage: `/search <query>`", msg.replyContext);
+        return;
+      }
+
+      let results = "";
+
+      // Search message log (SQLite LIKE)
+      try {
+        const rows = this.sessions.getDb().prepare(
+          `SELECT content, role, created_at FROM message_log
+           WHERE chat_id = ? AND content LIKE '%' || ? || '%'
+           ORDER BY created_at DESC LIMIT 5`,
+        ).all(msg.chatId, query) as Array<{ content: string; role: string; created_at: string }>;
+
+        if (rows.length > 0) {
+          results += "*Message History:*\n";
+          for (const row of rows) {
+            const snippet = row.content.slice(0, 100).replace(/\n/g, " ");
+            results += `\u2022 _${row.role}_ (${row.created_at}): ${snippet}...\n`;
+          }
+        }
+      } catch (e) {
+        log.error({ err: e }, "search: message log query failed");
+      }
+
+      // Search semantic memory if available
+      if (this.memoryStore) {
+        try {
+          const memResults = await this.memoryStore.search(query, 5);
+          if (memResults.length > 0) {
+            results += "\n*Memory:*\n";
+            for (const r of memResults) {
+              const snippet = r.text.slice(0, 100).replace(/\n/g, " ");
+              results += `\u2022 _${r.path}:${r.startLine}_ (${r.score.toFixed(2)}): ${snippet}...\n`;
+            }
+          }
+        } catch (e) {
+          log.error({ err: e }, "search: semantic memory query failed");
+        }
+      }
+
+      if (!results) {
+        results = "No results found.";
+      }
+
+      await this.channel.sendText(msg.chatId, results, msg.replyContext);
     });
 
     log.info("bridge wired up");

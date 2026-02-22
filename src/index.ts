@@ -323,7 +323,19 @@ async function cmdStart(configPath?: string): Promise<void> {
   const spawnQueue = new SpawnQueue(agentManager, defaultChatId);
   spawnQueue.start();
 
-  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions);
+  // Initialize semantic memory store if OpenAI is configured
+  let memoryStore: import("./memory/store.js").MemoryStore | undefined;
+  if (config.openai) {
+    try {
+      const { MemoryStore } = await import("./memory/store.js");
+      memoryStore = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      log.info("memory store initialized for /search");
+    } catch (e) {
+      log.warn({ err: e }, "failed to initialize memory store — /search will only search message history");
+    }
+  }
+
+  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions, memoryStore);
 
   // Wire up and start
   bridge.start();

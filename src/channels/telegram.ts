@@ -1,9 +1,9 @@
 import { Bot, Context } from "grammy";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import PQueue from "p-queue";
-import type { TelegramConfig } from "../config.js";
+import { getConfigPath, type TelegramConfig } from "../config.js";
 import type { Channel, IncomingMessage, DraftHandle } from "./types.js";
 import { getLogger } from "../util/logger.js";
 
@@ -198,13 +198,75 @@ export class TelegramChannel implements Channel {
     return this.allowedUsers.has(userId);
   }
 
+  private get accessMode(): "allowlist" | "pairing" {
+    return this.config.accessMode ?? "allowlist";
+  }
+
+  /**
+   * Persist a newly-paired user ID to config.json so it survives restarts.
+   */
+  private persistAllowedUser(userId: number): void {
+    try {
+      const configPath = getConfigPath();
+      const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+      const users: number[] = raw.telegram?.allowedUsers ?? [];
+      if (!users.includes(userId)) {
+        users.push(userId);
+        raw.telegram.allowedUsers = users;
+        writeFileSync(configPath, JSON.stringify(raw, null, 2) + "\n", "utf-8");
+        log.info({ userId, configPath }, "persisted new paired user to config");
+      }
+    } catch (e) {
+      log.error({ err: e, userId }, "failed to persist paired user to config");
+    }
+  }
+
   private setupHandlers(): void {
+    // /pair command — runs BEFORE auth middleware so unpaired users can reach it
+    this.bot.command("pair", async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
+
+      // Already allowed — no need to pair
+      if (this.isAllowed(userId)) {
+        await ctx.reply("You are already connected.");
+        return;
+      }
+
+      if (this.accessMode !== "pairing") {
+        // In allowlist mode, silently ignore unknown users
+        return;
+      }
+
+      const text = ctx.message?.text ?? "";
+      const code = text.replace(/^\/pair\s*/, "").trim();
+
+      if (!code) {
+        await ctx.reply("Usage: /pair <code>");
+        return;
+      }
+
+      if (code === this.config.pairingCode) {
+        this.allowedUsers.add(userId);
+        this.persistAllowedUser(userId);
+        log.info({ userId }, "user paired successfully");
+        await ctx.reply("Paired successfully! You can now send messages.");
+      } else {
+        log.warn({ userId }, "invalid pairing code attempt");
+        await ctx.reply("Invalid pairing code.");
+      }
+    });
+
     // Auth middleware
     this.bot.use(async (ctx, next) => {
       const userId = ctx.from?.id;
       if (!userId || !this.isAllowed(userId)) {
-        log.warn({ userId }, "unauthorized user");
-        await ctx.reply("Unauthorized. Your user ID is not in the allowlist.");
+        if (this.accessMode === "pairing") {
+          log.debug({ userId }, "unpaired user in pairing mode");
+          await ctx.reply("Send /pair <code> to connect.");
+        } else {
+          log.warn({ userId }, "unauthorized user");
+        }
         return;
       }
       await next();
@@ -267,6 +329,14 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    this.bot.command("search", async (ctx) => {
+      const handler = this.commandHandlers.get("search");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
@@ -278,7 +348,8 @@ export class TelegramChannel implements Channel {
         "/cost — Usage costs\n" +
         "/thinking — Toggle thinking display\n" +
         "/spawn — Spawn a sub-agent for a task\n" +
-        "/agents — List/kill/info sub-agents",
+        "/agents — List/kill/info sub-agents\n" +
+        "/search — Search message history and memory",
       );
     });
 

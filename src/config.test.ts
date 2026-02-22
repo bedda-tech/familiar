@@ -376,13 +376,33 @@ describe("loadConfig", () => {
       expect(() => loadConfig("/tmp/c.json")).toThrow("allowedUsers");
     });
 
-    it("throws when allowedUsers is an empty array", () => {
+    it("throws when allowedUsers is empty in allowlist mode", () => {
       mockedExistsSync.mockReturnValue(true);
       mockedReadFileSync.mockReturnValue(
         JSON.stringify({ telegram: { botToken: "tok", allowedUsers: [] } }),
       );
 
-      expect(() => loadConfig("/tmp/c.json")).toThrow("allowedUsers");
+      expect(() => loadConfig("/tmp/c.json")).toThrow("allowedUsers must not be empty");
+    });
+
+    it("allows empty allowedUsers in pairing mode", () => {
+      mockedExistsSync.mockReturnValue(true);
+      mockedReadFileSync.mockReturnValue(
+        JSON.stringify({ telegram: { botToken: "tok", allowedUsers: [], accessMode: "pairing", pairingCode: "secret" } }),
+      );
+
+      const config = loadConfig("/tmp/c.json");
+      expect(config.telegram.allowedUsers).toEqual([]);
+      expect(config.telegram.accessMode).toBe("pairing");
+    });
+
+    it("throws when pairing mode has no pairingCode", () => {
+      mockedExistsSync.mockReturnValue(true);
+      mockedReadFileSync.mockReturnValue(
+        JSON.stringify({ telegram: { botToken: "tok", allowedUsers: [1], accessMode: "pairing" } }),
+      );
+
+      expect(() => loadConfig("/tmp/c.json")).toThrow("pairingCode is required");
     });
 
     it("throws when allowedUsers is not an array", () => {

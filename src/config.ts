@@ -5,6 +5,10 @@ import { homedir } from "node:os";
 export interface TelegramConfig {
   botToken: string;
   allowedUsers: number[];
+  /** Access mode: "allowlist" (default) only allows configured users, "pairing" allows new users via /pair code */
+  accessMode?: "allowlist" | "pairing";
+  /** Pairing code for "pairing" mode. Users send /pair <code> to gain access */
+  pairingCode?: string;
 }
 
 export interface ClaudeConfig {
@@ -169,9 +173,20 @@ export function loadConfig(path?: string): FamiliarConfig {
   if (!tg.botToken || typeof tg.botToken !== "string") {
     throw new Error("Config missing required 'telegram.botToken'");
   }
-  if (!Array.isArray(tg.allowedUsers) || tg.allowedUsers.length === 0) {
+  if (!Array.isArray(tg.allowedUsers)) {
     throw new Error(
       "Config missing required 'telegram.allowedUsers' (array of Telegram user IDs)",
+    );
+  }
+  if (tg.allowedUsers.length === 0 && tg.accessMode !== "pairing") {
+    throw new Error(
+      "telegram.allowedUsers must not be empty in allowlist mode. " +
+      "Add at least one user ID, or set accessMode to \"pairing\".",
+    );
+  }
+  if (tg.accessMode === "pairing" && !tg.pairingCode) {
+    throw new Error(
+      "telegram.pairingCode is required when accessMode is \"pairing\"",
     );
   }
 
