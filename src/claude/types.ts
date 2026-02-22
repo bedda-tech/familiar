@@ -96,9 +96,15 @@ export interface ThinkingDelta {
   text: string;
 }
 
+export interface SystemInfo {
+  type: "system";
+  subtype: string;
+  message: string;
+}
+
 export interface StreamDone {
   type: "done";
   result: BackendResult;
 }
 
-export type StreamYield = TextDelta | ToolUseInfo | ThinkingDelta | StreamDone;
+export type StreamYield = TextDelta | ToolUseInfo | ThinkingDelta | SystemInfo | StreamDone;

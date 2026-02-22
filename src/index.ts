@@ -310,7 +310,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const spawnQueue = new SpawnQueue(agentManager, defaultChatId);
   spawnQueue.start();
 
-  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager);
+  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions);
 
   // Wire up and start
   bridge.start();

@@ -178,6 +178,7 @@ export class ClaudeCLI {
 
         case "system":
           log.debug({ subtype: event.subtype, message: event.message }, "system event");
+          yield { type: "system", subtype: event.subtype, message: event.message };
           break;
       }
     }

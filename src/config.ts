@@ -20,6 +20,8 @@ export interface ClaudeConfig {
 export interface SessionConfig {
   inactivityTimeout: string;
   rotateAfterMessages?: number;
+  /** Inject a memory flush prompt when context is approaching rotation limit. Default: true */
+  preCompactionFlush?: boolean;
 }
 
 export interface LogConfig {

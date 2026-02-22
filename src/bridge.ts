@@ -1,7 +1,7 @@
 import type { Channel, IncomingMessage } from "./channels/types.js";
 import type { ClaudeCLI, ClaudeRequest } from "./claude/cli.js";
 import type { SessionStore } from "./session/store.js";
-import type { OpenAIConfig } from "./config.js";
+import type { OpenAIConfig, SessionConfig } from "./config.js";
 import type { AgentManager } from "./agents/manager.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
@@ -19,6 +19,7 @@ export class Bridge {
   private showThinking = true;
   private openai: OpenAIConfig | undefined;
   private agents: AgentManager | undefined;
+  private sessionConfig: SessionConfig;
 
   constructor(
     private channel: Channel,
@@ -26,9 +27,11 @@ export class Bridge {
     private sessions: SessionStore,
     openai?: OpenAIConfig,
     agents?: AgentManager,
+    sessionConfig?: SessionConfig,
   ) {
     this.openai = openai;
     this.agents = agents;
+    this.sessionConfig = sessionConfig ?? { inactivityTimeout: "24h" };
   }
 
   /** Wire up the channel to the Claude backend */
@@ -295,6 +298,17 @@ export class Bridge {
     // Look up session
     const sessionId = this.sessions.getSession(msg.chatId);
 
+    // Pre-compaction flush: if context is getting long, inject save instruction
+    const flushEnabled = this.sessionConfig.preCompactionFlush !== false;
+    if (flushEnabled && sessionId) {
+      const info = this.sessions.getSessionInfo(msg.chatId);
+      const rotateAt = this.sessionConfig.rotateAfterMessages ?? 200;
+      if (info && info.messageCount > rotateAt * 0.8) {
+        prompt += "\n\n[SYSTEM: Context is getting long and may be compacted soon. Before answering, save any important pending context to memory/YYYY-MM-DD.md. Be brief — just capture what you'd need to continue if context resets.]";
+        log.info({ chatId: msg.chatId, messageCount: info.messageCount, rotateAt }, "injecting pre-compaction flush");
+      }
+    }
+
     const request: ClaudeRequest = {
       prompt,
       sessionId: sessionId ?? undefined,
@@ -352,6 +366,10 @@ export class Bridge {
                 `_${escaped}_`,
               );
             }
+            break;
+
+          case "system":
+            log.info({ subtype: event.subtype, message: event.message }, "claude system event");
             break;
 
           case "tool_use":
