@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { mkdirSync, writeFileSync, existsSync, cpSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, cpSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import {
   loadConfig,
   getConfigDir,
@@ -34,7 +34,9 @@ function printUsage(): void {
 familiar — Your AI Familiar
 
 Usage:
-  familiar start                Start the bot
+  familiar start                Start the bot (foreground)
+  familiar start --daemon       Start the bot in background (writes PID to ~/.familiar/familiar.pid)
+  familiar stop                 Stop a daemonized instance (reads PID file, sends SIGTERM)
   familiar tui                  Open interactive TUI (resumes Telegram session)
   familiar cron list            List configured cron jobs and their state
   familiar cron run <id>        Manually trigger a cron job
@@ -48,7 +50,7 @@ Usage:
 
 Options:
   --config <path>   Path to config file (default: ~/.familiar/config.json)
-  --daemon          Run in background (TODO)
+  --daemon          Run in background (fork and write PID file)
 `);
 }
 
@@ -402,6 +404,9 @@ async function cmdStart(configPath?: string): Promise<void> {
     if (cron) cron.stop();
     await telegram.stop();
     sessions.close();
+    // Clean up PID file if it exists (daemon mode)
+    const pidFile = join(getConfigDir(), "familiar.pid");
+    try { unlinkSync(pidFile); } catch {}
     process.exit(0);
   };
 
@@ -420,6 +425,36 @@ switch (command) {
   case undefined: {
     const configIdx = args.indexOf("--config");
     const configPath = configIdx >= 0 ? args[configIdx + 1] : undefined;
+
+    if (args.includes("--daemon")) {
+      const pidFile = join(getConfigDir(), "familiar.pid");
+
+      // Check if already running
+      if (existsSync(pidFile)) {
+        const existingPid = parseInt(readFileSync(pidFile, "utf-8").trim());
+        try {
+          process.kill(existingPid, 0); // Check if process exists
+          console.error(`Familiar is already running (PID ${existingPid}). Use 'familiar stop' first.`);
+          process.exit(1);
+        } catch {
+          // Process doesn't exist, stale PID file — continue
+        }
+      }
+
+      const childArgs = [fileURLToPath(import.meta.url), "start", ...args.filter(a => a !== "--daemon")];
+      const child = spawn(process.execPath, childArgs, {
+        detached: true,
+        stdio: "ignore",
+        env: process.env,
+      });
+      child.unref();
+      writeFileSync(pidFile, String(child.pid));
+      console.log(`Familiar started in background (PID ${child.pid})`);
+      console.log(`Logs: journalctl --user -u familiar -f  OR  check ~/.familiar/`);
+      console.log(`Stop: familiar stop`);
+      process.exit(0);
+    }
+
     cmdStart(configPath).catch((e) => {
       console.error("Fatal:", e instanceof Error ? e.message : e);
       process.exit(1);
@@ -441,6 +476,25 @@ switch (command) {
   case "install-service":
     cmdInstallService();
     break;
+
+  case "stop": {
+    const pidFile = join(getConfigDir(), "familiar.pid");
+    if (!existsSync(pidFile)) {
+      console.error("No PID file found — familiar may not be running as daemon.");
+      console.error("If using systemd: systemctl --user stop familiar");
+      process.exit(1);
+    }
+    const pid = parseInt(readFileSync(pidFile, "utf-8").trim());
+    try {
+      process.kill(pid, "SIGTERM");
+      unlinkSync(pidFile);
+      console.log(`Sent SIGTERM to PID ${pid}`);
+    } catch {
+      unlinkSync(pidFile);
+      console.log(`Process ${pid} not found (removed stale PID file)`);
+    }
+    break;
+  }
 
   case "migrate-from-openclaw":
     migrateFromOpenClaw().catch((e) => {
