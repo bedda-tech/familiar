@@ -24,6 +24,10 @@ export interface CronJobConfig {
   suppressPattern?: string;
   /** Whether job is enabled (default: true) */
   enabled?: boolean;
+  /** Optional system prompt for this job. Unlike the main session, cron jobs
+   *  do NOT inherit the global systemPrompt by default — they are task-focused
+   *  executors that don't need personality context. */
+  systemPrompt?: string;
 }
 
 /** Runtime state for a cron job, persisted in SQLite */

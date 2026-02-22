@@ -23,8 +23,13 @@ export async function runCronJob(
     args.push("--model", model);
   }
 
-  if (defaultConfig.systemPrompt) {
-    args.push("--append-system-prompt", defaultConfig.systemPrompt);
+  // Cron jobs are task-focused executors — do NOT inject the main session's
+  // personality prompt. The Oliver persona causes cron agents to waste turns
+  // reading governing docs (SOUL.md, IDENTITY.md, etc.) instead of executing
+  // their actual task. Each cron job's prompt IS the system prompt.
+  // Only pass the system prompt if the job explicitly opts in via systemPrompt field.
+  if (job.systemPrompt) {
+    args.push("--append-system-prompt", job.systemPrompt);
   }
 
   if (defaultConfig.allowedTools && defaultConfig.allowedTools.length > 0) {
