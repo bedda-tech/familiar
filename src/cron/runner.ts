@@ -17,7 +17,16 @@ export async function runCronJob(
   const workDir = job.workingDirectory ?? defaultConfig.workingDirectory;
   const maxTurns = job.maxTurns ?? defaultConfig.maxTurns ?? 25;
 
-  const args = ["-p", "--output-format", "stream-json", "--verbose"];
+  const args = [
+    "-p",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    // Each cron run MUST be a fresh session. Without this flag, Claude resumes
+    // a prior session and hallucinates "Already reported above" without doing
+    // any work — this caused 12 wasted greenhouse-pipeline runs on 2026-02-22.
+    "--no-session-persistence",
+  ];
 
   if (model) {
     args.push("--model", model);
