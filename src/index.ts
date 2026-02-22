@@ -400,60 +400,35 @@ async function cmdStart(configPath?: string): Promise<void> {
 
   const shutdown = async (signal: string) => {
     if (shuttingDown) {
-      log.warn({ signal }, "shutdown already in progress, ignoring");
-      return;
+      log.warn({ signal }, "forced exit (second signal)");
+      process.exit(1);
     }
     shuttingDown = true;
+    log.info({ signal }, "shutting down gracefully");
 
-    log.info({ signal }, "shutting down");
-
-    // Force exit after 10 seconds if graceful shutdown hangs
-    const forceTimeout = setTimeout(() => {
-      log.error("graceful shutdown timed out after 10s, forcing exit");
+    // Force exit after 10 seconds
+    const forceTimer = setTimeout(() => {
+      log.error("shutdown timed out — forcing exit");
       process.exit(1);
     }, 10_000);
-    forceTimeout.unref();
+    forceTimer.unref(); // Don't keep process alive for the timer
 
-    try { configWatcher.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping config watcher");
-    }
-
-    try { deliveryQueue.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping delivery queue");
-    }
-
-    try { spawnQueue.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping spawn queue");
-    }
-
-    try { agentManager.killAll(); } catch (e) {
-      log.error({ err: e }, "error killing agents");
-    }
-
-    try { if (webhooks) webhooks.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping webhooks");
-    }
-
-    try { if (cron) cron.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping cron");
-    }
-
-    try { await telegram.stop(); } catch (e) {
-      log.error({ err: e }, "error stopping telegram");
-    }
-
-    try { sessions.close(); } catch (e) {
-      log.error({ err: e }, "error closing sessions");
-    }
-
-    // Clean up PID file if it exists (daemon mode)
     try {
+      configWatcher.stop();
+      deliveryQueue.stop();
+      spawnQueue.stop();
+      agentManager.killAll();
+      if (webhooks) webhooks.stop();
+      if (cron) cron.stop();
+      await telegram.stop();
+    } catch (e) {
+      log.error({ err: e }, "error during shutdown");
+    } finally {
+      sessions.close();
       const pidFile = join(getConfigDir(), "familiar.pid");
-      unlinkSync(pidFile);
-    } catch {}
-
-    log.info("shutdown complete");
-    process.exit(0);
+      try { unlinkSync(pidFile); } catch {}
+      process.exit(0);
+    }
   };
 
   process.on("SIGINT", () => shutdown("SIGINT"));
