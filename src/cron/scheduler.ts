@@ -6,6 +6,7 @@ import type { CronJobConfig, CronRunResult } from "./types.js";
 import type { ClaudeConfig } from "../config.js";
 import { runCronJob } from "./runner.js";
 import { getConfigDir } from "../config.js";
+import { AgentWorkspace } from "../agents/workspace.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("cron-scheduler");
@@ -21,6 +22,7 @@ export class CronScheduler {
   private running = new Map<string, boolean>();
   private deliveryHandler: CronDeliveryHandler | null = null;
   private claudeConfig: ClaudeConfig;
+  private workspace: AgentWorkspace;
 
   constructor(
     jobConfigs: CronJobConfig[],
@@ -28,6 +30,7 @@ export class CronScheduler {
     dbPath?: string,
   ) {
     this.claudeConfig = claudeConfig;
+    this.workspace = new AgentWorkspace();
 
     const dir = getConfigDir();
     mkdirSync(dir, { recursive: true });
@@ -66,6 +69,11 @@ export class CronScheduler {
         created_at TEXT DEFAULT (datetime('now'))
       );
     `);
+  }
+
+  /** Get the agent workspace instance (for external access to agent state/memory). */
+  getWorkspace(): AgentWorkspace {
+    return this.workspace;
   }
 
   /** Set the handler for delivering cron results to the user. */
@@ -207,7 +215,7 @@ export class CronScheduler {
     this.running.set(config.id, true);
 
     try {
-      const result = await runCronJob(config, this.claudeConfig);
+      const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
       this.recordRun(result);
 
       // Update next run time

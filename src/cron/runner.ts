@@ -1,21 +1,39 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { CronJobConfig, CronRunResult } from "./types.js";
 import type { ClaudeConfig } from "../config.js";
 import type { StreamEvent, BackendResult, ResultEvent } from "../claude/types.js";
+import type { AgentWorkspace } from "../agents/workspace.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("cron-runner");
+
+export interface RunCronJobOptions {
+  /** Optional agent workspace — when provided, the job gets a persistent workspace. */
+  workspace?: AgentWorkspace;
+}
 
 /** Run a cron job by spawning an isolated `claude -p` process. */
 export async function runCronJob(
   job: CronJobConfig,
   defaultConfig: ClaudeConfig,
+  options?: RunCronJobOptions,
 ): Promise<CronRunResult> {
   const startedAt = new Date();
   const model = job.model ?? defaultConfig.model;
   const workDir = job.workingDirectory ?? defaultConfig.workingDirectory;
   const maxTurns = job.maxTurns ?? defaultConfig.maxTurns ?? 25;
+
+  // Set up agent workspace if provided
+  const workspace = options?.workspace;
+  let workspacePrompt = "";
+  if (workspace) {
+    workspace.ensureWorkspace(job.id);
+    workspace.recordRunStart(job.id);
+    workspacePrompt = workspace.buildSystemPromptFragment(job.id);
+  }
 
   const args = [
     "-p",
@@ -37,8 +55,16 @@ export async function runCronJob(
   // reading governing docs (SOUL.md, IDENTITY.md, etc.) instead of executing
   // their actual task. Each cron job's prompt IS the system prompt.
   // Only pass the system prompt if the job explicitly opts in via systemPrompt field.
-  if (job.systemPrompt) {
-    args.push("--append-system-prompt", job.systemPrompt);
+  //
+  // When a workspace is available, we append the workspace prompt fragment so
+  // the agent knows where its persistent state, memory, and output dirs live.
+  {
+    const parts: string[] = [];
+    if (job.systemPrompt) parts.push(job.systemPrompt);
+    if (workspacePrompt) parts.push(workspacePrompt);
+    if (parts.length > 0) {
+      args.push("--append-system-prompt", parts.join("\n\n"));
+    }
   }
 
   if (defaultConfig.allowedTools && defaultConfig.allowedTools.length > 0) {
@@ -132,6 +158,28 @@ export async function runCronJob(
         numTurns: 0,
         isError: false,
       };
+    }
+  }
+
+  // Save run output to workspace
+  if (workspace) {
+    try {
+      const outputDir = workspace.getOutputDir(job.id);
+      const timestamp = startedAt.toISOString().replace(/[:.]/g, "-");
+      const outputFile = join(outputDir, `run-${timestamp}.txt`);
+      const outputText = result.text || accumulatedText;
+      writeFileSync(outputFile, outputText, "utf-8");
+
+      // Update state with latest run metadata
+      workspace.setState(job.id, {
+        data: {
+          lastRunCost: result.costUsd,
+          lastRunTurns: result.numTurns,
+          lastRunError: result.isError ? (result.text || "unknown error") : undefined,
+        },
+      });
+    } catch (e) {
+      log.warn({ jobId: job.id, err: e }, "failed to save workspace output");
     }
   }
 
