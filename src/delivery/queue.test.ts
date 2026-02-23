@@ -151,9 +151,9 @@ describe("DeliveryQueue", () => {
 
     // Simulate reaching maxAttempts by setting attempts to maxAttempts - 1
     // (the next failure will push it to maxAttempts and trigger the drop)
-    db.prepare("UPDATE delivery_queue SET attempts = ?, next_attempt_at = datetime('now', '-1 seconds')").run(
-      maxAttempts - 1,
-    );
+    db.prepare(
+      "UPDATE delivery_queue SET attempts = ?, next_attempt_at = datetime('now', '-1 seconds')",
+    ).run(maxAttempts - 1);
 
     // Trigger processQueue
     queueWithLowMax.start();
@@ -254,10 +254,12 @@ describe("DeliveryQueue", () => {
     await vi.advanceTimersByTimeAsync(0); // flush the immediate processQueue
 
     // Manually insert a row that is already due
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO delivery_queue (chat_id, text, attempts, max_attempts, next_attempt_at)
       VALUES ('chat-interval', 'interval test', 0, 5, datetime('now', '-1 seconds'))
-    `).run();
+    `,
+    ).run();
 
     expect(queue.pendingCount()).toBe(1);
 

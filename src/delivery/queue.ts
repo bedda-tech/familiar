@@ -65,10 +65,14 @@ export class DeliveryQueue {
       log.warn({ chatId, error: errMsg }, "delivery failed — enqueueing for retry");
 
       const backoffSec = this.getBackoff(0);
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO delivery_queue (chat_id, text, attempts, max_attempts, next_attempt_at, last_error)
         VALUES (?, ?, 1, ?, datetime('now', '+' || ? || ' seconds'), ?)
-      `).run(chatId, text, this.maxAttempts, backoffSec, errMsg);
+      `,
+        )
+        .run(chatId, text, this.maxAttempts, backoffSec, errMsg);
     }
   }
 
@@ -91,30 +95,37 @@ export class DeliveryQueue {
 
   /** Get count of pending deliveries */
   pendingCount(): number {
-    const row = this.db.prepare(
-      `SELECT COUNT(*) as count FROM delivery_queue`
-    ).get() as { count: number };
+    const row = this.db.prepare(`SELECT COUNT(*) as count FROM delivery_queue`).get() as {
+      count: number;
+    };
     return row.count;
   }
 
   private async processQueue(): Promise<void> {
     if (!this.sender) return;
 
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT id, chat_id AS chatId, text, attempts, max_attempts AS maxAttempts,
              next_attempt_at AS nextAttemptAt, created_at AS createdAt, last_error AS lastError
       FROM delivery_queue
       WHERE next_attempt_at <= datetime('now')
       ORDER BY created_at ASC
       LIMIT 10
-    `).all() as PendingDelivery[];
+    `,
+      )
+      .all() as PendingDelivery[];
 
     for (const row of rows) {
       try {
         await this.sender(row.chatId, row.text);
         // Success — remove from queue
         this.db.prepare(`DELETE FROM delivery_queue WHERE id = ?`).run(row.id);
-        log.info({ id: row.id, chatId: row.chatId, attempts: row.attempts + 1 }, "retry delivery succeeded");
+        log.info(
+          { id: row.id, chatId: row.chatId, attempts: row.attempts + 1 },
+          "retry delivery succeeded",
+        );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         const nextAttempt = row.attempts + 1;
@@ -122,16 +133,26 @@ export class DeliveryQueue {
         if (nextAttempt >= row.maxAttempts) {
           // Max retries exhausted — drop it
           this.db.prepare(`DELETE FROM delivery_queue WHERE id = ?`).run(row.id);
-          log.error({ id: row.id, chatId: row.chatId, attempts: nextAttempt, error: errMsg }, "delivery failed permanently — dropped");
+          log.error(
+            { id: row.id, chatId: row.chatId, attempts: nextAttempt, error: errMsg },
+            "delivery failed permanently — dropped",
+          );
         } else {
           // Schedule next retry with exponential backoff
           const backoffSec = this.getBackoff(nextAttempt);
-          this.db.prepare(`
+          this.db
+            .prepare(
+              `
             UPDATE delivery_queue
             SET attempts = ?, next_attempt_at = datetime('now', '+' || ? || ' seconds'), last_error = ?
             WHERE id = ?
-          `).run(nextAttempt, backoffSec, errMsg, row.id);
-          log.warn({ id: row.id, attempts: nextAttempt, nextRetrySec: backoffSec, error: errMsg }, "retry failed — rescheduled");
+          `,
+            )
+            .run(nextAttempt, backoffSec, errMsg, row.id);
+          log.warn(
+            { id: row.id, attempts: nextAttempt, nextRetrySec: backoffSec, error: errMsg },
+            "retry failed — rescheduled",
+          );
         }
       }
     }

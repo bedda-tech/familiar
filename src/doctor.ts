@@ -2,12 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  loadConfig,
-  getConfigPath,
-  getConfigDir,
-  configExists,
-} from "./config.js";
+import { loadConfig, getConfigPath, getConfigDir, configExists } from "./config.js";
 
 interface CheckResult {
   name: string;
@@ -23,32 +18,51 @@ const BOLD = "\x1b[1m";
 
 function icon(status: CheckResult["status"]): string {
   switch (status) {
-    case "pass": return `${GREEN}✓${RESET}`;
-    case "warn": return `${YELLOW}⚠${RESET}`;
-    case "fail": return `${RED}✗${RESET}`;
+    case "pass":
+      return `${GREEN}✓${RESET}`;
+    case "warn":
+      return `${YELLOW}⚠${RESET}`;
+    case "fail":
+      return `${RED}✗${RESET}`;
   }
 }
 
 function checkConfig(): CheckResult {
   if (!configExists()) {
-    return { name: "Config file", status: "fail", message: `Not found at ${getConfigPath()}. Run 'familiar init'.` };
+    return {
+      name: "Config file",
+      status: "fail",
+      message: `Not found at ${getConfigPath()}. Run 'familiar init'.`,
+    };
   }
   try {
     loadConfig();
     return { name: "Config file", status: "pass", message: getConfigPath() };
   } catch (e) {
-    return { name: "Config file", status: "fail", message: e instanceof Error ? e.message : String(e) };
+    return {
+      name: "Config file",
+      status: "fail",
+      message: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
 function checkClaudeCLI(): CheckResult {
   const result = spawnSync("claude", ["--version"], { timeout: 10_000 });
   if (result.error) {
-    return { name: "Claude CLI", status: "fail", message: "Not found in PATH. Install Claude Code: https://claude.ai/cli" };
+    return {
+      name: "Claude CLI",
+      status: "fail",
+      message: "Not found in PATH. Install Claude Code: https://claude.ai/cli",
+    };
   }
   const version = result.stdout?.toString().trim() ?? "unknown";
   if (result.status !== 0) {
-    return { name: "Claude CLI", status: "fail", message: `Exited with code ${result.status}: ${result.stderr?.toString().slice(0, 200)}` };
+    return {
+      name: "Claude CLI",
+      status: "fail",
+      message: `Exited with code ${result.status}: ${result.stderr?.toString().slice(0, 200)}`,
+    };
   }
   return { name: "Claude CLI", status: "pass", message: version };
 }
@@ -60,13 +74,21 @@ function checkTelegramToken(): CheckResult {
   try {
     const config = loadConfig();
     if (!config.telegram.botToken || config.telegram.botToken === "YOUR_BOT_TOKEN_HERE") {
-      return { name: "Telegram bot", status: "fail", message: "Bot token not set. Get one from @BotFather." };
+      return {
+        name: "Telegram bot",
+        status: "fail",
+        message: "Bot token not set. Get one from @BotFather.",
+      };
     }
     // Quick validation — Telegram bot tokens are always in format NUMBER:ALPHANUMERIC
     if (!/^\d+:[A-Za-z0-9_-]+$/.test(config.telegram.botToken)) {
       return { name: "Telegram bot", status: "warn", message: "Token format looks unusual" };
     }
-    return { name: "Telegram bot", status: "pass", message: `Token set (${config.telegram.botToken.slice(0, 8)}...)` };
+    return {
+      name: "Telegram bot",
+      status: "pass",
+      message: `Token set (${config.telegram.botToken.slice(0, 8)}...)`,
+    };
   } catch {
     return { name: "Telegram bot", status: "fail", message: "Could not read config" };
   }
@@ -75,20 +97,32 @@ function checkTelegramToken(): CheckResult {
 function checkDatabase(): CheckResult {
   const dbPath = join(getConfigDir(), "familiar.db");
   if (!existsSync(dbPath)) {
-    return { name: "Database", status: "warn", message: "Not created yet (created on first start)" };
+    return {
+      name: "Database",
+      status: "warn",
+      message: "Not created yet (created on first start)",
+    };
   }
   const stat = statSync(dbPath);
   const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
   // Quick integrity check
   const result = spawnSync("sqlite3", [dbPath, "PRAGMA integrity_check;"], { timeout: 10_000 });
   if (result.error) {
-    return { name: "Database", status: "warn", message: `${sizeMB} MB (sqlite3 not in PATH — can't verify integrity)` };
+    return {
+      name: "Database",
+      status: "warn",
+      message: `${sizeMB} MB (sqlite3 not in PATH — can't verify integrity)`,
+    };
   }
   const output = result.stdout?.toString().trim();
   if (output === "ok") {
     return { name: "Database", status: "pass", message: `${sizeMB} MB, integrity OK` };
   }
-  return { name: "Database", status: "fail", message: `Integrity check failed: ${output?.slice(0, 200)}` };
+  return {
+    name: "Database",
+    status: "fail",
+    message: `Integrity check failed: ${output?.slice(0, 200)}`,
+  };
 }
 
 function checkWorkspace(): CheckResult {
@@ -126,7 +160,11 @@ function checkSystemd(): CheckResult {
   // Service not installed
   const serviceFile = join(homedir(), ".config", "systemd", "user", "familiar.service");
   if (!existsSync(serviceFile)) {
-    return { name: "systemd service", status: "warn", message: "Not installed. Run 'familiar install-service'." };
+    return {
+      name: "systemd service",
+      status: "warn",
+      message: "Not installed. Run 'familiar install-service'.",
+    };
   }
   return { name: "systemd service", status: "warn", message: `Status: ${status}` };
 }
@@ -144,10 +182,18 @@ function checkDiskSpace(): CheckResult {
   const available = parts[3] ?? "?";
   const usePercent = parseInt(parts[4] ?? "0");
   if (usePercent > 95) {
-    return { name: "Disk space", status: "fail", message: `${available} free (${usePercent}% used) — critically low!` };
+    return {
+      name: "Disk space",
+      status: "fail",
+      message: `${available} free (${usePercent}% used) — critically low!`,
+    };
   }
   if (usePercent > 85) {
-    return { name: "Disk space", status: "warn", message: `${available} free (${usePercent}% used)` };
+    return {
+      name: "Disk space",
+      status: "warn",
+      message: `${available} free (${usePercent}% used)`,
+    };
   }
   return { name: "Disk space", status: "pass", message: `${available} free (${usePercent}% used)` };
 }

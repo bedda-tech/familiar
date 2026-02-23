@@ -67,7 +67,9 @@ export class SessionStore {
   getSession(chatId: string): string | null {
     const row = this.db
       .prepare("SELECT session_id, last_used_at, message_count FROM sessions WHERE chat_id = ?")
-      .get(chatId) as { session_id: string; last_used_at: string; message_count: number } | undefined;
+      .get(chatId) as
+      | { session_id: string; last_used_at: string; message_count: number }
+      | undefined;
 
     if (!row) return null;
 
@@ -121,14 +123,18 @@ export class SessionStore {
   /** Get session info for /status command */
   getSessionInfo(chatId: string): SessionInfo | null {
     const row = this.db
-      .prepare("SELECT chat_id, session_id, created_at, last_used_at, message_count FROM sessions WHERE chat_id = ?")
-      .get(chatId) as {
-        chat_id: string;
-        session_id: string;
-        created_at: string;
-        last_used_at: string;
-        message_count: number;
-      } | undefined;
+      .prepare(
+        "SELECT chat_id, session_id, created_at, last_used_at, message_count FROM sessions WHERE chat_id = ?",
+      )
+      .get(chatId) as
+      | {
+          chat_id: string;
+          session_id: string;
+          created_at: string;
+          last_used_at: string;
+          message_count: number;
+        }
+      | undefined;
 
     if (!row) return null;
     return {
@@ -141,7 +147,12 @@ export class SessionStore {
   }
 
   /** Log a message for usage tracking */
-  logMessage(chatId: string, role: "user" | "assistant", content: string, costUsd: number = 0): void {
+  logMessage(
+    chatId: string,
+    role: "user" | "assistant",
+    content: string,
+    costUsd: number = 0,
+  ): void {
     this.db
       .prepare("INSERT INTO message_log (chat_id, role, content, cost_usd) VALUES (?, ?, ?, ?)")
       .run(chatId, role, content.slice(0, 10000), costUsd);

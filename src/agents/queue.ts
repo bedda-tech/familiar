@@ -89,7 +89,10 @@ export class SpawnQueue {
       // Delete the file first to avoid re-processing
       unlinkSync(filepath);
 
-      log.info({ filename, task: req.task.slice(0, 100), model: req.model, label: req.label }, "processing spawn request");
+      log.info(
+        { filename, task: req.task.slice(0, 100), model: req.model, label: req.label },
+        "processing spawn request",
+      );
 
       const result = await this.manager.spawn({
         task: req.task,
@@ -106,7 +109,11 @@ export class SpawnQueue {
     } catch (e) {
       log.error({ err: e, filename }, "failed to process spawn request");
       // Try to clean up the file
-      try { unlinkSync(filepath); } catch { /* ignore */ }
+      try {
+        unlinkSync(filepath);
+      } catch {
+        /* ignore */
+      }
     } finally {
       this.processing.delete(filename);
     }

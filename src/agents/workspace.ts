@@ -1,4 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync, readdirSync, existsSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  appendFileSync,
+  readdirSync,
+  existsSync,
+} from "node:fs";
 import { join } from "node:path";
 import { getConfigDir } from "../config.js";
 import { getLogger } from "../util/logger.js";

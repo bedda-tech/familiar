@@ -87,9 +87,7 @@ export class AgentRegistry {
     const query = chatId
       ? `SELECT * FROM subagents WHERE status = 'running' AND chat_id = ? ORDER BY created_at DESC`
       : `SELECT * FROM subagents WHERE status = 'running' ORDER BY created_at DESC`;
-    const rows = chatId
-      ? this.db.prepare(query).all(chatId)
-      : this.db.prepare(query).all();
+    const rows = chatId ? this.db.prepare(query).all(chatId) : this.db.prepare(query).all();
     return (rows as RawRow[]).map(mapRow);
   }
 

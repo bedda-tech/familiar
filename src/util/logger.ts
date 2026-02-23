@@ -5,10 +5,9 @@ let logger: pino.Logger = pino({ level: "info" });
 export function initLogger(level: string): void {
   logger = pino({
     level,
-    transport:
-      process.stdout.isTTY
-        ? { target: "pino/file", options: { destination: 1 } }
-        : undefined,
+    transport: process.stdout.isTTY
+      ? { target: "pino/file", options: { destination: 1 } }
+      : undefined,
   });
 }
 

@@ -72,10 +72,7 @@ describe("chunkMessage", () => {
     });
 
     it("preserves all content across chunks", () => {
-      const sentences = Array.from(
-        { length: 500 },
-        (_, i) => `Sentence number ${i}.`,
-      );
+      const sentences = Array.from({ length: 500 }, (_, i) => `Sentence number ${i}.`);
       const text = sentences.join(" ");
       const result = chunkMessage(text);
       const reassembled = result.join(" ");
@@ -140,11 +137,7 @@ describe("chunkMessage", () => {
       expect(result.length).toBeGreaterThanOrEqual(2);
       const trimmed = result[0].trimEnd();
       // Should end at a sentence boundary
-      expect(
-        trimmed.endsWith("?") ||
-          trimmed.endsWith("!") ||
-          trimmed.endsWith("."),
-      ).toBe(true);
+      expect(trimmed.endsWith("?") || trimmed.endsWith("!") || trimmed.endsWith(".")).toBe(true);
     });
   });
 
@@ -227,8 +220,7 @@ describe("chunkMessage", () => {
     it("handles a split that occurs between two code fences", () => {
       const code1 = "line1();\n".repeat(500);
       const code2 = "line2();\n".repeat(500);
-      const text =
-        "```js\n" + code1 + "```\n\nMiddle text.\n\n```python\n" + code2 + "```";
+      const text = "```js\n" + code1 + "```\n\nMiddle text.\n\n```python\n" + code2 + "```";
       const result = chunkMessage(text);
       expect(result.length).toBeGreaterThanOrEqual(2);
 
@@ -345,8 +337,7 @@ describe("chunkMessage", () => {
 
     it("handles backticks inside code (not fence markers)", () => {
       // Inline backticks should not confuse fence tracking
-      const text =
-        "Some `inline code` and more `stuff`.\n".repeat(200);
+      const text = "Some `inline code` and more `stuff`.\n".repeat(200);
       const result = chunkMessage(text);
       // Should not add any fence closing/opening markers
       for (const chunk of result) {

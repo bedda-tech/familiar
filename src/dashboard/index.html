@@ -1,600 +1,625 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Familiar Dashboard</title>
-  <style>
-    :root {
-      --bg: #0d1117;
-      --bg-card: #161b22;
-      --bg-hover: #1c2129;
-      --bg-input: #0d1117;
-      --border: #30363d;
-      --border-focus: #58a6ff;
-      --text: #c9d1d9;
-      --text-muted: #8b949e;
-      --text-bright: #f0f6fc;
-      --accent: #58a6ff;
-      --green: #3fb950;
-      --red: #f85149;
-      --yellow: #d29922;
-      --orange: #db6d28;
-      --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, monospace;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Familiar Dashboard</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --bg-card: #161b22;
+        --bg-hover: #1c2129;
+        --bg-input: #0d1117;
+        --border: #30363d;
+        --border-focus: #58a6ff;
+        --text: #c9d1d9;
+        --text-muted: #8b949e;
+        --text-bright: #f0f6fc;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --orange: #db6d28;
+        --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Consolas, monospace;
+      }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: var(--font-mono);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      font-size: 13px;
-      line-height: 1.5;
-    }
+      body {
+        font-family: var(--font-mono);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        font-size: 13px;
+        line-height: 1.5;
+      }
 
-    /* Header */
-    header {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
+      /* Header */
+      header {
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
 
-    header h1 {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-bright);
-      letter-spacing: -0.3px;
-    }
+      header h1 {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-bright);
+        letter-spacing: -0.3px;
+      }
 
-    header h1 span {
-      color: var(--accent);
-    }
+      header h1 span {
+        color: var(--accent);
+      }
 
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
 
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
+      }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse 2s ease-in-out infinite;
-    }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        animation: pulse 2s ease-in-out infinite;
+      }
 
-    .status-dot.error {
-      background: var(--red);
-      animation: none;
-    }
+      .status-dot.error {
+        background: var(--red);
+        animation: none;
+      }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
 
-    /* Token input */
-    .token-bar {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+      /* Token input */
+      .token-bar {
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
 
-    .token-bar label {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-    }
+      .token-bar label {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
 
-    .token-bar input {
-      flex: 1;
-      max-width: 400px;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      color: var(--text);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      padding: 6px 10px;
-      outline: none;
-    }
+      .token-bar input {
+        flex: 1;
+        max-width: 400px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 6px 10px;
+        outline: none;
+      }
 
-    .token-bar input:focus {
-      border-color: var(--border-focus);
-    }
+      .token-bar input:focus {
+        border-color: var(--border-focus);
+      }
 
-    .token-bar button {
-      background: var(--accent);
-      color: var(--bg);
-      border: none;
-      border-radius: 4px;
-      padding: 6px 14px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-    }
+      .token-bar button {
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 4px;
+        padding: 6px 14px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
 
-    .token-bar button:hover {
-      opacity: 0.9;
-    }
+      .token-bar button:hover {
+        opacity: 0.9;
+      }
 
-    /* Main content */
-    main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px;
-    }
+      /* Main content */
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+      }
 
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
 
-    .section-header h2 {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-bright);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+      .section-header h2 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-bright);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
 
-    .section-header .count {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1px 8px;
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-left: 8px;
-    }
+      .section-header .count {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1px 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-left: 8px;
+      }
 
-    .refresh-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 4px 10px;
-      cursor: pointer;
-    }
+      .refresh-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
 
-    .refresh-btn:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
+      .refresh-btn:hover {
+        color: var(--text);
+        border-color: var(--text-muted);
+      }
 
-    /* Jobs table */
-    .jobs-table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-    }
+      /* Jobs table */
+      .jobs-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
 
-    .jobs-table thead th {
-      background: var(--bg-card);
-      padding: 10px 14px;
-      text-align: left;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
-    }
+      .jobs-table thead th {
+        background: var(--bg-card);
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+      }
 
-    .jobs-table tbody tr {
-      cursor: pointer;
-      transition: background 0.15s;
-    }
+      .jobs-table tbody tr {
+        cursor: pointer;
+        transition: background 0.15s;
+      }
 
-    .jobs-table tbody tr:hover {
-      background: var(--bg-hover);
-    }
+      .jobs-table tbody tr:hover {
+        background: var(--bg-hover);
+      }
 
-    .jobs-table tbody tr.selected {
-      background: var(--bg-hover);
-      outline: 1px solid var(--border-focus);
-      outline-offset: -1px;
-    }
+      .jobs-table tbody tr.selected {
+        background: var(--bg-hover);
+        outline: 1px solid var(--border-focus);
+        outline-offset: -1px;
+      }
 
-    .jobs-table td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
+      .jobs-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
 
-    .jobs-table tbody tr:last-child td {
-      border-bottom: none;
-    }
+      .jobs-table tbody tr:last-child td {
+        border-bottom: none;
+      }
 
-    .job-id {
-      color: var(--accent);
-      font-weight: 600;
-    }
+      .job-id {
+        color: var(--accent);
+        font-weight: 600;
+      }
 
-    .job-label {
-      color: var(--text-muted);
-      font-size: 11px;
-      margin-top: 2px;
-    }
+      .job-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        margin-top: 2px;
+      }
 
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
 
-    .badge-ok {
-      background: rgba(63, 185, 80, 0.15);
-      color: var(--green);
-    }
+      .badge-ok {
+        background: rgba(63, 185, 80, 0.15);
+        color: var(--green);
+      }
 
-    .badge-error {
-      background: rgba(248, 81, 73, 0.15);
-      color: var(--red);
-    }
+      .badge-error {
+        background: rgba(248, 81, 73, 0.15);
+        color: var(--red);
+      }
 
-    .badge-disabled {
-      background: rgba(139, 148, 158, 0.15);
-      color: var(--text-muted);
-    }
+      .badge-disabled {
+        background: rgba(139, 148, 158, 0.15);
+        color: var(--text-muted);
+      }
 
-    .badge-never {
-      background: rgba(139, 148, 158, 0.1);
-      color: var(--text-muted);
-    }
+      .badge-never {
+        background: rgba(139, 148, 158, 0.1);
+        color: var(--text-muted);
+      }
 
-    .badge-running {
-      background: rgba(210, 153, 34, 0.15);
-      color: var(--yellow);
-    }
+      .badge-running {
+        background: rgba(210, 153, 34, 0.15);
+        color: var(--yellow);
+      }
 
-    .run-now-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 3px 10px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
+      .run-now-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 3px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
 
-    .run-now-btn:hover {
-      color: var(--accent);
-      border-color: var(--accent);
-    }
+      .run-now-btn:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
 
-    .run-now-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+      .run-now-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
 
-    .run-now-btn.running {
-      color: var(--yellow);
-      border-color: var(--yellow);
-      cursor: wait;
-    }
+      .run-now-btn.running {
+        color: var(--yellow);
+        border-color: var(--yellow);
+        cursor: wait;
+      }
 
-    /* Run history panel */
-    .run-history {
-      margin-top: 24px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      display: none;
-    }
+      /* Run history panel */
+      .run-history {
+        margin-top: 24px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        display: none;
+      }
 
-    .run-history.visible {
-      display: block;
-    }
+      .run-history.visible {
+        display: block;
+      }
 
-    .run-history-header {
-      background: var(--bg-card);
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+      .run-history-header {
+        background: var(--bg-card);
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
 
-    .run-history-header h3 {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-bright);
-    }
+      .run-history-header h3 {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-bright);
+      }
 
-    .close-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
+      .close-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 18px;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+      }
 
-    .close-btn:hover {
-      color: var(--text);
-    }
+      .close-btn:hover {
+        color: var(--text);
+      }
 
-    .runs-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+      .runs-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
 
-    .runs-table thead th {
-      background: var(--bg-card);
-      padding: 8px 14px;
-      text-align: left;
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
-    }
+      .runs-table thead th {
+        background: var(--bg-card);
+        padding: 8px 14px;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+      }
 
-    .runs-table td {
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-    }
+      .runs-table td {
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
 
-    .runs-table tbody tr:last-child td {
-      border-bottom: none;
-    }
+      .runs-table tbody tr:last-child td {
+        border-bottom: none;
+      }
 
-    .result-preview {
-      max-width: 400px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--text-muted);
-      font-size: 11px;
-    }
+      .result-preview {
+        max-width: 400px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-muted);
+        font-size: 11px;
+      }
 
-    /* Empty & loading states */
-    .empty-state {
-      text-align: center;
-      padding: 48px 24px;
-      color: var(--text-muted);
-    }
+      /* Empty & loading states */
+      .empty-state {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--text-muted);
+      }
 
-    .empty-state .icon {
-      font-size: 32px;
-      margin-bottom: 12px;
-      opacity: 0.4;
-    }
+      .empty-state .icon {
+        font-size: 32px;
+        margin-bottom: 12px;
+        opacity: 0.4;
+      }
 
-    .loading {
-      text-align: center;
-      padding: 24px;
-      color: var(--text-muted);
-    }
+      .loading {
+        text-align: center;
+        padding: 24px;
+        color: var(--text-muted);
+      }
 
-    .loading::after {
-      content: '';
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-left: 8px;
-      vertical-align: middle;
-    }
+      .loading::after {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-left: 8px;
+        vertical-align: middle;
+      }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-    /* Toast notifications */
-    .toast-container {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 200;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+      /* Toast notifications */
+      .toast-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 200;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
 
-    .toast {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px 16px;
-      font-size: 12px;
-      color: var(--text);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      animation: slideIn 0.2s ease-out;
-      max-width: 360px;
-    }
+      .toast {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 16px;
+        font-size: 12px;
+        color: var(--text);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        animation: slideIn 0.2s ease-out;
+        max-width: 360px;
+      }
 
-    .toast.success {
-      border-color: var(--green);
-    }
+      .toast.success {
+        border-color: var(--green);
+      }
 
-    .toast.error {
-      border-color: var(--red);
-    }
+      .toast.error {
+        border-color: var(--red);
+      }
 
-    @keyframes slideIn {
-      from { transform: translateX(20px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
+      @keyframes slideIn {
+        from {
+          transform: translateX(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      main { padding: 16px; }
-      .jobs-table td, .jobs-table th { padding: 8px 10px; }
-      .hide-mobile { display: none; }
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h1><span>&gt;</span> Familiar Dashboard</h1>
-    <div class="header-right">
-      <div class="status-indicator">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">connecting...</span>
+      /* Responsive */
+      @media (max-width: 768px) {
+        main {
+          padding: 16px;
+        }
+        .jobs-table td,
+        .jobs-table th {
+          padding: 8px 10px;
+        }
+        .hide-mobile {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1><span>&gt;</span> Familiar Dashboard</h1>
+      <div class="header-right">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">connecting...</span>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <div class="token-bar" id="tokenBar">
-    <label for="tokenInput">API Token</label>
-    <input type="password" id="tokenInput" placeholder="paste your familiar webhook token" autocomplete="off">
-    <button onclick="saveToken()">Connect</button>
-  </div>
-
-  <main>
-    <div class="section-header">
-      <h2>Cron Jobs <span class="count" id="jobCount">0</span></h2>
-      <button class="refresh-btn" onclick="loadJobs()">Refresh</button>
+    <div class="token-bar" id="tokenBar">
+      <label for="tokenInput">API Token</label>
+      <input
+        type="password"
+        id="tokenInput"
+        placeholder="paste your familiar webhook token"
+        autocomplete="off"
+      />
+      <button onclick="saveToken()">Connect</button>
     </div>
 
-    <div id="jobsContainer">
-      <div class="empty-state" id="emptyState">
-        <div class="icon">&gt;_</div>
-        <div>Enter your API token above to connect</div>
+    <main>
+      <div class="section-header">
+        <h2>Cron Jobs <span class="count" id="jobCount">0</span></h2>
+        <button class="refresh-btn" onclick="loadJobs()">Refresh</button>
       </div>
-    </div>
 
-    <div class="run-history" id="runHistory">
-      <div class="run-history-header">
-        <h3 id="runHistoryTitle">Run History</h3>
-        <button class="close-btn" onclick="closeHistory()">&times;</button>
+      <div id="jobsContainer">
+        <div class="empty-state" id="emptyState">
+          <div class="icon">&gt;_</div>
+          <div>Enter your API token above to connect</div>
+        </div>
       </div>
-      <div id="runsContainer"></div>
-    </div>
-  </main>
 
-  <div class="toast-container" id="toastContainer"></div>
+      <div class="run-history" id="runHistory">
+        <div class="run-history-header">
+          <h3 id="runHistoryTitle">Run History</h3>
+          <button class="close-btn" onclick="closeHistory()">&times;</button>
+        </div>
+        <div id="runsContainer"></div>
+      </div>
+    </main>
 
-  <script>
-    // ── State ────────────────────────────────────────────────────────────
-    let token = localStorage.getItem('familiar_token') || '';
-    let jobs = [];
-    let selectedJobId = null;
-    let refreshTimer = null;
-    let runningJobs = new Set();
+    <div class="toast-container" id="toastContainer"></div>
 
-    // ── Init ─────────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
-      const input = document.getElementById('tokenInput');
-      input.value = token;
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') saveToken();
+    <script>
+      // ── State ────────────────────────────────────────────────────────────
+      let token = localStorage.getItem("familiar_token") || "";
+      let jobs = [];
+      let selectedJobId = null;
+      let refreshTimer = null;
+      let runningJobs = new Set();
+
+      // ── Init ─────────────────────────────────────────────────────────────
+      document.addEventListener("DOMContentLoaded", () => {
+        const input = document.getElementById("tokenInput");
+        input.value = token;
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") saveToken();
+        });
+        if (token) {
+          loadJobs();
+          startAutoRefresh();
+        }
       });
-      if (token) {
+
+      // ── Token ────────────────────────────────────────────────────────────
+      function saveToken() {
+        token = document.getElementById("tokenInput").value.trim();
+        if (!token) return;
+        localStorage.setItem("familiar_token", token);
         loadJobs();
         startAutoRefresh();
       }
-    });
 
-    // ── Token ────────────────────────────────────────────────────────────
-    function saveToken() {
-      token = document.getElementById('tokenInput').value.trim();
-      if (!token) return;
-      localStorage.setItem('familiar_token', token);
-      loadJobs();
-      startAutoRefresh();
-    }
+      // ── API helpers ──────────────────────────────────────────────────────
+      function apiBase() {
+        // Dashboard is served from the same origin as the API
+        return window.location.origin;
+      }
 
-    // ── API helpers ──────────────────────────────────────────────────────
-    function apiBase() {
-      // Dashboard is served from the same origin as the API
-      return window.location.origin;
-    }
+      async function apiFetch(path, opts = {}) {
+        const res = await fetch(apiBase() + path, {
+          ...opts,
+          headers: {
+            "Content-Type": "application/json",
+            "x-familiar-token": token,
+            ...(opts.headers || {}),
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
 
-    async function apiFetch(path, opts = {}) {
-      const res = await fetch(apiBase() + path, {
-        ...opts,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-familiar-token': token,
-          ...(opts.headers || {}),
-        },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      return data;
-    }
+      // ── Load Jobs ────────────────────────────────────────────────────────
+      async function loadJobs() {
+        if (!token) return;
 
-    // ── Load Jobs ────────────────────────────────────────────────────────
-    async function loadJobs() {
-      if (!token) return;
-
-      try {
-        const data = await apiFetch('/api/cron/jobs');
-        jobs = data.jobs || [];
-        renderJobs();
-        setStatus('connected', true);
-      } catch (e) {
-        setStatus(e.message, false);
-        if (e.message.includes('Unauthorized')) {
-          toast('Invalid token', 'error');
+        try {
+          const data = await apiFetch("/api/cron/jobs");
+          jobs = data.jobs || [];
+          renderJobs();
+          setStatus("connected", true);
+        } catch (e) {
+          setStatus(e.message, false);
+          if (e.message.includes("Unauthorized")) {
+            toast("Invalid token", "error");
+          }
         }
       }
-    }
 
-    // ── Render Jobs ──────────────────────────────────────────────────────
-    function renderJobs() {
-      const container = document.getElementById('jobsContainer');
-      document.getElementById('jobCount').textContent = jobs.length;
+      // ── Render Jobs ──────────────────────────────────────────────────────
+      function renderJobs() {
+        const container = document.getElementById("jobsContainer");
+        document.getElementById("jobCount").textContent = jobs.length;
 
-      if (jobs.length === 0) {
-        container.innerHTML = `
+        if (jobs.length === 0) {
+          container.innerHTML = `
           <div class="empty-state">
             <div class="icon">&gt;_</div>
             <div>No cron jobs configured</div>
           </div>
         `;
-        return;
-      }
+          return;
+        }
 
-      let html = `
+        let html = `
         <table class="jobs-table">
           <thead>
             <tr>
@@ -610,15 +635,15 @@
           <tbody>
       `;
 
-      for (const job of jobs) {
-        const isSelected = selectedJobId === job.id;
-        const isRunning = runningJobs.has(job.id);
+        for (const job of jobs) {
+          const isSelected = selectedJobId === job.id;
+          const isRunning = runningJobs.has(job.id);
 
-        html += `
-          <tr class="${isSelected ? 'selected' : ''}" onclick="selectJob('${esc(job.id)}')">
+          html += `
+          <tr class="${isSelected ? "selected" : ""}" onclick="selectJob('${esc(job.id)}')">
             <td>
               <div class="job-id">${esc(job.id)}</div>
-              ${job.label ? `<div class="job-label">${esc(job.label)}</div>` : ''}
+              ${job.label ? `<div class="job-label">${esc(job.label)}</div>` : ""}
             </td>
             <td>${esc(job.schedule)}</td>
             <td>${statusBadge(job)}</td>
@@ -626,64 +651,64 @@
             <td class="hide-mobile">${formatRelative(job.nextRun)}</td>
             <td class="hide-mobile">${job.runCount}</td>
             <td>
-              <button class="run-now-btn ${isRunning ? 'running' : ''}"
+              <button class="run-now-btn ${isRunning ? "running" : ""}"
                       onclick="event.stopPropagation(); triggerJob('${esc(job.id)}')"
-                      ${isRunning || job.enabled === false ? 'disabled' : ''}>
-                ${isRunning ? 'Running...' : 'Run Now'}
+                      ${isRunning || job.enabled === false ? "disabled" : ""}>
+                ${isRunning ? "Running..." : "Run Now"}
               </button>
             </td>
           </tr>
         `;
+        }
+
+        html += "</tbody></table>";
+        container.innerHTML = html;
       }
 
-      html += '</tbody></table>';
-      container.innerHTML = html;
-    }
-
-    function statusBadge(job) {
-      if (job.enabled === false) return '<span class="badge badge-disabled">disabled</span>';
-      if (runningJobs.has(job.id)) return '<span class="badge badge-running">running</span>';
-      if (!job.lastRun) return '<span class="badge badge-never">never run</span>';
-      // Check if there was a last error by looking at the job state
-      // We infer status from the data available
-      return '<span class="badge badge-ok">ok</span>';
-    }
-
-    // ── Select Job / Run History ─────────────────────────────────────────
-    async function selectJob(jobId) {
-      if (selectedJobId === jobId) {
-        closeHistory();
-        return;
+      function statusBadge(job) {
+        if (job.enabled === false) return '<span class="badge badge-disabled">disabled</span>';
+        if (runningJobs.has(job.id)) return '<span class="badge badge-running">running</span>';
+        if (!job.lastRun) return '<span class="badge badge-never">never run</span>';
+        // Check if there was a last error by looking at the job state
+        // We infer status from the data available
+        return '<span class="badge badge-ok">ok</span>';
       }
 
-      selectedJobId = jobId;
-      renderJobs();
+      // ── Select Job / Run History ─────────────────────────────────────────
+      async function selectJob(jobId) {
+        if (selectedJobId === jobId) {
+          closeHistory();
+          return;
+        }
 
-      const panel = document.getElementById('runHistory');
-      const titleEl = document.getElementById('runHistoryTitle');
-      const container = document.getElementById('runsContainer');
+        selectedJobId = jobId;
+        renderJobs();
 
-      titleEl.textContent = `Run History: ${jobId}`;
-      container.innerHTML = '<div class="loading">Loading runs</div>';
-      panel.classList.add('visible');
+        const panel = document.getElementById("runHistory");
+        const titleEl = document.getElementById("runHistoryTitle");
+        const container = document.getElementById("runsContainer");
 
-      try {
-        const data = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/runs`);
-        renderRuns(data.runs || []);
-      } catch (e) {
-        container.innerHTML = `<div class="empty-state"><div>Failed to load: ${esc(e.message)}</div></div>`;
+        titleEl.textContent = `Run History: ${jobId}`;
+        container.innerHTML = '<div class="loading">Loading runs</div>';
+        panel.classList.add("visible");
+
+        try {
+          const data = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/runs`);
+          renderRuns(data.runs || []);
+        } catch (e) {
+          container.innerHTML = `<div class="empty-state"><div>Failed to load: ${esc(e.message)}</div></div>`;
+        }
       }
-    }
 
-    function renderRuns(runs) {
-      const container = document.getElementById('runsContainer');
+      function renderRuns(runs) {
+        const container = document.getElementById("runsContainer");
 
-      if (runs.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div>No runs recorded yet</div></div>';
-        return;
-      }
+        if (runs.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div>No runs recorded yet</div></div>';
+          return;
+        }
 
-      let html = `
+        let html = `
         <table class="runs-table">
           <thead>
             <tr>
@@ -698,154 +723,162 @@
           <tbody>
       `;
 
-      for (const run of runs) {
-        html += `
+        for (const run of runs) {
+          html += `
           <tr>
             <td>${formatTimestamp(run.startedAt)}</td>
             <td>${formatDuration(run.durationMs)}</td>
-            <td>${run.costUsd != null ? '$' + run.costUsd.toFixed(4) : '-'}</td>
-            <td>${run.numTurns ?? '-'}</td>
+            <td>${run.costUsd != null ? "$" + run.costUsd.toFixed(4) : "-"}</td>
+            <td>${run.numTurns ?? "-"}</td>
             <td>${run.isError ? '<span class="badge badge-error">error</span>' : '<span class="badge badge-ok">ok</span>'}</td>
-            <td><div class="result-preview" title="${esc(run.resultPreview || '')}">${esc(run.resultPreview || '-')}</div></td>
+            <td><div class="result-preview" title="${esc(run.resultPreview || "")}">${esc(run.resultPreview || "-")}</div></td>
           </tr>
         `;
+        }
+
+        html += "</tbody></table>";
+        container.innerHTML = html;
       }
 
-      html += '</tbody></table>';
-      container.innerHTML = html;
-    }
-
-    function closeHistory() {
-      selectedJobId = null;
-      document.getElementById('runHistory').classList.remove('visible');
-      renderJobs();
-    }
-
-    // ── Trigger Job ──────────────────────────────────────────────────────
-    async function triggerJob(jobId) {
-      if (runningJobs.has(jobId)) return;
-
-      runningJobs.add(jobId);
-      renderJobs();
-      toast(`Triggering ${jobId}...`, 'info');
-
-      try {
-        const result = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/run`, {
-          method: 'POST',
-        });
-
-        runningJobs.delete(jobId);
-
-        if (result.status === 'error') {
-          toast(`${jobId} completed with error: ${result.text?.slice(0, 100) || 'unknown'}`, 'error');
-        } else {
-          const cost = result.costUsd != null ? ` ($${result.costUsd.toFixed(4)})` : '';
-          const dur = result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : '';
-          toast(`${jobId} completed${dur}${cost}`, 'success');
-        }
-
-        // Refresh data
-        await loadJobs();
-        if (selectedJobId === jobId) {
-          selectJob(jobId);
-        }
-      } catch (e) {
-        runningJobs.delete(jobId);
-        toast(`Failed to trigger ${jobId}: ${e.message}`, 'error');
+      function closeHistory() {
+        selectedJobId = null;
+        document.getElementById("runHistory").classList.remove("visible");
         renderJobs();
       }
-    }
 
-    // ── Auto-refresh ─────────────────────────────────────────────────────
-    function startAutoRefresh() {
-      if (refreshTimer) clearInterval(refreshTimer);
-      refreshTimer = setInterval(() => {
-        loadJobs();
-        // Also refresh run history if a job is selected
-        if (selectedJobId) {
-          apiFetch(`/api/cron/jobs/${encodeURIComponent(selectedJobId)}/runs`)
-            .then(data => renderRuns(data.runs || []))
-            .catch(() => {});
+      // ── Trigger Job ──────────────────────────────────────────────────────
+      async function triggerJob(jobId) {
+        if (runningJobs.has(jobId)) return;
+
+        runningJobs.add(jobId);
+        renderJobs();
+        toast(`Triggering ${jobId}...`, "info");
+
+        try {
+          const result = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/run`, {
+            method: "POST",
+          });
+
+          runningJobs.delete(jobId);
+
+          if (result.status === "error") {
+            toast(
+              `${jobId} completed with error: ${result.text?.slice(0, 100) || "unknown"}`,
+              "error",
+            );
+          } else {
+            const cost = result.costUsd != null ? ` ($${result.costUsd.toFixed(4)})` : "";
+            const dur = result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : "";
+            toast(`${jobId} completed${dur}${cost}`, "success");
+          }
+
+          // Refresh data
+          await loadJobs();
+          if (selectedJobId === jobId) {
+            selectJob(jobId);
+          }
+        } catch (e) {
+          runningJobs.delete(jobId);
+          toast(`Failed to trigger ${jobId}: ${e.message}`, "error");
+          renderJobs();
         }
-      }, 30000);
-    }
+      }
 
-    // ── Status ───────────────────────────────────────────────────────────
-    function setStatus(text, ok) {
-      document.getElementById('statusDot').className = 'status-dot' + (ok ? '' : ' error');
-      document.getElementById('statusText').textContent = text;
-    }
+      // ── Auto-refresh ─────────────────────────────────────────────────────
+      function startAutoRefresh() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+          loadJobs();
+          // Also refresh run history if a job is selected
+          if (selectedJobId) {
+            apiFetch(`/api/cron/jobs/${encodeURIComponent(selectedJobId)}/runs`)
+              .then((data) => renderRuns(data.runs || []))
+              .catch(() => {});
+          }
+        }, 30000);
+      }
 
-    // ── Toast ────────────────────────────────────────────────────────────
-    function toast(msg, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      const el = document.createElement('div');
-      el.className = `toast ${type}`;
-      el.textContent = msg;
-      container.appendChild(el);
-      setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transition = 'opacity 0.3s';
-        setTimeout(() => el.remove(), 300);
-      }, 4000);
-    }
+      // ── Status ───────────────────────────────────────────────────────────
+      function setStatus(text, ok) {
+        document.getElementById("statusDot").className = "status-dot" + (ok ? "" : " error");
+        document.getElementById("statusText").textContent = text;
+      }
 
-    // ── Formatting helpers ───────────────────────────────────────────────
-    function formatRelative(isoStr) {
-      if (!isoStr) return '<span style="color: var(--text-muted)">-</span>';
-      try {
-        const d = new Date(isoStr);
-        const now = Date.now();
-        const diff = now - d.getTime();
+      // ── Toast ────────────────────────────────────────────────────────────
+      function toast(msg, type = "info") {
+        const container = document.getElementById("toastContainer");
+        const el = document.createElement("div");
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = "0";
+          el.style.transition = "opacity 0.3s";
+          setTimeout(() => el.remove(), 300);
+        }, 4000);
+      }
 
-        if (diff < 0) {
-          // Future
-          const absDiff = Math.abs(diff);
-          if (absDiff < 60000) return `in ${Math.floor(absDiff / 1000)}s`;
-          if (absDiff < 3600000) return `in ${Math.floor(absDiff / 60000)}m`;
-          if (absDiff < 86400000) return `in ${Math.floor(absDiff / 3600000)}h ${Math.floor((absDiff % 3600000) / 60000)}m`;
-          return `in ${Math.floor(absDiff / 86400000)}d`;
+      // ── Formatting helpers ───────────────────────────────────────────────
+      function formatRelative(isoStr) {
+        if (!isoStr) return '<span style="color: var(--text-muted)">-</span>';
+        try {
+          const d = new Date(isoStr);
+          const now = Date.now();
+          const diff = now - d.getTime();
+
+          if (diff < 0) {
+            // Future
+            const absDiff = Math.abs(diff);
+            if (absDiff < 60000) return `in ${Math.floor(absDiff / 1000)}s`;
+            if (absDiff < 3600000) return `in ${Math.floor(absDiff / 60000)}m`;
+            if (absDiff < 86400000)
+              return `in ${Math.floor(absDiff / 3600000)}h ${Math.floor((absDiff % 3600000) / 60000)}m`;
+            return `in ${Math.floor(absDiff / 86400000)}d`;
+          }
+
+          // Past
+          if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+          if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+          if (diff < 86400000)
+            return `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m ago`;
+          return `${Math.floor(diff / 86400000)}d ago`;
+        } catch {
+          return esc(isoStr);
         }
-
-        // Past
-        if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m ago`;
-        return `${Math.floor(diff / 86400000)}d ago`;
-      } catch {
-        return esc(isoStr);
       }
-    }
 
-    function formatTimestamp(isoStr) {
-      if (!isoStr) return '-';
-      try {
-        const d = new Date(isoStr);
-        return d.toLocaleString(undefined, {
-          month: 'short', day: 'numeric',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false,
-        });
-      } catch {
-        return esc(isoStr);
+      function formatTimestamp(isoStr) {
+        if (!isoStr) return "-";
+        try {
+          const d = new Date(isoStr);
+          return d.toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          });
+        } catch {
+          return esc(isoStr);
+        }
       }
-    }
 
-    function formatDuration(ms) {
-      if (ms == null) return '-';
-      if (ms < 1000) return `${ms}ms`;
-      if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-      const mins = Math.floor(ms / 60000);
-      const secs = Math.floor((ms % 60000) / 1000);
-      return `${mins}m ${secs}s`;
-    }
+      function formatDuration(ms) {
+        if (ms == null) return "-";
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        const mins = Math.floor(ms / 60000);
+        const secs = Math.floor((ms % 60000) / 1000);
+        return `${mins}m ${secs}s`;
+      }
 
-    function esc(str) {
-      if (!str) return '';
-      const div = document.createElement('div');
-      div.textContent = String(str);
-      return div.innerHTML;
-    }
-  </script>
-</body>
+      function esc(str) {
+        if (!str) return "";
+        const div = document.createElement("div");
+        div.textContent = String(str);
+        return div.innerHTML;
+      }
+    </script>
+  </body>
 </html>

@@ -11,10 +11,7 @@ import { getLogger } from "./util/logger.js";
 
 const log = getLogger("config-watcher");
 
-export type ConfigChangeHandler = (
-  newConfig: FamiliarConfig,
-  oldConfig: FamiliarConfig,
-) => void;
+export type ConfigChangeHandler = (newConfig: FamiliarConfig, oldConfig: FamiliarConfig) => void;
 
 export class ConfigWatcher {
   private watcher: FSWatcher | null = null;

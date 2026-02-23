@@ -1,12 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { ClaudeConfig } from "../config.js";
-import type {
-  StreamEvent,
-  StreamYield,
-  BackendResult,
-  ResultEvent,
-} from "./types.js";
+import type { StreamEvent, StreamYield, BackendResult, ResultEvent } from "./types.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("claude-cli");
@@ -250,9 +245,7 @@ export class ClaudeCLI {
     let prompt = request.prompt;
 
     if (request.filePaths && request.filePaths.length > 0) {
-      const fileList = request.filePaths
-        .map((p) => `- ${p}`)
-        .join("\n");
+      const fileList = request.filePaths.map((p) => `- ${p}`).join("\n");
       prompt += `\n\nThe user also sent these files. Read them if relevant:\n${fileList}`;
     }
 

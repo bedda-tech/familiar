@@ -1,8 +1,8 @@
-import { createReadStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import type { OpenAIConfig } from "../config.js";
 import { getLogger } from "../util/logger.js";
 
@@ -12,10 +12,7 @@ const log = getLogger("voice");
  * Transcribe an audio file using OpenAI Whisper API.
  * Converts .ogg to .mp3 via ffmpeg first (Whisper API doesn't accept .ogg).
  */
-export async function transcribeAudio(
-  filePath: string,
-  config: OpenAIConfig,
-): Promise<string> {
+export async function transcribeAudio(filePath: string, config: OpenAIConfig): Promise<string> {
   const model = config.whisperModel ?? "whisper-1";
 
   // Convert to mp3 if needed (Telegram sends .ogg/opus)
@@ -60,18 +57,28 @@ async function convertToMp3(inputPath: string): Promise<string> {
   const outputPath = join(dir, `voice_${Date.now()}.mp3`);
 
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", [
-      "-i", inputPath,
-      "-y",        // overwrite
-      "-vn",       // no video
-      "-ar", "16000",
-      "-ac", "1",
-      "-b:a", "64k",
-      outputPath,
-    ], { stdio: ["pipe", "pipe", "pipe"] });
+    const proc = spawn(
+      "ffmpeg",
+      [
+        "-i",
+        inputPath,
+        "-y", // overwrite
+        "-vn", // no video
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-b:a",
+        "64k",
+        outputPath,
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
 
     let stderr = "";
-    proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
 
     proc.on("close", (code) => {
       if (code === 0 && existsSync(outputPath)) {

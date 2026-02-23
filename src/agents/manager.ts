@@ -46,7 +46,9 @@ export class AgentManager {
   async spawn(options: SpawnOptions): Promise<{ id: string } | { error: string }> {
     const active = this.registry.activeCount();
     if (active >= this.maxConcurrent) {
-      return { error: `Max concurrent sub-agents reached (${this.maxConcurrent}). Kill one first.` };
+      return {
+        error: `Max concurrent sub-agents reached (${this.maxConcurrent}). Kill one first.`,
+      };
     }
 
     const id = randomUUID().slice(0, 8);
@@ -117,10 +119,13 @@ export class AgentManager {
 
     const args = [
       "-p",
-      "--output-format", "stream-json",
+      "--output-format",
+      "stream-json",
       "--verbose",
-      "--model", model,
-      "--max-turns", String(maxTurns),
+      "--model",
+      model,
+      "--max-turns",
+      String(maxTurns),
     ];
 
     if (this.claudeConfig.allowedTools?.length) {

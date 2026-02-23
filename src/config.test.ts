@@ -154,7 +154,14 @@ describe("loadConfig", () => {
       expect(result.claude.maxTurns).toBe(25);
       expect(result.claude.workingDirectory).toBe("/mock/home/familiar-workspace");
       expect(result.claude.allowedTools).toEqual([
-        "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "WebFetch",
+        "WebSearch",
       ]);
       expect(result.sessions.inactivityTimeout).toBe("24h");
       expect(result.sessions.rotateAfterMessages).toBe(200);
@@ -284,9 +291,7 @@ describe("loadConfig", () => {
     it("throws when config file does not exist", () => {
       mockedExistsSync.mockReturnValue(false);
 
-      expect(() => loadConfig("/nonexistent/config.json")).toThrow(
-        "Config file not found",
-      );
+      expect(() => loadConfig("/nonexistent/config.json")).toThrow("Config file not found");
     });
 
     it("includes the path in the error message", () => {
@@ -342,9 +347,7 @@ describe("loadConfig", () => {
 
     it("throws when botToken is missing", () => {
       mockedExistsSync.mockReturnValue(true);
-      mockedReadFileSync.mockReturnValue(
-        JSON.stringify({ telegram: { allowedUsers: [1] } }),
-      );
+      mockedReadFileSync.mockReturnValue(JSON.stringify({ telegram: { allowedUsers: [1] } }));
 
       expect(() => loadConfig("/tmp/c.json")).toThrow("botToken");
     });
@@ -369,9 +372,7 @@ describe("loadConfig", () => {
 
     it("throws when allowedUsers is missing", () => {
       mockedExistsSync.mockReturnValue(true);
-      mockedReadFileSync.mockReturnValue(
-        JSON.stringify({ telegram: { botToken: "tok" } }),
-      );
+      mockedReadFileSync.mockReturnValue(JSON.stringify({ telegram: { botToken: "tok" } }));
 
       expect(() => loadConfig("/tmp/c.json")).toThrow("allowedUsers");
     });
@@ -388,7 +389,14 @@ describe("loadConfig", () => {
     it("allows empty allowedUsers in pairing mode", () => {
       mockedExistsSync.mockReturnValue(true);
       mockedReadFileSync.mockReturnValue(
-        JSON.stringify({ telegram: { botToken: "tok", allowedUsers: [], accessMode: "pairing", pairingCode: "secret" } }),
+        JSON.stringify({
+          telegram: {
+            botToken: "tok",
+            allowedUsers: [],
+            accessMode: "pairing",
+            pairingCode: "secret",
+          },
+        }),
       );
 
       const config = loadConfig("/tmp/c.json");

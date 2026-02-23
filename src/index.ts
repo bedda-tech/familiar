@@ -5,12 +5,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
-import {
-  loadConfig,
-  getConfigDir,
-  getConfigPath,
-  configExists,
-} from "./config.js";
+import { loadConfig, getConfigDir, getConfigPath, configExists } from "./config.js";
 import { initLogger, getLogger } from "./util/logger.js";
 import { SessionStore } from "./session/store.js";
 import { ClaudeCLI } from "./claude/cli.js";
@@ -72,16 +67,7 @@ async function cmdInit(): Promise<void> {
         model: "sonnet",
         systemPrompt:
           "You are a helpful personal assistant communicating via Telegram. Keep responses concise and well-formatted for mobile reading.",
-        allowedTools: [
-          "Bash",
-          "Read",
-          "Write",
-          "Edit",
-          "Glob",
-          "Grep",
-          "WebFetch",
-          "WebSearch",
-        ],
+        allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
         maxTurns: 25,
       },
       sessions: {
@@ -101,9 +87,15 @@ async function cmdInit(): Promise<void> {
   }
 
   // Create workspace with templates
-  const config = configExists() ? (() => {
-    try { return loadConfig(); } catch { return null; }
-  })() : null;
+  const config = configExists()
+    ? (() => {
+        try {
+          return loadConfig();
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
   const workspaceDir = config?.claude?.workingDirectory ?? join(homedir(), "familiar-workspace");
   mkdirSync(workspaceDir, { recursive: true });
@@ -328,10 +320,17 @@ async function cmdStart(configPath?: string): Promise<void> {
   if (config.openai) {
     try {
       const { MemoryStore } = await import("./memory/store.js");
-      memoryStore = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      memoryStore = new MemoryStore(
+        sessions.getDb(),
+        config.openai,
+        config.claude.workingDirectory,
+      );
       log.info("memory store initialized for /search");
     } catch (e) {
-      log.warn({ err: e }, "failed to initialize memory store — /search will only search message history");
+      log.warn(
+        { err: e },
+        "failed to initialize memory store — /search will only search message history",
+      );
     }
   }
 
@@ -353,7 +352,17 @@ async function cmdStart(configPath?: string): Promise<void> {
     log.info({ jobs: config.cron.jobs.length }, "cron scheduler started");
   }
 
-  const bridge = new Bridge(telegram, claude, sessions, config.openai, agentManager, config.sessions, memoryStore, deliveryQueue, cron ?? undefined);
+  const bridge = new Bridge(
+    telegram,
+    claude,
+    sessions,
+    config.openai,
+    agentManager,
+    config.sessions,
+    memoryStore,
+    deliveryQueue,
+    cron ?? undefined,
+  );
 
   // Wire up and start
   bridge.start();
@@ -443,7 +452,9 @@ async function cmdStart(configPath?: string): Promise<void> {
     } finally {
       sessions.close();
       const pidFile = join(getConfigDir(), "familiar.pid");
-      try { unlinkSync(pidFile); } catch {}
+      try {
+        unlinkSync(pidFile);
+      } catch {}
       process.exit(0);
     }
   };
@@ -472,14 +483,20 @@ switch (command) {
         const existingPid = parseInt(readFileSync(pidFile, "utf-8").trim());
         try {
           process.kill(existingPid, 0); // Check if process exists
-          console.error(`Familiar is already running (PID ${existingPid}). Use 'familiar stop' first.`);
+          console.error(
+            `Familiar is already running (PID ${existingPid}). Use 'familiar stop' first.`,
+          );
           process.exit(1);
         } catch {
           // Process doesn't exist, stale PID file — continue
         }
       }
 
-      const childArgs = [fileURLToPath(import.meta.url), "start", ...args.filter(a => a !== "--daemon")];
+      const childArgs = [
+        fileURLToPath(import.meta.url),
+        "start",
+        ...args.filter((a) => a !== "--daemon"),
+      ];
       const child = spawn(process.execPath, childArgs, {
         detached: true,
         stdio: "ignore",
@@ -569,14 +586,23 @@ switch (command) {
       }
       const { SessionStore } = await import("./session/store.js");
       const { MemoryStore } = await import("./memory/store.js");
-      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
-      const memory = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      const sessions = new SessionStore(
+        config.sessions.inactivityTimeout,
+        config.sessions.rotateAfterMessages,
+      );
+      const memory = new MemoryStore(
+        sessions.getDb(),
+        config.openai,
+        config.claude.workingDirectory,
+      );
       const results = await memory.search(query);
       if (results.length === 0) {
         console.log("No results found.");
       } else {
         for (const r of results) {
-          console.log(`\n--- ${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(3)}) ---`);
+          console.log(
+            `\n--- ${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(3)}) ---`,
+          );
           console.log(r.text.slice(0, 500));
         }
       }
@@ -596,8 +622,15 @@ switch (command) {
       }
       const { SessionStore } = await import("./session/store.js");
       const { MemoryStore } = await import("./memory/store.js");
-      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
-      const memory = new MemoryStore(sessions.getDb(), config.openai, config.claude.workingDirectory);
+      const sessions = new SessionStore(
+        config.sessions.inactivityTimeout,
+        config.sessions.rotateAfterMessages,
+      );
+      const memory = new MemoryStore(
+        sessions.getDb(),
+        config.openai,
+        config.claude.workingDirectory,
+      );
       console.log("Indexing memory files...");
       const result = await memory.indexAll();
       console.log(`Done: ${result.indexed} indexed, ${result.skipped} unchanged.`);

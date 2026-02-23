@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { getConfigDir, getConfigPath, configExists } from "./config.js";
@@ -138,16 +138,7 @@ export async function runConfigure(): Promise<void> {
       model,
       systemPrompt:
         "You are a helpful personal assistant communicating via Telegram. Keep responses concise and well-formatted for mobile reading.",
-      allowedTools: [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "WebFetch",
-        "WebSearch",
-      ],
+      allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
       maxTurns: 25,
     },
     sessions: {

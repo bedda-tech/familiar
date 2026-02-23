@@ -356,17 +356,17 @@ export class TelegramChannel implements Channel {
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
-        "Just send me a message and I'll respond.\n\n" +
-        "Commands:\n" +
-        "/new — Start a fresh conversation\n" +
-        "/status — Session info\n" +
-        "/model — Switch model\n" +
-        "/cost — Usage costs\n" +
-        "/thinking — Toggle thinking display\n" +
-        "/spawn — Spawn a sub-agent for a task\n" +
-        "/agents — List/kill/info sub-agents\n" +
-        "/search — Search message history and memory\n" +
-        "/processes — System status (alias: /ps)",
+          "Just send me a message and I'll respond.\n\n" +
+          "Commands:\n" +
+          "/new — Start a fresh conversation\n" +
+          "/status — Session info\n" +
+          "/model — Switch model\n" +
+          "/cost — Usage costs\n" +
+          "/thinking — Toggle thinking display\n" +
+          "/spawn — Spawn a sub-agent for a task\n" +
+          "/agents — List/kill/info sub-agents\n" +
+          "/search — Search message history and memory\n" +
+          "/processes — System status (alias: /ps)",
       );
     });
 

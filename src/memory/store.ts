@@ -82,22 +82,30 @@ export class MemoryStore {
     const embedding = await this.embed(query);
 
     // Vector search
-    const vecResults = this.db.prepare(`
+    const vecResults = this.db
+      .prepare(
+        `
       SELECT id, distance
       FROM memory_chunks_vec
       WHERE embedding MATCH ?
       ORDER BY distance
       LIMIT ?
-    `).all(new Float32Array(embedding), limit * 2) as Array<{ id: string; distance: number }>;
+    `,
+      )
+      .all(new Float32Array(embedding), limit * 2) as Array<{ id: string; distance: number }>;
 
     // FTS search
-    const ftsResults = this.db.prepare(`
+    const ftsResults = this.db
+      .prepare(
+        `
       SELECT id, rank
       FROM memory_chunks_fts
       WHERE memory_chunks_fts MATCH ?
       ORDER BY rank
       LIMIT ?
-    `).all(query.replace(/[^\w\s]/g, " "), limit * 2) as Array<{ id: string; rank: number }>;
+    `,
+      )
+      .all(query.replace(/[^\w\s]/g, " "), limit * 2) as Array<{ id: string; rank: number }>;
 
     // Merge results with reciprocal rank fusion
     const scores = new Map<string, number>();
@@ -122,10 +130,14 @@ export class MemoryStore {
 
     // Fetch full chunks
     const results: SearchResult[] = [];
-    const stmt = this.db.prepare(`SELECT text, path, start_line, end_line FROM memory_chunks WHERE id = ?`);
+    const stmt = this.db.prepare(
+      `SELECT text, path, start_line, end_line FROM memory_chunks WHERE id = ?`,
+    );
 
     for (const { id, score } of topIds) {
-      const row = stmt.get(id) as { text: string; path: string; start_line: number; end_line: number } | undefined;
+      const row = stmt.get(id) as
+        | { text: string; path: string; start_line: number; end_line: number }
+        | undefined;
       if (row) {
         results.push({
           text: row.text,
@@ -181,7 +193,9 @@ export class MemoryStore {
     const hash = createHash("sha256").update(content).digest("hex").slice(0, 16);
 
     // Check if file is unchanged
-    const existing = this.db.prepare(`SELECT hash FROM memory_files WHERE path = ?`).get(relPath) as { hash: string } | undefined;
+    const existing = this.db
+      .prepare(`SELECT hash FROM memory_files WHERE path = ?`)
+      .get(relPath) as { hash: string } | undefined;
     if (existing?.hash === hash) return false;
 
     // File changed — re-index
@@ -189,7 +203,9 @@ export class MemoryStore {
     const chunks = this.chunkLines(lines);
 
     // Remove old chunks
-    const oldChunks = this.db.prepare(`SELECT id FROM memory_chunks WHERE path = ?`).all(relPath) as Array<{ id: string }>;
+    const oldChunks = this.db
+      .prepare(`SELECT id FROM memory_chunks WHERE path = ?`)
+      .all(relPath) as Array<{ id: string }>;
     for (const { id } of oldChunks) {
       this.db.prepare(`DELETE FROM memory_chunks_fts WHERE id = ?`).run(id);
       this.db.prepare(`DELETE FROM memory_chunks_vec WHERE id = ?`).run(id);
@@ -206,27 +222,52 @@ export class MemoryStore {
       const embeddingBlob = new Float32Array(embedding);
       const now = Date.now();
 
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT OR REPLACE INTO memory_chunks (id, path, start_line, end_line, hash, text, embedding, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, relPath, chunk.startLine, chunk.endLine, chunkHash, chunk.text, Buffer.from(embeddingBlob.buffer), now);
+      `,
+        )
+        .run(
+          id,
+          relPath,
+          chunk.startLine,
+          chunk.endLine,
+          chunkHash,
+          chunk.text,
+          Buffer.from(embeddingBlob.buffer),
+          now,
+        );
 
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO memory_chunks_fts (id, path, start_line, end_line, text)
         VALUES (?, ?, ?, ?, ?)
-      `).run(id, relPath, chunk.startLine, chunk.endLine, chunk.text);
+      `,
+        )
+        .run(id, relPath, chunk.startLine, chunk.endLine, chunk.text);
 
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO memory_chunks_vec (id, embedding)
         VALUES (?, ?)
-      `).run(id, embeddingBlob);
+      `,
+        )
+        .run(id, embeddingBlob);
     }
 
     // Update file record
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO memory_files (path, hash, mtime, size)
       VALUES (?, ?, ?, ?)
-    `).run(relPath, hash, stat.mtimeMs, stat.size);
+    `,
+      )
+      .run(relPath, hash, stat.mtimeMs, stat.size);
 
     log.info({ path: relPath, chunks: chunks.length }, "indexed memory file");
     return true;
@@ -272,7 +313,7 @@ export class MemoryStore {
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${this.openai.apiKey}`,
+        Authorization: `Bearer ${this.openai.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -286,14 +327,18 @@ export class MemoryStore {
       throw new Error(`Embedding API error ${response.status}: ${err}`);
     }
 
-    const data = await response.json() as { data: Array<{ embedding: number[] }> };
+    const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
     return data.data[0].embedding;
   }
 
   /** Get stats about the memory index */
   stats(): { chunks: number; files: number } {
-    const chunkCount = (this.db.prepare(`SELECT COUNT(*) as c FROM memory_chunks`).get() as { c: number }).c;
-    const fileCount = (this.db.prepare(`SELECT COUNT(*) as c FROM memory_files`).get() as { c: number }).c;
+    const chunkCount = (
+      this.db.prepare(`SELECT COUNT(*) as c FROM memory_chunks`).get() as { c: number }
+    ).c;
+    const fileCount = (
+      this.db.prepare(`SELECT COUNT(*) as c FROM memory_files`).get() as { c: number }
+    ).c;
     return { chunks: chunkCount, files: fileCount };
   }
 }

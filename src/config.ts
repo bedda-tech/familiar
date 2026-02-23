@@ -87,16 +87,7 @@ const DEFAULTS: Partial<FamiliarConfig> = {
     model: "sonnet",
     systemPrompt:
       "You are a helpful personal assistant communicating via Telegram. Keep responses concise and well-formatted for mobile reading.",
-    allowedTools: [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-    ],
+    allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
     maxTurns: 25,
   },
   sessions: {
@@ -120,10 +111,7 @@ export function configExists(): boolean {
   return existsSync(CONFIG_PATH);
 }
 
-function deepMerge<T extends Record<string, unknown>>(
-  target: T,
-  source: Partial<T>,
-): T {
+function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
   const result = { ...target };
   for (const key of Object.keys(source) as Array<keyof T>) {
     const sourceVal = source[key];
@@ -151,9 +139,7 @@ export function loadConfig(path?: string): FamiliarConfig {
   const configPath = path ?? CONFIG_PATH;
 
   if (!existsSync(configPath)) {
-    throw new Error(
-      `Config file not found at ${configPath}\nRun 'familiar init' to create one.`,
-    );
+    throw new Error(`Config file not found at ${configPath}\nRun 'familiar init' to create one.`);
   }
 
   let raw: unknown;
@@ -162,6 +148,7 @@ export function loadConfig(path?: string): FamiliarConfig {
   } catch (e) {
     throw new Error(
       `Failed to parse config at ${configPath}: ${e instanceof Error ? e.message : e}`,
+      { cause: e },
     );
   }
 
@@ -176,24 +163,23 @@ export function loadConfig(path?: string): FamiliarConfig {
     throw new Error("Config missing required 'telegram.botToken'");
   }
   if (!Array.isArray(tg.allowedUsers)) {
-    throw new Error(
-      "Config missing required 'telegram.allowedUsers' (array of Telegram user IDs)",
-    );
+    throw new Error("Config missing required 'telegram.allowedUsers' (array of Telegram user IDs)");
   }
   if (tg.allowedUsers.length === 0 && tg.accessMode !== "pairing") {
     throw new Error(
       "telegram.allowedUsers must not be empty in allowlist mode. " +
-      "Add at least one user ID, or set accessMode to \"pairing\".",
+        'Add at least one user ID, or set accessMode to "pairing".',
     );
   }
   if (tg.accessMode === "pairing" && !tg.pairingCode) {
-    throw new Error(
-      "telegram.pairingCode is required when accessMode is \"pairing\"",
-    );
+    throw new Error('telegram.pairingCode is required when accessMode is "pairing"');
   }
 
   // Merge with defaults
-  const merged = deepMerge(DEFAULTS as Record<string, unknown>, config) as unknown as FamiliarConfig;
+  const merged = deepMerge(
+    DEFAULTS as Record<string, unknown>,
+    config,
+  ) as unknown as FamiliarConfig;
 
   return merged;
 }
@@ -202,9 +188,7 @@ export function loadConfig(path?: string): FamiliarConfig {
 export function parseDuration(duration: string): number {
   const match = duration.match(/^(\d+)\s*(ms|s|m|h|d)$/);
   if (!match) {
-    throw new Error(
-      `Invalid duration: ${duration}. Use format like "24h", "30m", "7d"`,
-    );
+    throw new Error(`Invalid duration: ${duration}. Use format like "24h", "30m", "7d"`);
   }
   const value = parseInt(match[1], 10);
   const unit = match[2];

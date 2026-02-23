@@ -8,12 +8,7 @@ import type { DeliveryQueue } from "./delivery/queue.js";
 import type { CronScheduler } from "./cron/scheduler.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
-import {
-  createDraft,
-  appendToDraft,
-  finalizeDraft,
-  type DraftContext,
-} from "./streaming/draft.js";
+import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
 import { getLogger } from "./util/logger.js";
 
 const log = getLogger("bridge");
@@ -56,7 +51,11 @@ export class Bridge {
     // Handle /new — fresh session
     this.channel.onCommand("new", async (msg) => {
       this.sessions.clearSession(msg.chatId);
-      await this.channel.sendText(msg.chatId, "Session cleared. Next message starts a fresh conversation.", msg.replyContext);
+      await this.channel.sendText(
+        msg.chatId,
+        "Session cleared. Next message starts a fresh conversation.",
+        msg.replyContext,
+      );
     });
 
     // Handle /status — session info
@@ -131,7 +130,11 @@ export class Bridge {
       const arg = msg.text.trim().toLowerCase();
       if (arg === "on") {
         this.showThinking = true;
-        await this.channel.sendText(msg.chatId, "Thinking blocks *enabled*. You'll see reasoning before responses.", msg.replyContext);
+        await this.channel.sendText(
+          msg.chatId,
+          "Thinking blocks *enabled*. You'll see reasoning before responses.",
+          msg.replyContext,
+        );
       } else if (arg === "off") {
         this.showThinking = false;
         await this.channel.sendText(msg.chatId, "Thinking blocks *disabled*.", msg.replyContext);
@@ -207,7 +210,9 @@ export class Bridge {
           lines.push(`*Active (${active.length}):*`);
           for (const a of active) {
             const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
-            lines.push(`  \`${a.id}\` ${a.label ?? ""} (${a.model}, ${elapsed}s) — ${a.task.slice(0, 60)}`);
+            lines.push(
+              `  \`${a.id}\` ${a.label ?? ""} (${a.model}, ${elapsed}s) — ${a.task.slice(0, 60)}`,
+            );
           }
         } else {
           lines.push("No active sub-agents.");
@@ -227,17 +232,27 @@ export class Bridge {
       } else if (sub === "kill") {
         const target = args[1];
         if (!target) {
-          await this.channel.sendText(msg.chatId, "Usage: `/agents kill <id>` or `/agents kill all`", msg.replyContext);
+          await this.channel.sendText(
+            msg.chatId,
+            "Usage: `/agents kill <id>` or `/agents kill all`",
+            msg.replyContext,
+          );
           return;
         }
         if (target === "all") {
           const count = this.agents.killAll();
-          await this.channel.sendText(msg.chatId, `Killed ${count} sub-agent(s).`, msg.replyContext);
+          await this.channel.sendText(
+            msg.chatId,
+            `Killed ${count} sub-agent(s).`,
+            msg.replyContext,
+          );
         } else {
           const killed = this.agents.kill(target);
           await this.channel.sendText(
             msg.chatId,
-            killed ? `Killed sub-agent \`${target}\`.` : `No running sub-agent matching \`${target}\`.`,
+            killed
+              ? `Killed sub-agent \`${target}\`.`
+              : `No running sub-agent matching \`${target}\`.`,
             msg.replyContext,
           );
         }
@@ -249,7 +264,11 @@ export class Bridge {
         }
         const agent = this.agents.getInfo(target);
         if (!agent) {
-          await this.channel.sendText(msg.chatId, `No sub-agent matching \`${target}\`.`, msg.replyContext);
+          await this.channel.sendText(
+            msg.chatId,
+            `No sub-agent matching \`${target}\`.`,
+            msg.replyContext,
+          );
           return;
         }
         const lines = [
@@ -287,11 +306,14 @@ export class Bridge {
 
       // Search message log (SQLite LIKE)
       try {
-        const rows = this.sessions.getDb().prepare(
-          `SELECT content, role, created_at FROM message_log
+        const rows = this.sessions
+          .getDb()
+          .prepare(
+            `SELECT content, role, created_at FROM message_log
            WHERE chat_id = ? AND content LIKE '%' || ? || '%'
            ORDER BY created_at DESC LIMIT 5`,
-        ).all(msg.chatId, query) as Array<{ content: string; role: string; created_at: string }>;
+          )
+          .all(msg.chatId, query) as Array<{ content: string; role: string; created_at: string }>;
 
         if (rows.length > 0) {
           results += "*Message History:*\n";
@@ -347,7 +369,8 @@ export class Bridge {
         lines.push(`*Sub-agents:* ${active.length} running`);
         for (const a of active) {
           const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
-          const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+          const elapsedStr =
+            elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
           const label = a.label ? `"${a.label}"` : `"${a.task.slice(0, 40)}"`;
           lines.push(`\u2022 \`${a.id}\` \u2014 ${label} (${elapsedStr})`);
         }
@@ -376,7 +399,11 @@ export class Bridge {
           let nextStr = "unknown";
           if (job.nextRun) {
             const nextDate = new Date(job.nextRun);
-            nextStr = nextDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+            nextStr = nextDate.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            });
           }
           const label = job.label ?? job.id;
           lines.push(`\u2022 ${label} \u2014 next: ${nextStr}`);
@@ -401,7 +428,12 @@ export class Bridge {
     }
 
     log.info(
-      { chatId: msg.chatId, textLen: msg.text.length, files: msg.filePaths?.length ?? 0, isVoice: msg.isVoice },
+      {
+        chatId: msg.chatId,
+        textLen: msg.text.length,
+        files: msg.filePaths?.length ?? 0,
+        isVoice: msg.isVoice,
+      },
       "incoming message",
     );
 
@@ -437,12 +469,20 @@ export class Bridge {
 
         if (count > rotateAt * 0.8) {
           // Urgent: context is about to be compacted
-          prompt += "\n\n[SYSTEM: Context is getting long and may be compacted soon. Before answering, save any important pending context to memory/YYYY-MM-DD.md. Be brief — just capture what you'd need to continue if context resets.]";
-          log.info({ chatId: msg.chatId, messageCount: count, rotateAt }, "injecting pre-compaction flush");
+          prompt +=
+            "\n\n[SYSTEM: Context is getting long and may be compacted soon. Before answering, save any important pending context to memory/YYYY-MM-DD.md. Be brief — just capture what you'd need to continue if context resets.]";
+          log.info(
+            { chatId: msg.chatId, messageCount: count, rotateAt },
+            "injecting pre-compaction flush",
+          );
         } else if (count > 0 && count % 20 === 0) {
           // Periodic: every 20 messages, nudge a lightweight memory save
-          prompt += "\n\n[SYSTEM: Periodic checkpoint — if you've accumulated important context, decisions, or learnings in this session that aren't yet saved, briefly update memory/YYYY-MM-DD.md. Skip if nothing new to save.]";
-          log.info({ chatId: msg.chatId, messageCount: count }, "injecting periodic memory checkpoint");
+          prompt +=
+            "\n\n[SYSTEM: Periodic checkpoint — if you've accumulated important context, decisions, or learnings in this session that aren't yet saved, briefly update memory/YYYY-MM-DD.md. Skip if nothing new to save.]";
+          log.info(
+            { chatId: msg.chatId, messageCount: count },
+            "injecting periodic memory checkpoint",
+          );
         }
       }
     }
@@ -476,7 +516,7 @@ export class Bridge {
 
     // Stream response from Claude
     let fullText = "";
-    let toolsUsed: string[] = [];
+    const toolsUsed: string[] = [];
     let typingStopped = false;
 
     try {
@@ -494,15 +534,11 @@ export class Bridge {
           case "thinking":
             // Send thinking as a separate message in italics
             if (this.showThinking && event.text.length > 0) {
-              const preview = event.text.length > 3000
-                ? event.text.slice(0, 3000) + "..."
-                : event.text;
+              const preview =
+                event.text.length > 3000 ? event.text.slice(0, 3000) + "..." : event.text;
               // Escape for Telegram Markdown v1: only _ * ` [ need escaping
-              const escaped = preview.replace(/[_*`\[]/g, "\\$&");
-              await this.channel.sendDirectMessage(
-                msg.chatId,
-                `_${escaped}_`,
-              );
+              const escaped = preview.replace(/[_*`[]/g, "\\$&");
+              await this.channel.sendDirectMessage(msg.chatId, `_${escaped}_`);
             }
             break;
 
@@ -514,10 +550,7 @@ export class Bridge {
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
             // Show tool usage to the user
-            await this.channel.sendDirectMessage(
-              msg.chatId,
-              `\`${event.name}\``,
-            );
+            await this.channel.sendDirectMessage(msg.chatId, `\`${event.name}\``);
             // Restart typing during tool execution
             if (typingStopped) {
               stopTyping = this.channel.startTyping(msg.chatId);
@@ -553,7 +586,10 @@ export class Bridge {
             await finalizeDraft(draft, draftCtx, chunks);
 
             if (result.isError) {
-              log.warn({ chatId: msg.chatId, error: result.text.slice(0, 200) }, "claude returned error");
+              log.warn(
+                { chatId: msg.chatId, error: result.text.slice(0, 200) },
+                "claude returned error",
+              );
             } else {
               log.info(
                 {

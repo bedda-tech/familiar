@@ -70,7 +70,10 @@ export class WebhookServer {
       // CORS headers for web dashboard
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-familiar-token");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization, x-familiar-token",
+      );
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -300,8 +303,8 @@ export class WebhookServer {
   /** Load the dashboard HTML at startup. Checks dist/ first, then src/ (dev). */
   private loadDashboard(): void {
     const candidates = [
-      join(__dirname, "..", "dashboard", "index.html"),  // dist/dashboard/index.html
-      join(__dirname, "..", "..", "src", "dashboard", "index.html"),  // src/dashboard/index.html (dev)
+      join(__dirname, "..", "dashboard", "index.html"), // dist/dashboard/index.html
+      join(__dirname, "..", "..", "src", "dashboard", "index.html"), // src/dashboard/index.html (dev)
     ];
 
     for (const candidate of candidates) {

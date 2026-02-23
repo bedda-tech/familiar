@@ -27,7 +27,7 @@ vi.mock("../util/logger.js", () => ({
 }));
 
 import { SessionStore } from "./store.js";
-import type { SessionInfo, CostSummary } from "./store.js";
+import type { CostSummary } from "./store.js";
 
 describe("SessionStore", () => {
   let store: SessionStore;
@@ -176,9 +176,9 @@ describe("SessionStore", () => {
     store.logMessage("chat-1", "assistant", longContent, 0.01);
 
     const db = store.getDb();
-    const row = db
-      .prepare("SELECT content FROM message_log WHERE chat_id = ?")
-      .get("chat-1") as { content: string };
+    const row = db.prepare("SELECT content FROM message_log WHERE chat_id = ?").get("chat-1") as {
+      content: string;
+    };
 
     expect(row.content).toHaveLength(10000);
     expect(row.content).toBe("A".repeat(10000));
@@ -192,7 +192,7 @@ describe("SessionStore", () => {
     store.logMessage("chat-1", "user", "question 1", 0);
     store.logMessage("chat-1", "assistant", "answer 1", 0.005);
     store.logMessage("chat-1", "user", "question 2", 0);
-    store.logMessage("chat-1", "assistant", "answer 2", 0.010);
+    store.logMessage("chat-1", "assistant", "answer 2", 0.01);
 
     const summary: CostSummary = store.getCostSummary("chat-1");
 

@@ -24,11 +24,7 @@ export class CronScheduler {
   private claudeConfig: ClaudeConfig;
   private workspace: AgentWorkspace;
 
-  constructor(
-    jobConfigs: CronJobConfig[],
-    claudeConfig: ClaudeConfig,
-    dbPath?: string,
-  ) {
+  constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
     this.claudeConfig = claudeConfig;
     this.workspace = new AgentWorkspace();
 
@@ -95,7 +91,10 @@ export class CronScheduler {
         const next = cron.nextRun();
         const nextStr = next ? next.toISOString() : "unknown";
         this.updateNextRun(id, nextStr);
-        log.info({ jobId: id, schedule: config.schedule, timezone: config.timezone, next: nextStr }, "scheduled cron job");
+        log.info(
+          { jobId: id, schedule: config.schedule, timezone: config.timezone, next: nextStr },
+          "scheduled cron job",
+        );
       } catch (e) {
         log.error({ jobId: id, err: e }, "failed to schedule job");
       }
@@ -126,7 +125,9 @@ export class CronScheduler {
   }
 
   /** List all configured jobs with their state. */
-  listJobs(): Array<CronJobConfig & { nextRun: string | null; lastRun: string | null; runCount: number }> {
+  listJobs(): Array<
+    CronJobConfig & { nextRun: string | null; lastRun: string | null; runCount: number }
+  > {
     return Array.from(this.configs.values()).map((config) => {
       const state = this.getJobState(config.id);
       // Use live scheduler if running, otherwise compute from expression
@@ -151,7 +152,10 @@ export class CronScheduler {
   }
 
   /** Get recent run history for a job. */
-  getRunHistory(jobId: string, limit: number = 10): Array<{
+  getRunHistory(
+    jobId: string,
+    limit: number = 10,
+  ): Array<{
     startedAt: string;
     finishedAt: string;
     durationMs: number;
@@ -165,13 +169,13 @@ export class CronScheduler {
          FROM cron_runs WHERE job_id = ? ORDER BY id DESC LIMIT ?`,
       )
       .all(jobId, limit) as Array<{
-        started_at: string;
-        finished_at: string;
-        duration_ms: number;
-        cost_usd: number;
-        is_error: number;
-        result_text: string;
-      }>;
+      started_at: string;
+      finished_at: string;
+      duration_ms: number;
+      cost_usd: number;
+      is_error: number;
+      result_text: string;
+    }>;
 
     return rows.map((r) => ({
       startedAt: r.started_at,
@@ -232,7 +236,10 @@ export class CronScheduler {
           try {
             suppressed = new RegExp(config.suppressPattern).test(result.text);
           } catch {
-            log.warn({ jobId: config.id, pattern: config.suppressPattern }, "invalid suppressPattern");
+            log.warn(
+              { jobId: config.id, pattern: config.suppressPattern },
+              "invalid suppressPattern",
+            );
           }
         }
 
@@ -302,13 +309,17 @@ export class CronScheduler {
       .run(jobId, nextRunAt);
   }
 
-  private getJobState(jobId: string): {
-    last_run_at: string | null;
-    next_run_at: string | null;
-    run_count: number;
-  } | undefined {
+  private getJobState(jobId: string):
+    | {
+        last_run_at: string | null;
+        next_run_at: string | null;
+        run_count: number;
+      }
+    | undefined {
     return this.db
       .prepare("SELECT last_run_at, next_run_at, run_count FROM cron_state WHERE job_id = ?")
-      .get(jobId) as { last_run_at: string | null; next_run_at: string | null; run_count: number } | undefined;
+      .get(jobId) as
+      | { last_run_at: string | null; next_run_at: string | null; run_count: number }
+      | undefined;
   }
 }

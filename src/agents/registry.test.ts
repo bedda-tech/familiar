@@ -15,7 +15,9 @@ describe("AgentRegistry", () => {
     registry = new AgentRegistry(db);
   });
 
-  function makeRecord(overrides: Partial<Pick<SubagentRecord, "id" | "task" | "label" | "model" | "chatId">> = {}) {
+  function makeRecord(
+    overrides: Partial<Pick<SubagentRecord, "id" | "task" | "label" | "model" | "chatId">> = {},
+  ) {
     return {
       id: overrides.id ?? "agent-001",
       task: overrides.task ?? "do something",
@@ -231,7 +233,9 @@ describe("AgentRegistry", () => {
   // Additional: listRecent uses default limit of 20
   it("listRecent defaults to limit of 20", () => {
     for (let i = 0; i < 25; i++) {
-      registry.register(makeRecord({ id: `agent-${String(i).padStart(3, "0")}`, chatId: "chat-1" }));
+      registry.register(
+        makeRecord({ id: `agent-${String(i).padStart(3, "0")}`, chatId: "chat-1" }),
+      );
     }
 
     const recent = registry.listRecent();

@@ -337,7 +337,9 @@ export async function migrateFromOpenClaw(): Promise<void> {
   if (allowedUsers.length > 0) {
     console.log(`Allowed Telegram users: ${allowedUsers.join(", ")}`);
   } else {
-    console.warn("No allowed Telegram users found — you'll need to add your user ID to the config.");
+    console.warn(
+      "No allowed Telegram users found — you'll need to add your user ID to the config.",
+    );
   }
 
   // Detect other channels for reporting
@@ -388,9 +390,7 @@ export async function migrateFromOpenClaw(): Promise<void> {
 
   // 6. Extract failover chain if configured
   const fallbacks = oc.config.agents?.defaults?.model?.fallbacks;
-  const failoverChain = fallbacks?.length
-    ? [model, ...fallbacks.map(mapModel)]
-    : undefined;
+  const failoverChain = fallbacks?.length ? [model, ...fallbacks.map(mapModel)] : undefined;
   if (failoverChain) {
     console.log(`Failover chain: ${failoverChain.join(" -> ")}`);
   }
@@ -403,16 +403,7 @@ export async function migrateFromOpenClaw(): Promise<void> {
     workingDirectory: workspace,
     model,
     systemPrompt,
-    allowedTools: [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-    ],
+    allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
     maxTurns: 25,
   };
   if (failoverChain) {
@@ -487,7 +478,9 @@ export async function migrateFromOpenClaw(): Promise<void> {
 
   console.log("\nWhat was NOT migrated (not yet supported):");
   if (otherChannels.length > 0) {
-    console.log(`  - Other channels: ${otherChannels.join(", ")} — Familiar is Telegram-only for now`);
+    console.log(
+      `  - Other channels: ${otherChannels.join(", ")} — Familiar is Telegram-only for now`,
+    );
   }
   console.log("  - OpenClaw's vector memory DB — not used by Familiar");
   console.log("  - Skills / plugins — use Claude Code MCP tools instead");

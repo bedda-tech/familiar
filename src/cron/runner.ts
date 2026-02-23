@@ -175,7 +175,7 @@ export async function runCronJob(
         data: {
           lastRunCost: result.costUsd,
           lastRunTurns: result.numTurns,
-          lastRunError: result.isError ? (result.text || "unknown error") : undefined,
+          lastRunError: result.isError ? result.text || "unknown error" : undefined,
         },
       });
     } catch (e) {
