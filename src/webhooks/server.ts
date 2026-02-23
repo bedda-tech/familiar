@@ -239,6 +239,13 @@ export class WebhookServer {
       return;
     }
 
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      sendJson(res, 400, {
+        error: `'message' exceeds maximum length of ${MAX_MESSAGE_LENGTH} characters`,
+      });
+      return;
+    }
+
     const chatId = (body.chatId as string | undefined) ?? undefined;
 
     if (!this.wakeHandler) {
@@ -265,6 +272,13 @@ export class WebhookServer {
     const prompt = body.prompt as string | undefined;
     if (!prompt || typeof prompt !== "string") {
       sendJson(res, 400, { error: "Missing required 'prompt' field" });
+      return;
+    }
+
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      sendJson(res, 400, {
+        error: `'prompt' exceeds maximum length of ${MAX_PROMPT_LENGTH} characters`,
+      });
       return;
     }
 
@@ -357,10 +371,29 @@ function sendJson(res: ServerResponse, status: number, body: Record<string, unkn
   res.end(JSON.stringify(body));
 }
 
+/** Maximum allowed request body size (1 MB). Prevents memory exhaustion from oversized payloads. */
+const MAX_BODY_BYTES = 1 * 1024 * 1024;
+
+/** Maximum length for user-supplied message text (64 KB). */
+export const MAX_MESSAGE_LENGTH = 64 * 1024;
+
+/** Maximum length for user-supplied prompt text (64 KB). */
+export const MAX_PROMPT_LENGTH = 64 * 1024;
+
 function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let totalBytes = 0;
+
+    req.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")) as Record<string, unknown>);
