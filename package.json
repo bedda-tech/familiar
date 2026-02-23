@@ -12,7 +12,7 @@
     "templates/"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/dashboard dist/dashboard",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build",

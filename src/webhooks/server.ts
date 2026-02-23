@@ -11,15 +11,26 @@
  *   GET  /api/cron/jobs/:id/runs — run history for a specific job
  *   POST /api/cron/jobs/:id/run  — trigger a cron job manually
  *
+ * Dashboard:
+ *   GET  /                    — web dashboard (redirects to /dashboard)
+ *   GET  /dashboard           — web dashboard UI
+ *
  * Auth: Bearer token via Authorization header or x-familiar-token header.
+ *       Dashboard HTML is served without auth (it prompts for token client-side).
  */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ClaudeConfig } from "../config.js";
 import { runCronJob } from "../cron/runner.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { CronScheduler } from "../cron/scheduler.js";
 import { getLogger } from "../util/logger.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const log = getLogger("webhooks");
 
@@ -35,11 +46,14 @@ export class WebhookServer {
   private server: Server | null = null;
   private wakeHandler: WakeHandler | null = null;
   private cronScheduler: CronScheduler | null = null;
+  private dashboardHtml: string | null = null;
 
   constructor(
     private config: WebhookConfig,
     private claudeConfig: ClaudeConfig,
-  ) {}
+  ) {
+    this.loadDashboard();
+  }
 
   /** Register handler for /hooks/wake — injects message into a chat session. */
   onWake(handler: WakeHandler): void {
@@ -93,6 +107,12 @@ export class WebhookServer {
     // Health check — no auth required
     if (url === "/health" && method === "GET") {
       sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+      return;
+    }
+
+    // Dashboard — no auth required (the SPA handles auth client-side)
+    if (method === "GET" && (url === "/" || url === "/dashboard")) {
+      this.serveDashboard(res);
       return;
     }
 
@@ -273,6 +293,45 @@ export class WebhookServer {
       log.error({ err: e }, "agent turn failed");
       sendJson(res, 500, { error: "Agent execution failed" });
     }
+  }
+
+  // ── Dashboard ────────────────────────────────────────────────────────
+
+  /** Load the dashboard HTML at startup. Checks dist/ first, then src/ (dev). */
+  private loadDashboard(): void {
+    const candidates = [
+      join(__dirname, "..", "dashboard", "index.html"),  // dist/dashboard/index.html
+      join(__dirname, "..", "..", "src", "dashboard", "index.html"),  // src/dashboard/index.html (dev)
+    ];
+
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        try {
+          this.dashboardHtml = readFileSync(candidate, "utf-8");
+          log.info({ path: candidate }, "dashboard loaded");
+          return;
+        } catch (e) {
+          log.warn({ path: candidate, err: e }, "failed to read dashboard file");
+        }
+      }
+    }
+
+    log.warn("dashboard HTML not found; dashboard will be unavailable");
+  }
+
+  /** Serve the dashboard HTML. */
+  private serveDashboard(res: ServerResponse): void {
+    if (!this.dashboardHtml) {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Dashboard not available. Ensure src/dashboard/index.html exists.");
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache",
+    });
+    res.end(this.dashboardHtml);
   }
 
   private authenticate(req: IncomingMessage): boolean {
