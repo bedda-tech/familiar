@@ -45,6 +45,9 @@ export interface Channel {
   /** Send a file to a chat */
   sendFile(chatId: string, filePath: string, caption?: string): Promise<void>;
 
+  /** Send a voice/audio message to a chat (optional — not all channels support this) */
+  sendVoice?(chatId: string, filePath: string): Promise<void>;
+
   /** Start the channel */
   start(): Promise<void>;
 

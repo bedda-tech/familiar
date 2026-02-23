@@ -57,6 +57,10 @@ export interface CronConfig {
 export interface OpenAIConfig {
   apiKey: string;
   whisperModel?: string; // default: "whisper-1"
+  /** TTS model to use for voice responses. Default: "tts-1" */
+  ttsModel?: string;
+  /** TTS voice: alloy | echo | fable | onyx | nova | shimmer. Default: "alloy" */
+  ttsVoice?: string;
 }
 
 export interface WebhookServerConfig {

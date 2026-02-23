@@ -108,6 +108,18 @@ export class TelegramChannel implements Channel {
     });
   }
 
+  async sendVoice(chatId: string, filePath: string): Promise<void> {
+    try {
+      const { createReadStream } = await import("node:fs");
+      const { InputFile } = await import("grammy");
+      const stream = createReadStream(filePath);
+      const inputFile = new InputFile(stream, filePath.split("/").pop());
+      await this.bot.api.sendVoice(Number(chatId), inputFile);
+    } catch (e) {
+      log.error({ err: e, chatId, filePath }, "failed to send voice message");
+    }
+  }
+
   async sendFile(chatId: string, filePath: string, caption?: string): Promise<void> {
     try {
       const { createReadStream } = await import("node:fs");
@@ -405,6 +417,14 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    this.bot.command("voice", async (ctx) => {
+      const handler = this.commandHandlers.get("voice");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
@@ -415,6 +435,7 @@ export class TelegramChannel implements Channel {
           "/model — Switch model\n" +
           "/cost — Usage costs\n" +
           "/thinking — Toggle thinking display\n" +
+          "/voice — Toggle voice replies (TTS)\n" +
           "/spawn — Spawn a sub-agent for a task\n" +
           "/agents — List/kill/info sub-agents\n" +
           "/search — Search message history and memory\n" +
