@@ -190,6 +190,7 @@ function cmdTui(): void {
   if (config.claude.model) {
     args.push("--model", config.claude.model);
   }
+  args.push("--dangerously-skip-permissions");
 
   if (sessionId) {
     console.log(`Resuming session ${sessionId.slice(0, 8)}…`);
