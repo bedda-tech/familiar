@@ -6,6 +6,7 @@ import type { AgentManager } from "./agents/manager.js";
 import type { MemoryStore } from "./memory/store.js";
 import type { DeliveryQueue } from "./delivery/queue.js";
 import type { CronScheduler } from "./cron/scheduler.js";
+import type { ProcessTracker } from "./claude/process-tracker.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
@@ -25,6 +26,7 @@ export class Bridge {
   private memoryStore: MemoryStore | undefined;
   private deliveryQueue: DeliveryQueue | undefined;
   private cronScheduler: CronScheduler | undefined;
+  private processTracker: ProcessTracker | undefined;
   private sessionConfig: SessionConfig;
 
   constructor(
@@ -37,12 +39,14 @@ export class Bridge {
     memoryStore?: MemoryStore,
     deliveryQueue?: DeliveryQueue,
     cronScheduler?: CronScheduler,
+    processTracker?: ProcessTracker,
   ) {
     this.openai = openai;
     this.agents = agents;
     this.memoryStore = memoryStore;
     this.deliveryQueue = deliveryQueue;
     this.cronScheduler = cronScheduler;
+    this.processTracker = processTracker;
     this.sessionConfig = sessionConfig ?? { inactivityTimeout: "24h" };
   }
 
@@ -392,6 +396,18 @@ export class Bridge {
 
       lines.push("*System Status*");
       lines.push(`Uptime: ${uptimeStr}`);
+
+      // Active Claude requests
+      if (this.processTracker) {
+        const active = this.processTracker.list();
+        lines.push("");
+        lines.push(`*Active Requests:* ${active.length} in-flight`);
+        for (const req of active) {
+          const elapsed = Math.round((Date.now() - req.startedAt.getTime()) / 1000);
+          const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+          lines.push(`\u2022 chat \`${req.chatId}\` \u2014 PID ${req.pid ?? "?"} (${elapsedStr})`);
+        }
+      }
 
       // Sub-agents
       if (this.agents) {
