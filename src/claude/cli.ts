@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { ClaudeConfig } from "../config.js";
 import type { StreamEvent, StreamYield, BackendResult, ResultEvent } from "./types.js";
+import type { ProcessTracker } from "./process-tracker.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("claude-cli");
@@ -10,6 +11,8 @@ export interface ClaudeRequest {
   prompt: string;
   sessionId?: string;
   filePaths?: string[];
+  /** Optional chatId for process tracking — enables /cancel and /processes display. */
+  chatId?: string;
 }
 
 /** Default failover chain: try opus, fall back to sonnet, then haiku */
@@ -18,11 +21,17 @@ const DEFAULT_FAILOVER = ["opus", "sonnet", "haiku"];
 export class ClaudeCLI {
   private modelOverride: string | null = null;
   private failoverChain: string[] = DEFAULT_FAILOVER;
+  private tracker: ProcessTracker | null = null;
 
   constructor(private config: ClaudeConfig) {
     if (config.failoverChain?.length) {
       this.failoverChain = config.failoverChain;
     }
+  }
+
+  /** Attach a ProcessTracker to record active in-flight requests. */
+  setTracker(tracker: ProcessTracker): void {
+    this.tracker = tracker;
   }
 
   /** Override the model at runtime. Pass null to revert to config default. */
@@ -87,10 +96,16 @@ export class ClaudeCLI {
       env: cleanEnv(),
     });
 
+    // Register with process tracker if available
+    if (this.tracker && request.chatId) {
+      this.tracker.register(request.chatId, proc);
+    }
+
     // Write prompt to stdin and close
     proc.stdin.write(prompt);
     proc.stdin.end();
 
+    try {
     // Collect stderr for error reporting
     let stderr = "";
     proc.stderr.on("data", (chunk: Buffer) => {
@@ -211,6 +226,11 @@ export class ClaudeCLI {
     }
 
     yield { type: "done", result };
+    } finally {
+      if (this.tracker && request.chatId) {
+        this.tracker.unregister(request.chatId);
+      }
+    }
   }
 
   private buildArgs(request: ClaudeRequest, model: string): string[] {
