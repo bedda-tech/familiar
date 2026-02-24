@@ -88,6 +88,16 @@ export async function runCronJob(
     env,
   });
 
+  // Capture spawn errors (e.g. ENOENT when claude binary is missing)
+  // so they reject the promise chain instead of crashing as uncaught exceptions.
+  let spawnError: Error | null = null;
+  const spawnErrorPromise = new Promise<never>((_, reject) => {
+    proc.on("error", (err: Error) => {
+      spawnError = err;
+      reject(err);
+    });
+  });
+
   proc.stdin.write(job.prompt);
   proc.stdin.end();
 
@@ -133,6 +143,23 @@ export async function runCronJob(
         result = parseResult(event as ResultEvent);
         break;
     }
+  }
+
+  // If spawn failed (ENOENT etc.), short-circuit with an error result
+  if (spawnError !== null) {
+    const err = spawnError as Error;
+    const finishedAt = new Date();
+    log.error({ jobId: job.id, err }, "failed to spawn claude process");
+    return {
+      jobId: job.id,
+      text: `Failed to spawn claude: ${err.message}`,
+      costUsd: 0,
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      numTurns: 0,
+      isError: true,
+      startedAt,
+      finishedAt,
+    };
   }
 
   const exitCode = await waitForExit(proc);
