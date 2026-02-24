@@ -11,7 +11,12 @@ import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
 import { getLogger } from "./util/logger.js";
 
-const log = getLogger("bridge");
+const log = getLogger("bridge")
+
+// Input length limits to prevent memory exhaustion and abuse
+const MAX_TASK_LENGTH = 50_000 // 50 KB — max /spawn task text
+const MAX_LABEL_LENGTH = 256 // max /spawn label length
+const MAX_SEARCH_QUERY_LENGTH = 1_000 // max /search query length;
 
 export class Bridge {
   private showThinking = true;
@@ -179,6 +184,24 @@ export class Bridge {
         task = task.replace(labelMatch[0], "").trim();
       }
 
+      // Validate input lengths
+      if (task.length > MAX_TASK_LENGTH) {
+        await this.channel.sendText(
+          msg.chatId,
+          `Task is too long (${task.length} chars). Maximum is ${MAX_TASK_LENGTH} characters.`,
+          msg.replyContext,
+        );
+        return;
+      }
+      if (label && label.length > MAX_LABEL_LENGTH) {
+        await this.channel.sendText(
+          msg.chatId,
+          `Label is too long (${label.length} chars). Maximum is ${MAX_LABEL_LENGTH} characters.`,
+          msg.replyContext,
+        );
+        return;
+      }
+
       const result = await this.agents.spawn({ task, label, model, chatId: msg.chatId });
       if ("error" in result) {
         await this.channel.sendText(msg.chatId, result.error, msg.replyContext);
@@ -299,6 +322,14 @@ export class Bridge {
       const query = msg.text.replace(/^\/search\s*/i, "").trim();
       if (!query) {
         await this.channel.sendText(msg.chatId, "Usage: `/search <query>`", msg.replyContext);
+        return;
+      }
+      if (query.length > MAX_SEARCH_QUERY_LENGTH) {
+        await this.channel.sendText(
+          msg.chatId,
+          `Search query is too long (${query.length} chars). Maximum is ${MAX_SEARCH_QUERY_LENGTH} characters.`,
+          msg.replyContext,
+        );
         return;
       }
 

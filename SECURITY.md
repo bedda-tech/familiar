@@ -74,6 +74,28 @@ The HTTP server enforces the following limits to prevent memory exhaustion:
 
 Requests that exceed these limits receive a `400 Bad Request` response.
 
+### Telegram Command Input Limits
+
+User-supplied text in Telegram commands is validated before processing:
+
+| Command | Field | Limit |
+|---------|-------|-------|
+| `/spawn` | Task text | 50 KB |
+| `/spawn` | `--label` value | 256 chars |
+| `/search` | Query string | 1 000 chars |
+
+Messages exceeding these limits are rejected with an error reply and no processing occurs.
+
+### Full-Text Search (FTS) Query Sanitization
+
+The `/search` query is sanitized before being passed to SQLite FTS5:
+
+```typescript
+query.replace(/[^\w\s]/g, " ")
+```
+
+This strips all non-word, non-space characters, preventing FTS operator injection (e.g., `NEAR`, `NOT`, `*` operators that could cause unexpected results or errors).
+
 ### Authentication
 
 All webhook and REST API endpoints (except `/health` and `/dashboard`) require a Bearer token matching `webhooks.token` in the config. The token is compared with a plain string equality check (no timing-safe comparison needed — Bearer tokens are not secret inputs that must resist timing attacks on the server side, since the attacker must already know the endpoint).
