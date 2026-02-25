@@ -106,6 +106,10 @@ export async function runCronJob(
   const rl = createInterface({ input: proc.stdout });
   let result: BackendResult | null = null;
   let accumulatedText = "";
+  // Track streaming text captured since the last assistant event. Used to
+  // decide whether to fall back to the assistant message's text blocks when
+  // no streaming deltas arrived for a given turn (e.g. piped/non-TTY mode).
+  let deltasSinceLastAssistant = "";
 
   for await (const line of rl) {
     if (!line.trim()) continue;
@@ -121,19 +125,23 @@ export async function runCronJob(
       case "content_block_delta":
         if (event.delta?.type === "text_delta" && event.delta.text) {
           accumulatedText += event.delta.text;
+          deltasSinceLastAssistant += event.delta.text;
         }
         break;
 
       case "assistant":
-        if (event.message?.content) {
+        // If no streaming deltas arrived for this turn, extract text from the
+        // full assistant message. This handles both non-streaming modes and
+        // turns where Claude produced text that wasn't captured via deltas.
+        if (!deltasSinceLastAssistant && event.message?.content) {
           for (const block of event.message.content) {
             if (block.type === "text" && block.text) {
-              if (!accumulatedText.includes(block.text)) {
-                accumulatedText += block.text;
-              }
+              accumulatedText += block.text;
             }
           }
         }
+        // Reset per-turn tracker for the next turn.
+        deltasSinceLastAssistant = "";
         break;
 
       case "result":
@@ -191,7 +199,8 @@ export async function runCronJob(
       const outputDir = workspace.getOutputDir(job.id);
       const timestamp = startedAt.toISOString().replace(/[:.]/g, "-");
       const outputFile = join(outputDir, `run-${timestamp}.txt`);
-      const outputText = result.text || accumulatedText;
+      // Prefer accumulatedText (all turns) over result.text (final turn only)
+      const outputText = accumulatedText || result.text;
       writeFileSync(outputFile, outputText, "utf-8");
 
       // Update state with latest run metadata
@@ -214,14 +223,17 @@ export async function runCronJob(
       duration: result.durationMs,
       turns: result.numTurns,
       isError: result.isError,
-      responseLen: (result.text || accumulatedText).length,
+      responseLen: (accumulatedText || result.text).length,
     },
     "cron job complete",
   );
 
   return {
     jobId: job.id,
-    text: result.text || accumulatedText,
+    // Prefer accumulatedText (captures all turns) over result.text (final turn only).
+    // For multi-turn sessions, result.text from the result event only contains the
+    // last assistant message. accumulatedText has text from every turn.
+    text: accumulatedText || result.text,
     costUsd: result.costUsd,
     durationMs: result.durationMs,
     numTurns: result.numTurns,
