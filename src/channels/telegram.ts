@@ -110,11 +110,13 @@ export class TelegramChannel implements Channel {
 
   async sendVoice(chatId: string, filePath: string): Promise<void> {
     try {
-      const { createReadStream } = await import("node:fs");
-      const { InputFile } = await import("grammy");
-      const stream = createReadStream(filePath);
-      const inputFile = new InputFile(stream, filePath.split("/").pop());
-      await this.bot.api.sendVoice(Number(chatId), inputFile);
+      await this.rateLimitedSend(chatId, async () => {
+        const { createReadStream } = await import("node:fs");
+        const { InputFile } = await import("grammy");
+        const stream = createReadStream(filePath);
+        const inputFile = new InputFile(stream, filePath.split("/").pop());
+        await this.bot.api.sendVoice(Number(chatId), inputFile);
+      });
     } catch (e) {
       log.error({ err: e, chatId, filePath }, "failed to send voice message");
     }
@@ -122,24 +124,26 @@ export class TelegramChannel implements Channel {
 
   async sendFile(chatId: string, filePath: string, caption?: string): Promise<void> {
     try {
-      const { createReadStream } = await import("node:fs");
-      const { InputFile } = await import("grammy");
-      const stream = createReadStream(filePath);
-      const inputFile = new InputFile(stream, filePath.split("/").pop());
+      await this.rateLimitedSend(chatId, async () => {
+        const { createReadStream } = await import("node:fs");
+        const { InputFile } = await import("grammy");
+        const stream = createReadStream(filePath);
+        const inputFile = new InputFile(stream, filePath.split("/").pop());
 
-      // Detect if image by extension
-      const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-      const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
+        // Detect if image by extension
+        const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+        const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
 
-      if (imageExts.includes(ext)) {
-        await this.bot.api.sendPhoto(Number(chatId), inputFile, {
-          caption: caption ?? undefined,
-        });
-      } else {
-        await this.bot.api.sendDocument(Number(chatId), inputFile, {
-          caption: caption ?? undefined,
-        });
-      }
+        if (imageExts.includes(ext)) {
+          await this.bot.api.sendPhoto(Number(chatId), inputFile, {
+            caption: caption ?? undefined,
+          });
+        } else {
+          await this.bot.api.sendDocument(Number(chatId), inputFile, {
+            caption: caption ?? undefined,
+          });
+        }
+      });
     } catch (e) {
       log.error({ err: e, chatId, filePath }, "failed to send file");
     }
@@ -148,15 +152,14 @@ export class TelegramChannel implements Channel {
   async sendDirectMessage(chatId: string, text: string): Promise<void> {
     const chunks = this.splitForTelegram(text);
     for (const chunk of chunks) {
-      try {
-        await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "Markdown" });
-      } catch {
+      await this.rateLimitedSend(chatId, async () => {
         try {
+          await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "Markdown" });
+        } catch {
+          // Retry without markdown formatting; propagate failure so delivery queue can retry
           await this.bot.api.sendMessage(Number(chatId), chunk);
-        } catch (e) {
-          log.error({ err: e, chatId }, "failed to send direct message");
         }
-      }
+      });
     }
   }
 
