@@ -92,36 +92,60 @@ describe("WebhookServer — input validation", () => {
 
   it("accepts requests with a valid Bearer token", async () => {
     // No wakeHandler → 503, but we got past auth
-    const { status } = await req(port, "POST", "/hooks/wake", { message: "hi" }, {
-      Authorization: "Bearer test-token",
-    });
+    const { status } = await req(
+      port,
+      "POST",
+      "/hooks/wake",
+      { message: "hi" },
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     expect(status).not.toBe(401);
   });
 
   // ── /hooks/wake — message length ───────────────────────────────────
 
   it("rejects /hooks/wake with missing 'message'", async () => {
-    const { status, body } = await req(port, "POST", "/hooks/wake", {}, {
-      Authorization: "Bearer test-token",
-    });
+    const { status, body } = await req(
+      port,
+      "POST",
+      "/hooks/wake",
+      {},
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     expect(status).toBe(400);
     expect(body.error).toMatch(/message/i);
   });
 
   it("rejects /hooks/wake when 'message' exceeds MAX_MESSAGE_LENGTH", async () => {
     const message = "x".repeat(MAX_MESSAGE_LENGTH + 1);
-    const { status, body } = await req(port, "POST", "/hooks/wake", { message }, {
-      Authorization: "Bearer test-token",
-    });
+    const { status, body } = await req(
+      port,
+      "POST",
+      "/hooks/wake",
+      { message },
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     expect(status).toBe(400);
     expect(body.error).toMatch(/exceeds maximum length/i);
   });
 
   it("accepts /hooks/wake when 'message' is exactly MAX_MESSAGE_LENGTH", async () => {
     const message = "x".repeat(MAX_MESSAGE_LENGTH);
-    const { status } = await req(port, "POST", "/hooks/wake", { message }, {
-      Authorization: "Bearer test-token",
-    });
+    const { status } = await req(
+      port,
+      "POST",
+      "/hooks/wake",
+      { message },
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     // No wakeHandler configured → 503, but validation passed
     expect(status).not.toBe(400);
   });
@@ -129,18 +153,30 @@ describe("WebhookServer — input validation", () => {
   // ── /hooks/agent — prompt length ───────────────────────────────────
 
   it("rejects /hooks/agent with missing 'prompt'", async () => {
-    const { status, body } = await req(port, "POST", "/hooks/agent", {}, {
-      Authorization: "Bearer test-token",
-    });
+    const { status, body } = await req(
+      port,
+      "POST",
+      "/hooks/agent",
+      {},
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     expect(status).toBe(400);
     expect(body.error).toMatch(/prompt/i);
   });
 
   it("rejects /hooks/agent when 'prompt' exceeds MAX_PROMPT_LENGTH", async () => {
     const prompt = "x".repeat(MAX_PROMPT_LENGTH + 1);
-    const { status, body } = await req(port, "POST", "/hooks/agent", { prompt }, {
-      Authorization: "Bearer test-token",
-    });
+    const { status, body } = await req(
+      port,
+      "POST",
+      "/hooks/agent",
+      { prompt },
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     expect(status).toBe(400);
     expect(body.error).toMatch(/exceeds maximum length/i);
   });
@@ -148,9 +184,15 @@ describe("WebhookServer — input validation", () => {
   it("accepts /hooks/agent when 'prompt' is exactly MAX_PROMPT_LENGTH", async () => {
     const prompt = "x".repeat(MAX_PROMPT_LENGTH);
     // This will try to actually run the cron job and fail, but it passes validation
-    const { status } = await req(port, "POST", "/hooks/agent", { prompt }, {
-      Authorization: "Bearer test-token",
-    });
+    const { status } = await req(
+      port,
+      "POST",
+      "/hooks/agent",
+      { prompt },
+      {
+        Authorization: "Bearer test-token",
+      },
+    );
     // Should be 500 (execution failure) not 400 (validation failure)
     expect(status).not.toBe(400);
   });

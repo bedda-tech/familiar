@@ -106,126 +106,126 @@ export class ClaudeCLI {
     proc.stdin.end();
 
     try {
-    // Collect stderr for error reporting
-    let stderr = "";
-    proc.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
+      // Collect stderr for error reporting
+      let stderr = "";
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
-    // Parse NDJSON from stdout
-    const rl = createInterface({ input: proc.stdout });
+      // Parse NDJSON from stdout
+      const rl = createInterface({ input: proc.stdout });
 
-    let result: BackendResult | null = null;
-    let accumulatedText = "";
+      let result: BackendResult | null = null;
+      let accumulatedText = "";
 
-    // Track thinking blocks being streamed via content_block_delta
-    const thinkingBlocks = new Set<number>();
-    let thinkingBuffer = "";
-    const yieldedThinking = new Set<string>(); // Dedup against assistant event
+      // Track thinking blocks being streamed via content_block_delta
+      const thinkingBlocks = new Set<number>();
+      let thinkingBuffer = "";
+      const yieldedThinking = new Set<string>(); // Dedup against assistant event
 
-    for await (const line of rl) {
-      if (!line.trim()) continue;
+      for await (const line of rl) {
+        if (!line.trim()) continue;
 
-      let event: StreamEvent;
-      try {
-        event = JSON.parse(line) as StreamEvent;
-      } catch {
-        log.warn({ line: line.slice(0, 200) }, "failed to parse stream-json line");
-        continue;
-      }
+        let event: StreamEvent;
+        try {
+          event = JSON.parse(line) as StreamEvent;
+        } catch {
+          log.warn({ line: line.slice(0, 200) }, "failed to parse stream-json line");
+          continue;
+        }
 
-      switch (event.type) {
-        case "content_block_delta":
-          if (event.delta?.type === "text_delta" && event.delta.text) {
-            accumulatedText += event.delta.text;
-            yield { type: "text_delta", text: event.delta.text };
-          } else if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
-            thinkingBuffer += event.delta.thinking;
-          }
-          break;
+        switch (event.type) {
+          case "content_block_delta":
+            if (event.delta?.type === "text_delta" && event.delta.text) {
+              accumulatedText += event.delta.text;
+              yield { type: "text_delta", text: event.delta.text };
+            } else if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
+              thinkingBuffer += event.delta.thinking;
+            }
+            break;
 
-        case "content_block_start":
-          if (event.content_block?.type === "tool_use" && event.content_block.name) {
-            yield { type: "tool_use", name: event.content_block.name };
-          } else if (event.content_block?.type === "thinking") {
-            thinkingBlocks.add(event.index);
-            thinkingBuffer = "";
-          }
-          break;
+          case "content_block_start":
+            if (event.content_block?.type === "tool_use" && event.content_block.name) {
+              yield { type: "tool_use", name: event.content_block.name };
+            } else if (event.content_block?.type === "thinking") {
+              thinkingBlocks.add(event.index);
+              thinkingBuffer = "";
+            }
+            break;
 
-        case "content_block_stop":
-          if (thinkingBlocks.has(event.index) && thinkingBuffer.length > 0) {
-            yield { type: "thinking", text: thinkingBuffer };
-            yieldedThinking.add(thinkingBuffer.slice(0, 100));
-            thinkingBlocks.delete(event.index);
-            thinkingBuffer = "";
-          }
-          break;
+          case "content_block_stop":
+            if (thinkingBlocks.has(event.index) && thinkingBuffer.length > 0) {
+              yield { type: "thinking", text: thinkingBuffer };
+              yieldedThinking.add(thinkingBuffer.slice(0, 100));
+              thinkingBlocks.delete(event.index);
+              thinkingBuffer = "";
+            }
+            break;
 
-        case "assistant":
-          // Full assistant message — extract text and thinking from content blocks
-          if (event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === "thinking" && block.thinking) {
-                // Only yield if we didn't already stream this thinking block
-                if (!yieldedThinking.has(block.thinking.slice(0, 100))) {
-                  yield { type: "thinking", text: block.thinking };
-                }
-              } else if (block.type === "text" && block.text) {
-                // Only yield if we haven't already streamed this text via deltas
-                if (!accumulatedText.includes(block.text)) {
-                  accumulatedText += block.text;
-                  yield { type: "text_delta", text: block.text };
+          case "assistant":
+            // Full assistant message — extract text and thinking from content blocks
+            if (event.message?.content) {
+              for (const block of event.message.content) {
+                if (block.type === "thinking" && block.thinking) {
+                  // Only yield if we didn't already stream this thinking block
+                  if (!yieldedThinking.has(block.thinking.slice(0, 100))) {
+                    yield { type: "thinking", text: block.thinking };
+                  }
+                } else if (block.type === "text" && block.text) {
+                  // Only yield if we haven't already streamed this text via deltas
+                  if (!accumulatedText.includes(block.text)) {
+                    accumulatedText += block.text;
+                    yield { type: "text_delta", text: block.text };
+                  }
                 }
               }
             }
-          }
-          break;
+            break;
 
-        case "result":
-          result = this.parseResult(event);
-          break;
+          case "result":
+            result = this.parseResult(event);
+            break;
 
-        case "system":
-          log.debug({ subtype: event.subtype, message: event.message }, "system event");
-          yield { type: "system", subtype: event.subtype, message: event.message };
-          break;
+          case "system":
+            log.debug({ subtype: event.subtype, message: event.message }, "system event");
+            yield { type: "system", subtype: event.subtype, message: event.message };
+            break;
+        }
       }
-    }
 
-    // Wait for process to exit
-    const exitCode = await waitForExit(proc);
+      // Wait for process to exit
+      const exitCode = await waitForExit(proc);
 
-    if (!result) {
-      // If no result event, construct one from accumulated text
-      if (exitCode !== 0) {
-        log.error({ exitCode, stderr: stderr.slice(0, 500) }, "claude exited with error");
-        result = {
-          text: accumulatedText || `Claude exited with code ${exitCode}: ${stderr.slice(0, 200)}`,
-          sessionId: "",
-          costUsd: 0,
-          durationMs: 0,
-          numTurns: 0,
-          isError: true,
-        };
-      } else {
-        result = {
-          text: accumulatedText,
-          sessionId: "",
-          costUsd: 0,
-          durationMs: 0,
-          numTurns: 0,
-          isError: false,
-        };
+      if (!result) {
+        // If no result event, construct one from accumulated text
+        if (exitCode !== 0) {
+          log.error({ exitCode, stderr: stderr.slice(0, 500) }, "claude exited with error");
+          result = {
+            text: accumulatedText || `Claude exited with code ${exitCode}: ${stderr.slice(0, 200)}`,
+            sessionId: "",
+            costUsd: 0,
+            durationMs: 0,
+            numTurns: 0,
+            isError: true,
+          };
+        } else {
+          result = {
+            text: accumulatedText,
+            sessionId: "",
+            costUsd: 0,
+            durationMs: 0,
+            numTurns: 0,
+            isError: false,
+          };
+        }
       }
-    }
 
-    // If we got no text from streaming, use the result text
-    if (!accumulatedText && result.text) {
-      yield { type: "text_delta", text: result.text };
-    }
+      // If we got no text from streaming, use the result text
+      if (!accumulatedText && result.text) {
+        yield { type: "text_delta", text: result.text };
+      }
 
-    yield { type: "done", result };
+      yield { type: "done", result };
     } finally {
       if (this.tracker && request.chatId) {
         this.tracker.unregister(request.chatId);

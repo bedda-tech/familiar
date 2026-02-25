@@ -12,12 +12,12 @@ import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
 import { getLogger } from "./util/logger.js";
 
-const log = getLogger("bridge")
+const log = getLogger("bridge");
 
 // Input length limits to prevent memory exhaustion and abuse
-const MAX_TASK_LENGTH = 50_000 // 50 KB — max /spawn task text
-const MAX_LABEL_LENGTH = 256 // max /spawn label length
-const MAX_SEARCH_QUERY_LENGTH = 1_000 // max /search query length;
+const MAX_TASK_LENGTH = 50_000; // 50 KB — max /spawn task text
+const MAX_LABEL_LENGTH = 256; // max /spawn label length
+const MAX_SEARCH_QUERY_LENGTH = 1_000; // max /search query length;
 
 export class Bridge {
   private showThinking = true;
@@ -404,7 +404,8 @@ export class Bridge {
         lines.push(`*Active Requests:* ${active.length} in-flight`);
         for (const req of active) {
           const elapsed = Math.round((Date.now() - req.startedAt.getTime()) / 1000);
-          const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+          const elapsedStr =
+            elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
           lines.push(`\u2022 chat \`${req.chatId}\` \u2014 PID ${req.pid ?? "?"} (${elapsedStr})`);
         }
       }
