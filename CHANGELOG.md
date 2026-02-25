@@ -2,6 +2,13 @@
 
 All notable changes to Familiar are documented here.
 
+## [Unreleased]
+
+### Security
+- **Input length limit for Telegram messages** — Regular messages are now capped at 64 KB; oversized messages are rejected with a user-visible error before any processing occurs. ([#59](https://github.com/bedda-tech/familiar/issues/59))
+- **Document extension sanitization** — File extensions from user-uploaded documents are validated against `^[a-zA-Z0-9]{1,10}$` before use in the local temp filename; unrecognised extensions fall back to `bin`. ([#59](https://github.com/bedda-tech/familiar/issues/59))
+- **SECURITY.md updated** — Documents all input validation paths: message length limits, file attachment handling, and extension sanitization.
+
 ## [0.5.0] — 2026-02-22
 
 ### Added

@@ -74,17 +74,28 @@ The HTTP server enforces the following limits to prevent memory exhaustion:
 
 Requests that exceed these limits receive a `400 Bad Request` response.
 
-### Telegram Command Input Limits
+### Telegram Message and Command Input Limits
 
-User-supplied text in Telegram commands is validated before processing:
+User-supplied text is validated before processing:
 
-| Command | Field | Limit |
-|---------|-------|-------|
+| Input | Field | Limit |
+|-------|-------|-------|
+| Regular messages | Text | 64 KB |
 | `/spawn` | Task text | 50 KB |
 | `/spawn` | `--label` value | 256 chars |
 | `/search` | Query string | 1 000 chars |
 
 Messages exceeding these limits are rejected with an error reply and no processing occurs.
+
+### File Attachment Handling
+
+Documents uploaded via Telegram are saved to a temporary directory (`/tmp/familiar/`). The file extension from the user-supplied filename is sanitized to alphanumeric characters only (max 10 chars) before use in the local filename:
+
+```typescript
+const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "bin";
+```
+
+The filename itself is always generated from `Date.now()`, so user-supplied filenames cannot cause path traversal. The file content is fetched from Telegram's API servers, not directly from the user.
 
 ### Full-Text Search (FTS) Query Sanitization
 

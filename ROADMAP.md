@@ -15,10 +15,21 @@ Familiar bridges Telegram to Claude Code via `claude -p --resume`. Working today
 ## Short Term
 
 ### Multi-channel support
-The channel interface (`src/channels/types.ts`) is already abstracted. Add:
+The channel interface (`src/channels/types.ts`) is already abstracted. Two approaches to evaluate:
+
+**Option A: Build adapters ourselves** (current plan)
 - **WhatsApp** via WhatsApp Business API or Baileys
 - **Discord** via discord.js
 - **Signal** via signal-cli
+
+**Option B: Adopt Vercel Chat SDK** (`npm i chat`, open-sourced Feb 2026)
+- Unified TypeScript library for Slack, Discord, Teams, Google Chat, GitHub, Linear
+- Adapter pattern similar to our channel abstraction
+- Built-in AI streaming support (native Slack streaming + post+edit fallback)
+- JSX cards/modals that render natively per platform
+- Distributed state management with pluggable backends
+- See `docs/research/vercel-chat-sdk-evaluation.md` for full analysis
+- Catch: no Telegram adapter (we'd still need our own for that)
 
 ### Daemon mode
 `--daemon` is in the help text but not implemented. Use `familiar start --daemon` to background the process without systemd.

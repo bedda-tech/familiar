@@ -519,7 +519,8 @@ export class TelegramChannel implements Channel {
     const msg = this.normalizeMessage(ctx);
     const doc = ctx.message?.document;
     if (doc) {
-      const ext = doc.file_name?.split(".").pop() ?? "bin";
+      const rawExt = doc.file_name?.split(".").pop() ?? "";
+      const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "bin";
       const filePath = await this.downloadFile(doc.file_id, `doc_${Date.now()}.${ext}`);
       if (filePath) {
         msg.filePaths = [filePath];

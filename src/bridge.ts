@@ -15,6 +15,7 @@ import { getLogger } from "./util/logger.js";
 const log = getLogger("bridge");
 
 // Input length limits to prevent memory exhaustion and abuse
+const MAX_MESSAGE_LENGTH = 64_000; // 64 KB — max regular message text
 const MAX_TASK_LENGTH = 50_000; // 50 KB — max /spawn task text
 const MAX_LABEL_LENGTH = 256; // max /spawn label length
 const MAX_SEARCH_QUERY_LENGTH = 1_000; // max /search query length;
@@ -472,6 +473,15 @@ export class Bridge {
 
   private async handleMessage(msg: IncomingMessage): Promise<void> {
     if (!msg.text && (!msg.filePaths || msg.filePaths.length === 0)) {
+      return;
+    }
+
+    if (msg.text.length > MAX_MESSAGE_LENGTH) {
+      await this.channel.sendText(
+        msg.chatId,
+        `Message is too long (${msg.text.length.toLocaleString()} chars). Maximum is ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`,
+        msg.replyContext,
+      );
       return;
     }
 

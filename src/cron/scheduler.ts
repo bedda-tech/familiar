@@ -23,6 +23,9 @@ export class CronScheduler {
   private deliveryHandler: CronDeliveryHandler | null = null;
   private claudeConfig: ClaudeConfig;
   private workspace: AgentWorkspace;
+  private concurrentCount = 0;
+  private maxConcurrent = 3;
+  private waitQueue: Array<{ resolve: () => void }> = [];
 
   constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
     this.claudeConfig = claudeConfig;
@@ -187,6 +190,26 @@ export class CronScheduler {
     }));
   }
 
+  private async acquireSlot(jobId: string): Promise<void> {
+    if (this.concurrentCount < this.maxConcurrent) {
+      this.concurrentCount++;
+      return;
+    }
+    log.info({ jobId, queue: this.waitQueue.length, running: this.concurrentCount }, "waiting for concurrency slot");
+    return new Promise<void>((resolve) => {
+      this.waitQueue.push({ resolve });
+    });
+  }
+
+  private releaseSlot(): void {
+    const next = this.waitQueue.shift();
+    if (next) {
+      next.resolve();
+    } else {
+      this.concurrentCount--;
+    }
+  }
+
   private scheduleJob(config: CronJobConfig): Cron {
     return new Cron(
       config.schedule,
@@ -217,8 +240,10 @@ export class CronScheduler {
     }
 
     this.running.set(config.id, true);
+    await this.acquireSlot(config.id);
 
     try {
+      log.info({ jobId: config.id, concurrent: this.concurrentCount }, "executing job");
       const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
       this.recordRun(result);
 
@@ -256,6 +281,7 @@ export class CronScheduler {
 
       return result;
     } finally {
+      this.releaseSlot();
       this.running.set(config.id, false);
     }
   }
