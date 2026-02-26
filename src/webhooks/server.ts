@@ -27,9 +27,6 @@ import type { ClaudeConfig } from "../config.js";
 import { runCronJob } from "../cron/runner.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { CronScheduler } from "../cron/scheduler.js";
-import type { AgentManager } from "../agents/manager.js";
-import { AgentStore } from "../agents/store.js";
-import { ApiRouter } from "../api/router.js";
 import { getLogger } from "../util/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,7 +47,6 @@ export class WebhookServer {
   private wakeHandler: WakeHandler | null = null;
   private cronScheduler: CronScheduler | null = null;
   private dashboardHtml: string | null = null;
-  private router = new ApiRouter();
 
   constructor(
     private config: WebhookConfig,
@@ -67,12 +63,6 @@ export class WebhookServer {
   /** Attach the cron scheduler for REST API access. */
   setCronScheduler(scheduler: CronScheduler): void {
     this.cronScheduler = scheduler;
-    this.router.setCronScheduler(scheduler);
-  }
-
-  /** Attach the agent manager for REST API access. */
-  setAgentManager(manager: AgentManager): void {
-    this.router.setAgentStore(new AgentStore(manager));
   }
 
   async start(): Promise<void> {
@@ -135,16 +125,32 @@ export class WebhookServer {
       return;
     }
 
-    // REST API routes — delegated to ApiRouter
-    if (url.startsWith("/api/")) {
-      const handled = await this.router.handle(method, url, res);
-      if (handled) return;
+    // REST API routes (GET)
+    if (method === "GET") {
+      if (url === "/api/cron/jobs") {
+        this.handleListCronJobs(res);
+        return;
+      }
+
+      const runsMatch = url.match(/^\/api\/cron\/jobs\/([^/]+)\/runs$/);
+      if (runsMatch) {
+        this.handleGetCronRuns(runsMatch[1], res);
+        return;
+      }
+
       sendJson(res, 404, { error: "Not found" });
       return;
     }
 
     if (method !== "POST") {
       sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    // POST routes
+    const runMatch = url.match(/^\/api\/cron\/jobs\/([^/]+)\/run$/);
+    if (runMatch) {
+      await this.handleTriggerCronJob(runMatch[1], res);
       return;
     }
 
@@ -169,6 +175,55 @@ export class WebhookServer {
       default:
         sendJson(res, 404, { error: "Not found" });
     }
+  }
+
+  // ── REST API: Cron Management ──────────────────────────────────────
+
+  /** GET /api/cron/jobs — list all cron jobs with their current state. */
+  private handleListCronJobs(res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const jobs = this.cronScheduler.listJobs();
+    sendJson(res, 200, { jobs });
+  }
+
+  /** GET /api/cron/jobs/:id/runs — get run history for a specific job. */
+  private handleGetCronRuns(jobId: string, res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const runs = this.cronScheduler.getRunHistory(jobId, 20);
+    sendJson(res, 200, { jobId, runs });
+  }
+
+  /** POST /api/cron/jobs/:id/run — manually trigger a cron job. */
+  private async handleTriggerCronJob(jobId: string, res: ServerResponse): Promise<void> {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    log.info({ jobId }, "manual cron trigger via API");
+
+    const result = await this.cronScheduler.runNow(jobId);
+    if (!result) {
+      sendJson(res, 404, { error: `Job '${jobId}' not found` });
+      return;
+    }
+
+    sendJson(res, 200, {
+      status: result.isError ? "error" : "ok",
+      jobId: result.jobId,
+      text: result.text,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+      numTurns: result.numTurns,
+    });
   }
 
   // ── Webhook Handlers ───────────────────────────────────────────────

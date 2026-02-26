@@ -380,9 +380,6 @@ async function cmdStart(configPath?: string): Promise<void> {
       webhooks.setCronScheduler(cron);
     }
 
-    // Wire up agent manager for REST API
-    webhooks.setAgentManager(agentManager);
-
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
       const targetChat = chatId || String(config.telegram.allowedUsers[0]);
