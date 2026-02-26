@@ -258,6 +258,9 @@ export class ClaudeCLI {
       args.push("--mcp-config", this.config.mcpConfig);
     }
 
+    // Give all Claude sessions access to Chrome
+    args.push("--chrome");
+
     return args;
   }
 

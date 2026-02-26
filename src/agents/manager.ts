@@ -140,6 +140,8 @@ export class AgentManager {
       args.push("--mcp-config", this.claudeConfig.mcpConfig);
     }
 
+    args.push("--chrome");
+
     const env = { ...process.env };
     delete env.CLAUDECODE;
 

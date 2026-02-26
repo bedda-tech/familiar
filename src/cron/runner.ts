@@ -77,6 +77,9 @@ export async function runCronJob(
     args.push("--mcp-config", defaultConfig.mcpConfig);
   }
 
+  // Give cron agents access to Chrome for cookie extraction, web interaction, etc.
+  args.push("--chrome");
+
   log.info({ jobId: job.id, model, workDir }, "running cron job");
 
   const env = { ...process.env };

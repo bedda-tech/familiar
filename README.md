@@ -8,45 +8,57 @@
   <a href="https://github.com/orgs/bedda-tech/projects/3"><img src="https://img.shields.io/badge/project-roadmap-blue" alt="roadmap"></a>
 </p>
 
-A bridge between Telegram and Claude Code (`claude -p`). Gives you a persistent AI assistant on Telegram backed by Claude Code's full toolset — Bash, file ops, web search, MCP servers, session memory.
+A persistent AI agent platform powered by Claude Code. Run autonomous agents, scheduled jobs, and background tasks -- all through your existing Claude subscription, no API keys required.
+
+Message your agent on Telegram, pick up the same session in the terminal, schedule cron jobs that run while you sleep, spawn sub-agents for parallel work. Familiar handles the orchestration; Claude Code does the heavy lifting.
 
 ```
-Telegram  ──>  Familiar (bridge)  ──>  claude -p --resume <session>
-          <──                     <──  --output-format stream-json
+You (Telegram / TUI)  ──>  Familiar  ──>  claude -p (with full toolset)
+                       <──            <──  streaming results, tool calls, files
+                                      ──>  cron jobs, sub-agents, webhooks
 ```
+
+### Why Familiar?
+
+- **Use your Claude subscription** -- Familiar wraps `claude -p` (Claude Code's CLI mode), so it runs on your existing Claude Pro/Team/Enterprise subscription. No separate API billing, no token counting, no ToS violations.
+- **Truly autonomous** -- Cron jobs, self-spawning sub-agents, and webhook triggers let your agent work 24/7 without manual intervention.
+- **One agent, every interface** -- Same session across Telegram (mobile) and TUI (terminal). Switch mid-conversation without losing context.
+- **Personality system** -- Governing docs (SOUL.md, IDENTITY.md, USER.md) give your agent a persistent identity that carries across sessions.
 
 ## Features
 
-- **Streaming responses** — Edit-in-place message streaming, just like ChatGPT
-- **Session persistence** — SQLite-backed sessions survive restarts, auto-rotate on inactivity or message count
-- **Thinking blocks** — Extended reasoning streamed as italicized messages before the response, toggleable via `/thinking`
-- **Typing indicators** — Bot shows "typing..." while Claude is processing, including during tool execution
-- **Tool visibility** — Tool calls shown in Telegram as inline code blocks so you can see what Claude is doing
-- **Voice transcription** — Voice messages transcribed via OpenAI Whisper API before sending to Claude
-- **Cost tracking** — `/cost` shows session, today, 24h, and all-time usage costs
-- **Sub-agents** — `/spawn` background tasks on separate `claude -p` processes; `/agents` to list, kill, inspect. SQLite-tracked with concurrency limits. The familiar can also self-spawn agents via a file-based queue
-- **Semantic memory** — Hybrid FTS5 + vector search (sqlite-vec, OpenAI embeddings). `familiar recall <query>` for semantic search, `familiar index-memory` to re-index
-- **Delivery queue** — SQLite-backed retry with exponential backoff for all async Telegram deliveries (cron, sub-agents, webhooks). Survives restarts
-- **Memory management** — PreCompact hook backs up transcripts, periodic checkpoints every 20 messages, urgent flush at 80% of session rotation limit
-- **System diagnostics** — `familiar doctor` checks config, Claude CLI, DB integrity, workspace, systemd, disk space
-- **Model failover** — Automatic failover chain (opus → sonnet → haiku) when a model errors before producing output
-- **Cron scheduler** — Schedule recurring jobs with cron expressions, timezone support, and isolated execution
-- **Webhooks** — HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
-- **Runtime model switching** — `/model opus`, `/model sonnet`, `/model haiku` — switch without restart
-- **Config hot-reload** — Edit config.json and changes apply live (model, log level)
-- **File responses** — Send photos and documents back to user from Claude via `sendFile`
-- **TUI mode** — `familiar tui` opens the full Claude Code TUI, resuming the same Telegram session
-- **OpenClaw migration** — `familiar migrate-from-openclaw` migrates config, cron jobs, OpenAI key, failover chain
-- **Governing docs** — Personality system via SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md
-- **First-run onboarding** — BOOTSTRAP.md walks new users through naming and configuring their familiar
+### Agent Capabilities
+- **Cron scheduler** -- Recurring jobs with cron expressions, timezone support, concurrency limits, and isolated execution. Results delivered to Telegram with optional suppression patterns
+- **Sub-agents** -- `/spawn` background tasks on separate `claude -p` processes; `/agents` to list, kill, inspect. SQLite-tracked with concurrency limits. Agents can self-spawn via a file-based queue
+- **Model failover** -- Automatic failover chain (opus -> sonnet -> haiku) when a model errors before producing output
+- **Webhooks** -- HTTP endpoints for external triggering (`/hooks/wake`, `/hooks/agent`, `/health`)
+- **Chrome access** -- Agents can use Chrome for web interaction, cookie extraction, and browser automation
+
+### Messaging
+- **Streaming responses** -- Edit-in-place message streaming, just like ChatGPT
+- **Session persistence** -- SQLite-backed sessions survive restarts, auto-rotate on inactivity or message count
+- **Thinking blocks** -- Extended reasoning streamed as italicized messages, toggleable via `/thinking`
+- **Tool visibility** -- Tool calls shown as inline code blocks so you can see what Claude is doing
+- **Voice messages** -- Transcribed via OpenAI Whisper API before processing
+- **File responses** -- Photos and documents sent back to Telegram from Claude
+
+### Memory & State
+- **Semantic memory** -- Hybrid FTS5 + vector search (sqlite-vec, OpenAI embeddings). `familiar recall <query>` for semantic search
+- **Delivery queue** -- SQLite-backed retry with exponential backoff for async deliveries (cron, sub-agents, webhooks). Survives restarts
+- **Memory management** -- PreCompact hook backs up transcripts, periodic checkpoints, urgent flush near session rotation
+- **Governing docs** -- Personality system via SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md
+- **First-run onboarding** -- BOOTSTRAP.md walks new users through naming and configuring their familiar
+
+### Operations
+- **TUI mode** -- `familiar tui` opens the full Claude Code TUI, resuming the same Telegram session
+- **Runtime model switching** -- `/model opus`, `/model sonnet`, `/model haiku` -- switch without restart
+- **Config hot-reload** -- Edit config.json and changes apply live
+- **System diagnostics** -- `familiar doctor` checks config, CLI, DB integrity, workspace, systemd, disk space
+- **Cost tracking** -- `/cost` shows session, today, 24h, and all-time usage costs
 
 ## Setup
 
-Two paths: **fresh install** or **migrate from OpenClaw**.
-
-### Path A: Fresh Install
-
-**Prerequisites**: Node.js >= 20, Claude Code CLI installed and authenticated (`claude --version` works).
+**Prerequisites**: Node.js >= 20, [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude --version` works). You need an active Claude subscription (Pro, Team, or Enterprise).
 
 ```bash
 # 1. Install globally from npm
@@ -101,46 +113,15 @@ The config after editing should look like:
 familiar start
 ```
 
-### Path B: Migrate from OpenClaw
+### Migrating from OpenClaw
 
-If `~/.openclaw/` exists with a previous OpenClaw/ClawdBot setup:
+If you have a previous OpenClaw/ClawdBot setup at `~/.openclaw/`:
 
 ```bash
-# 1. Install globally from npm
-npm install -g @bedda/familiar
-
-# 2. Run migration — reads OpenClaw config, cron jobs, creates Familiar config, adds CLAUDE.md
 familiar migrate-from-openclaw
 ```
 
-The migration reads from these OpenClaw paths:
-- Config: `~/.openclaw/openclaw.json` or `~/.openclaw/clawdbot.json`
-- Allowed users: `~/.openclaw/credentials/telegram-default-allowFrom.json`
-- Cron jobs: `~/.openclaw/cron/jobs.json`
-
-It creates:
-- `~/.familiar/config.json` — with Telegram config, model, workspace, and migrated cron jobs
-- `CLAUDE.md` in the workspace — Claude Code's auto-loaded root instruction file
-
-All existing governing docs (SOUL.md, IDENTITY.md, USER.md, etc.) are left untouched.
-
-**What's migrated:**
-- Telegram bot token and user allowlist
-- Model selection
-- Cron jobs (cron expressions and interval schedules converted to Familiar format)
-- System prompt derived from IDENTITY.md
-
-**Not migrated:**
-- Other channels (Discord, WhatsApp, Signal) — Familiar is Telegram-only for now
-- Skills/plugins — use Claude Code MCP tools instead
-
-```bash
-# 3. Verify config looks right
-cat ~/.familiar/config.json
-
-# 4. Start
-familiar start
-```
+This reads your OpenClaw config, cron jobs, and user allowlist, creating a Familiar config at `~/.familiar/config.json`. Governing docs are left untouched.
 
 ## Verification
 
@@ -287,37 +268,37 @@ Opens the full Claude Code interactive TUI, resuming the same session that Teleg
 
 ## Telegram Commands
 
-- `/new` — Clear current session, start fresh
-- `/status` — Show session info (session ID, message count, age)
-- `/model` — Show current model
-- `/model opus` / `/model sonnet` / `/model haiku` — Switch model at runtime
-- `/model reset` — Revert to config default
-- `/cost` — Show usage costs (session, today, 24h, all time)
-- `/thinking on` / `/thinking off` — Toggle thinking block display
-- `/spawn <task>` — Spawn a background sub-agent (optional `--model`, `--label`)
-- `/agents` — List active/recent sub-agents
-- `/agents kill <id|all>` — Kill running sub-agents
-- `/agents info <id>` — Show sub-agent details and result
-- Send a voice message — auto-transcribed via Whisper before processing
+- `/new` -- Clear current session, start fresh
+- `/status` -- Show session info (session ID, message count, age)
+- `/model` -- Show current model
+- `/model opus` / `/model sonnet` / `/model haiku` -- Switch model at runtime
+- `/model reset` -- Revert to config default
+- `/cost` -- Show usage costs (session, today, 24h, all time)
+- `/thinking on` / `/thinking off` -- Toggle thinking block display
+- `/spawn <task>` -- Spawn a background sub-agent (optional `--model`, `--label`)
+- `/agents` -- List active/recent sub-agents
+- `/agents kill <id|all>` -- Kill running sub-agents
+- `/agents info <id>` -- Show sub-agent details and result
+- Send a voice message -- auto-transcribed via Whisper before processing
 
 ## Workspace & Governing Docs
 
-The workspace directory (`claude.workingDirectory`) contains files that define your familiar's personality. `familiar init` creates these templates:
+The workspace directory (`claude.workingDirectory`) contains files that define your familiar's personality and state. `familiar init` creates these templates:
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | Root instruction file — loaded automatically by Claude Code on every invocation |
+| `CLAUDE.md` | Root instruction file -- loaded automatically by Claude Code on every invocation |
 | `SOUL.md` | Core personality and philosophy |
-| `IDENTITY.md` | Name, nature, emoji — filled in during first conversation via BOOTSTRAP.md |
-| `USER.md` | Info about the human — filled in during first conversation |
-| `AGENTS.md` | Behavioral rules |
+| `IDENTITY.md` | Name, nature, emoji -- filled in during first conversation |
+| `USER.md` | Info about the human -- filled in during first conversation |
+| `AGENTS.md` | Behavioral rules and autonomy guidelines |
 | `TOOLS.md` | Available CLI tools and integrations |
-| `BOOTSTRAP.md` | First-run onboarding script — self-deletes after setup |
+| `BOOTSTRAP.md` | First-run onboarding script -- self-deletes after setup |
 | `TODO.md` | Persistent task board |
 | `MEMORY.md` | Long-term curated memory |
 | `memory/` | Daily notes directory (YYYY-MM-DD.md) |
 
-On the first Telegram message, the familiar reads BOOTSTRAP.md and walks the user through choosing a name, emoji, and personality.
+On first message, the familiar reads BOOTSTRAP.md and walks the user through choosing a name, emoji, and personality. After setup, your agent has a persistent identity that carries across all sessions and cron jobs.
 
 ## Running as a systemd Service
 
@@ -340,53 +321,45 @@ systemctl --user stop familiar
 
 ## Architecture
 
-6 runtime dependencies (`grammy`, `better-sqlite3`, `pino`, `p-queue`, `croner`, `sqlite-vec`).
+Familiar is a thin orchestration layer around Claude Code's CLI. It doesn't re-implement AI capabilities -- it manages sessions, scheduling, delivery, and state so that `claude -p` can be used as a persistent autonomous agent.
+
+6 runtime dependencies: `grammy`, `better-sqlite3`, `pino`, `p-queue`, `croner`, `sqlite-vec`.
 
 ```
 ~/.familiar/
   config.json       # Config (hot-reloaded)
-  familiar.db       # SQLite — sessions, message log, cron state, agents, delivery queue, memory vectors
+  familiar.db       # SQLite: sessions, messages, cron state, agents, delivery queue, memory vectors
   spawn-queue/      # File-based queue for self-spawning sub-agents
 
-~/familiar/         # Source repo
-  src/
-    index.ts        # CLI entry point (start, tui, init, migrate, cron, doctor, recall, etc.)
-    config.ts       # Config loader with defaults and validation
-    config-watcher.ts # Hot-reload via fs.watch
-    bridge.ts       # Message router: channel <-> Claude (with periodic memory checkpoints)
-    doctor.ts       # System diagnostics (config, CLI, DB, workspace, systemd, disk)
-    migrate-openclaw.ts # OpenClaw migration (config + cron jobs)
-    claude/
-      cli.ts        # Spawns `claude -p`, parses stream-json, model override
-      types.ts      # Stream event types (text, thinking, tool_use, system, done)
-    channels/
-      telegram.ts   # grammY Telegram bot (typing, direct messages, chunking)
-      types.ts      # Channel interface
-    session/
-      store.ts      # SQLite session store (better-sqlite3)
-    streaming/
-      chunker.ts    # Splits long responses into 4096-char Telegram messages
-      draft.ts      # Edit-in-place streaming (updates message as response streams in)
-    cron/
-      scheduler.ts  # Cron scheduling with croner, SQLite state, suppress pattern
-      runner.ts     # Isolated job execution (spawns claude -p per job)
-      types.ts      # Cron job types
-    agents/
-      registry.ts   # SQLite sub-agent tracking (status, cost, results)
-      manager.ts    # Sub-agent lifecycle (spawn, kill, delivery callbacks)
-      queue.ts      # File-based spawn queue for self-spawning sub-agents
-    delivery/
-      queue.ts      # SQLite-backed retry with exponential backoff
-    memory/
-      store.ts      # Hybrid FTS5 + sqlite-vec semantic memory search
-    webhooks/
-      server.ts     # HTTP webhook server (wake, agent, health)
-    voice/
-      transcribe.ts # Whisper API transcription with ffmpeg conversion
-    util/
-      logger.ts     # pino logger
-  templates/        # Workspace template files copied by `familiar init`
-  dist/             # Compiled JS (after `npm run build`)
+src/
+  index.ts          # CLI entry (start, tui, init, cron, doctor, recall, etc.)
+  config.ts         # Config loader with validation + hot-reload
+  bridge.ts         # Message router: channel <-> Claude (with memory checkpoints)
+  doctor.ts         # System diagnostics
+  claude/
+    cli.ts          # Spawns `claude -p`, parses stream-json, model failover
+  channels/
+    telegram.ts     # grammY bot (typing indicators, chunking, direct messages)
+  session/
+    store.ts        # SQLite session persistence
+  streaming/
+    chunker.ts      # 4096-char message splitting for Telegram
+    draft.ts        # Edit-in-place streaming
+  cron/
+    scheduler.ts    # Cron scheduling (croner), concurrency limits, SQLite state
+    runner.ts       # Isolated job execution (spawns claude -p per job)
+  agents/
+    registry.ts     # SQLite sub-agent tracking
+    manager.ts      # Sub-agent lifecycle (spawn, kill, delivery)
+    queue.ts        # File-based self-spawn queue
+  delivery/
+    queue.ts        # SQLite-backed retry with exponential backoff
+  memory/
+    store.ts        # Hybrid FTS5 + sqlite-vec semantic search
+  webhooks/
+    server.ts       # HTTP server (wake, agent, health endpoints)
+  voice/
+    transcribe.ts   # Whisper transcription (ffmpeg + OpenAI API)
 ```
 
 ## Roadmap & Contributing

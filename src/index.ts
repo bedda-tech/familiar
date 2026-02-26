@@ -191,6 +191,7 @@ function cmdTui(): void {
     args.push("--model", config.claude.model);
   }
   args.push("--dangerously-skip-permissions");
+  args.push("--chrome");
 
   if (sessionId) {
     console.log(`Resuming session ${sessionId.slice(0, 8)}…`);
@@ -378,6 +379,9 @@ async function cmdStart(configPath?: string): Promise<void> {
     if (cron) {
       webhooks.setCronScheduler(cron);
     }
+
+    // Wire up agent manager for REST API
+    webhooks.setAgentManager(agentManager);
 
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
