@@ -247,7 +247,8 @@ function parseResult(event: ResultEvent): BackendResult {
   return {
     text: event.result ?? "",
     sessionId: event.session_id ?? "",
-    costUsd: event.cost_usd ?? 0,
+    // Claude CLI emits total_cost_usd (not cost_usd) in stream-json output
+    costUsd: event.total_cost_usd ?? event.cost_usd ?? 0,
     durationMs: event.duration_ms ?? 0,
     numTurns: event.num_turns ?? 0,
     isError: event.is_error ?? false,

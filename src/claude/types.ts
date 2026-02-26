@@ -39,7 +39,9 @@ export interface ResultEvent {
   type: "result";
   subtype: "success" | "error" | "error_max_turns";
   session_id: string;
-  cost_usd: number;
+  cost_usd?: number;
+  /** Claude CLI uses total_cost_usd (not cost_usd) in stream-json output */
+  total_cost_usd?: number;
   duration_ms: number;
   duration_api_ms: number;
   is_error: boolean;
