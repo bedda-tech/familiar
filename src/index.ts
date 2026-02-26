@@ -18,6 +18,7 @@ import { ConfigWatcher } from "./config-watcher.js";
 import { DeliveryQueue } from "./delivery/queue.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { AgentManager } from "./agents/manager.js";
+import { AgentStore } from "./agents/store.js";
 import { SpawnQueue } from "./agents/queue.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
@@ -379,6 +380,9 @@ async function cmdStart(configPath?: string): Promise<void> {
     if (cron) {
       webhooks.setCronScheduler(cron);
     }
+
+    // Wire up agent store for REST API
+    webhooks.setAgentStore(new AgentStore(agentManager));
 
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
