@@ -384,6 +384,12 @@ async function cmdStart(configPath?: string): Promise<void> {
     // Wire up agent store for REST API
     webhooks.setAgentStore(new AgentStore(agentManager));
 
+    // Set config path for cron CRUD operations
+    webhooks.setConfigPath(join(getConfigDir(), "config.json"));
+    webhooks.setConfigChangeHandler(async () => {
+      log.info("config changed via API — restart required for schedule changes");
+    });
+
     // Wake handler — inject message into a chat (defaults to first allowed user)
     webhooks.onWake(async (chatId, message) => {
       const targetChat = chatId || String(config.telegram.allowedUsers[0]);

@@ -150,11 +150,52 @@
         opacity: 0.9;
       }
 
+      /* Tab navigation */
+      .tab-bar {
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        display: flex;
+        gap: 0;
+      }
+
+      .tab-btn {
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 12px 20px;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: color 0.15s, border-color 0.15s;
+      }
+
+      .tab-btn:hover {
+        color: var(--text);
+      }
+
+      .tab-btn.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+
       /* Main content */
       main {
         max-width: 1200px;
         margin: 0 auto;
         padding: 24px;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: block;
       }
 
       .section-header {
@@ -182,6 +223,12 @@
         margin-left: 8px;
       }
 
+      .section-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       .refresh-btn {
         background: transparent;
         border: 1px solid var(--border);
@@ -196,6 +243,22 @@
       .refresh-btn:hover {
         color: var(--text);
         border-color: var(--text-muted);
+      }
+
+      .create-btn {
+        background: var(--green);
+        color: var(--bg);
+        border: none;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+
+      .create-btn:hover {
+        opacity: 0.9;
       }
 
       /* Jobs table */
@@ -290,6 +353,16 @@
         color: var(--yellow);
       }
 
+      .badge-active {
+        background: rgba(63, 185, 80, 0.15);
+        color: var(--green);
+      }
+
+      .badge-idle {
+        background: rgba(88, 166, 255, 0.15);
+        color: var(--accent);
+      }
+
       .run-now-btn {
         background: transparent;
         border: 1px solid var(--border);
@@ -316,6 +389,34 @@
         color: var(--yellow);
         border-color: var(--yellow);
         cursor: wait;
+      }
+
+      .action-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 3px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .action-btn:hover {
+        color: var(--text);
+        border-color: var(--text-muted);
+      }
+
+      .action-btn.delete:hover {
+        color: var(--red);
+        border-color: var(--red);
+      }
+
+      .action-group {
+        display: flex;
+        gap: 4px;
+        align-items: center;
       }
 
       /* Run history panel */
@@ -394,6 +495,337 @@
         white-space: nowrap;
         color: var(--text-muted);
         font-size: 11px;
+      }
+
+      /* Agents table */
+      .agents-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .agents-table thead th {
+        background: var(--bg-card);
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .agents-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+
+      .agents-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      /* Pipeline health cards */
+      .pipeline-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+      }
+
+      .pipeline-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px;
+      }
+
+      .pipeline-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .pipeline-card-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-bright);
+      }
+
+      .pipeline-stat-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .pipeline-stat {
+        background: var(--bg);
+        border-radius: 4px;
+        padding: 8px 10px;
+      }
+
+      .pipeline-stat-label {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+      }
+
+      .pipeline-stat-value {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-bright);
+      }
+
+      .pipeline-blockers {
+        margin-top: 8px;
+      }
+
+      .pipeline-blockers-label {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+
+      .pipeline-blocker-item {
+        font-size: 11px;
+        color: var(--orange);
+        padding: 2px 0;
+      }
+
+      /* Modal */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 300;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-overlay.visible {
+        display: flex;
+      }
+
+      .modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        width: 90%;
+        max-width: 560px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .modal-header h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-bright);
+      }
+
+      .modal-body {
+        padding: 20px;
+      }
+
+      .form-group {
+        margin-bottom: 14px;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+
+      .form-group input,
+      .form-group select,
+      .form-group textarea {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 8px 10px;
+        outline: none;
+      }
+
+      .form-group input:focus,
+      .form-group select:focus,
+      .form-group textarea:focus {
+        border-color: var(--border-focus);
+      }
+
+      .form-group textarea {
+        min-height: 80px;
+        resize: vertical;
+      }
+
+      .form-group select {
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 30px;
+      }
+
+      .form-row {
+        display: flex;
+        gap: 12px;
+      }
+
+      .form-row .form-group {
+        flex: 1;
+      }
+
+      .form-group-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .form-group-checkbox input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .form-group-checkbox label {
+        font-size: 12px;
+        color: var(--text);
+        cursor: pointer;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .modal-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 16px 20px;
+        border-top: 1px solid var(--border);
+      }
+
+      .btn-cancel {
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 6px 16px;
+        cursor: pointer;
+      }
+
+      .btn-cancel:hover {
+        color: var(--text);
+        border-color: var(--text-muted);
+      }
+
+      .btn-save {
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 7px 18px;
+        cursor: pointer;
+      }
+
+      .btn-save:hover {
+        opacity: 0.9;
+      }
+
+      .btn-save:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-danger {
+        background: var(--red);
+        color: var(--bg);
+        border: none;
+        border-radius: 4px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 7px 18px;
+        cursor: pointer;
+      }
+
+      .btn-danger:hover {
+        opacity: 0.9;
+      }
+
+      /* Confirm dialog */
+      .confirm-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 400;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .confirm-overlay.visible {
+        display: flex;
+      }
+
+      .confirm-dialog {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+
+      .confirm-dialog p {
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: var(--text);
+        line-height: 1.6;
+      }
+
+      .confirm-dialog .confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
       }
 
       /* Empty & loading states */
@@ -485,8 +917,19 @@
         .jobs-table th {
           padding: 8px 10px;
         }
+        .agents-table td,
+        .agents-table th {
+          padding: 8px 10px;
+        }
         .hide-mobile {
           display: none;
+        }
+        .tab-btn {
+          padding: 10px 12px;
+          font-size: 11px;
+        }
+        .pipeline-cards {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -513,39 +956,164 @@
       <button onclick="saveToken()">Connect</button>
     </div>
 
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="cron" onclick="switchTab('cron')">Cron Jobs</button>
+      <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')">Agents</button>
+      <button class="tab-btn" data-tab="pipeline" onclick="switchTab('pipeline')">Pipeline Health</button>
+    </div>
+
     <main>
-      <div class="section-header">
-        <h2>Cron Jobs <span class="count" id="jobCount">0</span></h2>
-        <button class="refresh-btn" onclick="loadJobs()">Refresh</button>
-      </div>
+      <!-- Cron Jobs Tab -->
+      <div class="tab-panel active" id="tab-cron">
+        <div class="section-header">
+          <h2>Cron Jobs <span class="count" id="jobCount">0</span></h2>
+          <div class="section-header-actions">
+            <button class="create-btn" onclick="openCreateJobModal()">+ Create Job</button>
+            <button class="refresh-btn" onclick="loadJobs()">Refresh</button>
+          </div>
+        </div>
 
-      <div id="jobsContainer">
-        <div class="empty-state" id="emptyState">
-          <div class="icon">&gt;_</div>
-          <div>Enter your API token above to connect</div>
+        <div id="jobsContainer">
+          <div class="empty-state" id="emptyState">
+            <div class="icon">&gt;_</div>
+            <div>Enter your API token above to connect</div>
+          </div>
+        </div>
+
+        <div class="run-history" id="runHistory">
+          <div class="run-history-header">
+            <h3 id="runHistoryTitle">Run History</h3>
+            <button class="close-btn" onclick="closeHistory()">&times;</button>
+          </div>
+          <div id="runsContainer"></div>
         </div>
       </div>
 
-      <div class="run-history" id="runHistory">
-        <div class="run-history-header">
-          <h3 id="runHistoryTitle">Run History</h3>
-          <button class="close-btn" onclick="closeHistory()">&times;</button>
+      <!-- Agents Tab -->
+      <div class="tab-panel" id="tab-agents">
+        <div class="section-header">
+          <h2>Active Agents <span class="count" id="agentCount">0</span></h2>
+          <div class="section-header-actions">
+            <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
+          </div>
         </div>
-        <div id="runsContainer"></div>
+
+        <div id="agentsContainer">
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>Loading agents...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Health Tab -->
+      <div class="tab-panel" id="tab-pipeline">
+        <div class="section-header">
+          <h2>Pipeline Health</h2>
+          <div class="section-header-actions">
+            <button class="refresh-btn" onclick="loadPipelineHealth()">Refresh</button>
+          </div>
+        </div>
+
+        <div id="pipelineContainer">
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>Loading pipeline health...</div>
+          </div>
+        </div>
       </div>
     </main>
 
     <div class="toast-container" id="toastContainer"></div>
 
+    <!-- Job Create/Edit Modal -->
+    <div class="modal-overlay" id="jobModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="jobModalTitle">Create Job</h3>
+          <button class="close-btn" onclick="closeJobModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="jobModalMode" value="create" />
+          <div class="form-group">
+            <label for="jobFormId">ID</label>
+            <input type="text" id="jobFormId" placeholder="my-cron-job" />
+          </div>
+          <div class="form-group">
+            <label for="jobFormLabel">Label</label>
+            <input type="text" id="jobFormLabel" placeholder="Human-readable description" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="jobFormSchedule">Schedule (cron)</label>
+              <input type="text" id="jobFormSchedule" placeholder="*/30 * * * *" />
+            </div>
+            <div class="form-group">
+              <label for="jobFormTimezone">Timezone</label>
+              <input type="text" id="jobFormTimezone" placeholder="America/Chicago" value="America/Chicago" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="jobFormPrompt">Prompt</label>
+            <textarea id="jobFormPrompt" placeholder="What should the agent do?"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="jobFormModel">Model</label>
+              <select id="jobFormModel">
+                <option value="sonnet">sonnet</option>
+                <option value="opus">opus</option>
+                <option value="haiku">haiku</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="jobFormMaxTurns">Max Turns</label>
+              <input type="number" id="jobFormMaxTurns" placeholder="25" value="25" min="1" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="jobFormWorkDir">Working Directory</label>
+            <input type="text" id="jobFormWorkDir" placeholder="/home/mwhit/clawd" />
+          </div>
+          <div class="form-group-checkbox">
+            <input type="checkbox" id="jobFormAnnounce" />
+            <label for="jobFormAnnounce">Announce results to chat</label>
+          </div>
+          <div class="form-group-checkbox">
+            <input type="checkbox" id="jobFormEnabled" checked />
+            <label for="jobFormEnabled">Enabled</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeJobModal()">Cancel</button>
+          <button class="btn-save" id="jobModalSave" onclick="saveJob()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm Delete Dialog -->
+    <div class="confirm-overlay" id="confirmDialog">
+      <div class="confirm-dialog">
+        <p id="confirmMessage">Are you sure?</p>
+        <div class="confirm-actions">
+          <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
+          <button class="btn-danger" id="confirmAction" onclick="confirmCallback()">Delete</button>
+        </div>
+      </div>
+    </div>
+
     <script>
-      // ── State ────────────────────────────────────────────────────────────
+      // -- State --
       let token = localStorage.getItem("familiar_token") || "";
       let jobs = [];
+      let agents = [];
       let selectedJobId = null;
       let refreshTimer = null;
       let runningJobs = new Set();
+      let activeTab = "cron";
+      let pendingConfirmCallback = null;
 
-      // ── Init ─────────────────────────────────────────────────────────────
+      // -- Init --
       document.addEventListener("DOMContentLoaded", () => {
         const input = document.getElementById("tokenInput");
         input.value = token;
@@ -558,7 +1126,7 @@
         }
       });
 
-      // ── Token ────────────────────────────────────────────────────────────
+      // -- Token --
       function saveToken() {
         token = document.getElementById("tokenInput").value.trim();
         if (!token) return;
@@ -567,9 +1135,22 @@
         startAutoRefresh();
       }
 
-      // ── API helpers ──────────────────────────────────────────────────────
+      // -- Tab Navigation --
+      function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.tab === tab);
+        });
+        document.querySelectorAll(".tab-panel").forEach((panel) => {
+          panel.classList.toggle("active", panel.id === "tab-" + tab);
+        });
+
+        if (tab === "agents") loadAgents();
+        if (tab === "pipeline") loadPipelineHealth();
+      }
+
+      // -- API helpers --
       function apiBase() {
-        // Dashboard is served from the same origin as the API
         return window.location.origin;
       }
 
@@ -587,7 +1168,7 @@
         return data;
       }
 
-      // ── Load Jobs ────────────────────────────────────────────────────────
+      // -- Load Jobs --
       async function loadJobs() {
         if (!token) return;
 
@@ -604,7 +1185,7 @@
         }
       }
 
-      // ── Render Jobs ──────────────────────────────────────────────────────
+      // -- Render Jobs --
       function renderJobs() {
         const container = document.getElementById("jobsContainer");
         document.getElementById("jobCount").textContent = jobs.length;
@@ -651,11 +1232,19 @@
             <td class="hide-mobile">${formatRelative(job.nextRun)}</td>
             <td class="hide-mobile">${job.runCount}</td>
             <td>
-              <button class="run-now-btn ${isRunning ? "running" : ""}"
-                      onclick="event.stopPropagation(); triggerJob('${esc(job.id)}')"
-                      ${isRunning || job.enabled === false ? "disabled" : ""}>
-                ${isRunning ? "Running..." : "Run Now"}
-              </button>
+              <div class="action-group">
+                <button class="run-now-btn ${isRunning ? "running" : ""}"
+                        onclick="event.stopPropagation(); triggerJob('${esc(job.id)}')"
+                        ${isRunning || job.enabled === false ? "disabled" : ""}>
+                  ${isRunning ? "Running..." : "Run"}
+                </button>
+                <button class="action-btn"
+                        onclick="event.stopPropagation(); openEditJobModal('${esc(job.id)}')"
+                        title="Edit">Edit</button>
+                <button class="action-btn delete"
+                        onclick="event.stopPropagation(); confirmDeleteJob('${esc(job.id)}')"
+                        title="Delete">Del</button>
+              </div>
             </td>
           </tr>
         `;
@@ -669,12 +1258,10 @@
         if (job.enabled === false) return '<span class="badge badge-disabled">disabled</span>';
         if (runningJobs.has(job.id)) return '<span class="badge badge-running">running</span>';
         if (!job.lastRun) return '<span class="badge badge-never">never run</span>';
-        // Check if there was a last error by looking at the job state
-        // We infer status from the data available
         return '<span class="badge badge-ok">ok</span>';
       }
 
-      // ── Select Job / Run History ─────────────────────────────────────────
+      // -- Select Job / Run History --
       async function selectJob(jobId) {
         if (selectedJobId === jobId) {
           closeHistory();
@@ -746,7 +1333,135 @@
         renderJobs();
       }
 
-      // ── Trigger Job ──────────────────────────────────────────────────────
+      // -- Job CRUD Modal --
+      function openCreateJobModal() {
+        document.getElementById("jobModalMode").value = "create";
+        document.getElementById("jobModalTitle").textContent = "Create Job";
+        document.getElementById("jobModalSave").textContent = "Create";
+        document.getElementById("jobFormId").value = "";
+        document.getElementById("jobFormId").disabled = false;
+        document.getElementById("jobFormLabel").value = "";
+        document.getElementById("jobFormSchedule").value = "";
+        document.getElementById("jobFormTimezone").value = "America/Chicago";
+        document.getElementById("jobFormPrompt").value = "";
+        document.getElementById("jobFormModel").value = "sonnet";
+        document.getElementById("jobFormMaxTurns").value = "25";
+        document.getElementById("jobFormWorkDir").value = "";
+        document.getElementById("jobFormAnnounce").checked = false;
+        document.getElementById("jobFormEnabled").checked = true;
+        document.getElementById("jobModal").classList.add("visible");
+      }
+
+      function openEditJobModal(jobId) {
+        const job = jobs.find((j) => j.id === jobId);
+        if (!job) return;
+
+        document.getElementById("jobModalMode").value = "edit";
+        document.getElementById("jobModalTitle").textContent = `Edit: ${job.id}`;
+        document.getElementById("jobModalSave").textContent = "Save";
+        document.getElementById("jobFormId").value = job.id;
+        document.getElementById("jobFormId").disabled = true;
+        document.getElementById("jobFormLabel").value = job.label || "";
+        document.getElementById("jobFormSchedule").value = job.schedule || "";
+        document.getElementById("jobFormTimezone").value = job.timezone || "America/Chicago";
+        document.getElementById("jobFormPrompt").value = job.prompt || "";
+        document.getElementById("jobFormModel").value = job.model || "sonnet";
+        document.getElementById("jobFormMaxTurns").value = job.maxTurns ?? 25;
+        document.getElementById("jobFormWorkDir").value = job.workingDirectory || "";
+        document.getElementById("jobFormAnnounce").checked = !!job.announce;
+        document.getElementById("jobFormEnabled").checked = job.enabled !== false;
+        document.getElementById("jobModal").classList.add("visible");
+      }
+
+      function closeJobModal() {
+        document.getElementById("jobModal").classList.remove("visible");
+      }
+
+      async function saveJob() {
+        const mode = document.getElementById("jobModalMode").value;
+        const id = document.getElementById("jobFormId").value.trim();
+        if (!id) {
+          toast("Job ID is required", "error");
+          return;
+        }
+
+        const schedule = document.getElementById("jobFormSchedule").value.trim();
+        if (!schedule) {
+          toast("Schedule is required", "error");
+          return;
+        }
+
+        const payload = {
+          id: id,
+          label: document.getElementById("jobFormLabel").value.trim() || undefined,
+          schedule: schedule,
+          timezone: document.getElementById("jobFormTimezone").value.trim() || undefined,
+          prompt: document.getElementById("jobFormPrompt").value.trim() || undefined,
+          model: document.getElementById("jobFormModel").value,
+          maxTurns: parseInt(document.getElementById("jobFormMaxTurns").value) || 25,
+          workingDirectory: document.getElementById("jobFormWorkDir").value.trim() || undefined,
+          announce: document.getElementById("jobFormAnnounce").checked,
+          enabled: document.getElementById("jobFormEnabled").checked,
+        };
+
+        const saveBtn = document.getElementById("jobModalSave");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+
+        try {
+          if (mode === "create") {
+            await apiFetch("/api/cron/jobs", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+            toast(`Job "${id}" created`, "success");
+          } else {
+            await apiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, {
+              method: "PUT",
+              body: JSON.stringify(payload),
+            });
+            toast(`Job "${id}" updated`, "success");
+          }
+          closeJobModal();
+          await loadJobs();
+        } catch (e) {
+          toast(`Failed to save: ${e.message}`, "error");
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = mode === "create" ? "Create" : "Save";
+        }
+      }
+
+      // -- Delete Job --
+      function confirmDeleteJob(jobId) {
+        document.getElementById("confirmMessage").textContent =
+          `Delete job "${jobId}"? This cannot be undone.`;
+        pendingConfirmCallback = async () => {
+          closeConfirm();
+          try {
+            await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}`, {
+              method: "DELETE",
+            });
+            toast(`Job "${jobId}" deleted`, "success");
+            if (selectedJobId === jobId) closeHistory();
+            await loadJobs();
+          } catch (e) {
+            toast(`Failed to delete: ${e.message}`, "error");
+          }
+        };
+        document.getElementById("confirmDialog").classList.add("visible");
+      }
+
+      function confirmCallback() {
+        if (pendingConfirmCallback) pendingConfirmCallback();
+      }
+
+      function closeConfirm() {
+        document.getElementById("confirmDialog").classList.remove("visible");
+        pendingConfirmCallback = null;
+      }
+
+      // -- Trigger Job --
       async function triggerJob(jobId) {
         if (runningJobs.has(jobId)) return;
 
@@ -772,7 +1487,6 @@
             toast(`${jobId} completed${dur}${cost}`, "success");
           }
 
-          // Refresh data
           await loadJobs();
           if (selectedJobId === jobId) {
             selectJob(jobId);
@@ -784,7 +1498,164 @@
         }
       }
 
-      // ── Auto-refresh ─────────────────────────────────────────────────────
+      // -- Agents --
+      async function loadAgents() {
+        if (!token) return;
+        const container = document.getElementById("agentsContainer");
+        container.innerHTML = '<div class="loading">Loading agents</div>';
+
+        try {
+          const data = await apiFetch("/api/agents");
+          agents = data.agents || [];
+          renderAgents();
+        } catch (e) {
+          container.innerHTML = `<div class="empty-state"><div>Failed to load agents: ${esc(e.message)}</div></div>`;
+        }
+      }
+
+      function renderAgents() {
+        const container = document.getElementById("agentsContainer");
+        document.getElementById("agentCount").textContent = agents.length;
+
+        if (agents.length === 0) {
+          container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>No active agents</div>
+          </div>`;
+          return;
+        }
+
+        let html = `
+        <table class="agents-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Label</th>
+              <th>Status</th>
+              <th class="hide-mobile">Chat ID</th>
+              <th>Started</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+        for (const agent of agents) {
+          const statusClass = agent.status === "active" || agent.status === "running"
+            ? "badge-active"
+            : agent.status === "idle"
+              ? "badge-idle"
+              : agent.status === "error"
+                ? "badge-error"
+                : "badge-ok";
+
+          html += `
+          <tr>
+            <td><span class="job-id">${esc(agent.id)}</span></td>
+            <td>${esc(agent.label || "-")}</td>
+            <td><span class="badge ${statusClass}">${esc(agent.status || "unknown")}</span></td>
+            <td class="hide-mobile">${esc(agent.chatId || "-")}</td>
+            <td>${formatRelative(agent.started_at || agent.startedAt)}</td>
+            <td>${agent.cost != null || agent.costUsd != null ? "$" + (agent.cost ?? agent.costUsd).toFixed(4) : "-"}</td>
+          </tr>
+        `;
+        }
+
+        html += "</tbody></table>";
+        container.innerHTML = html;
+      }
+
+      // -- Pipeline Health --
+      async function loadPipelineHealth() {
+        if (!token) return;
+        const container = document.getElementById("pipelineContainer");
+        container.innerHTML = '<div class="loading">Loading pipeline health</div>';
+
+        try {
+          const data = await apiFetch("/api/pipeline-health");
+          renderPipelineHealth(data.pipelines || []);
+        } catch (e) {
+          if (e.message.includes("404") || e.message.includes("Not Found")) {
+            container.innerHTML = `
+            <div class="empty-state">
+              <div class="icon">&gt;_</div>
+              <div>Pipeline health endpoint not available yet</div>
+              <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted)">
+                GET /api/pipeline-health returned 404. This feature will be available once the endpoint is implemented.
+              </div>
+            </div>`;
+          } else {
+            container.innerHTML = `<div class="empty-state"><div>Failed to load: ${esc(e.message)}</div></div>`;
+          }
+        }
+      }
+
+      function renderPipelineHealth(pipelines) {
+        const container = document.getElementById("pipelineContainer");
+
+        if (pipelines.length === 0) {
+          container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>No pipeline data available</div>
+          </div>`;
+          return;
+        }
+
+        let html = '<div class="pipeline-cards">';
+
+        for (const p of pipelines) {
+          const statusClass = p.status === "healthy"
+            ? "badge-ok"
+            : p.status === "degraded"
+              ? "badge-running"
+              : p.status === "down"
+                ? "badge-error"
+                : "badge-never";
+
+          html += `
+          <div class="pipeline-card">
+            <div class="pipeline-card-header">
+              <span class="pipeline-card-title">${esc(p.name || p.id)}</span>
+              <span class="badge ${statusClass}">${esc(p.status || "unknown")}</span>
+            </div>
+            <div class="pipeline-stat-grid">
+              <div class="pipeline-stat">
+                <div class="pipeline-stat-label">Inventory</div>
+                <div class="pipeline-stat-value">${formatNumber(p.inventory)}</div>
+              </div>
+              <div class="pipeline-stat">
+                <div class="pipeline-stat-label">24h Applied</div>
+                <div class="pipeline-stat-value">${formatNumber(p.applied24h)}</div>
+              </div>
+              <div class="pipeline-stat">
+                <div class="pipeline-stat-label">24h Failed</div>
+                <div class="pipeline-stat-value">${formatNumber(p.failed24h)}</div>
+              </div>
+              <div class="pipeline-stat">
+                <div class="pipeline-stat-label">Success Rate</div>
+                <div class="pipeline-stat-value">${p.successRate != null ? p.successRate.toFixed(1) + "%" : "-"}</div>
+              </div>
+            </div>`;
+
+          if (p.blockers && p.blockers.length > 0) {
+            html += `<div class="pipeline-blockers">
+              <div class="pipeline-blockers-label">Blockers</div>`;
+            for (const b of p.blockers) {
+              html += `<div class="pipeline-blocker-item">- ${esc(b)}</div>`;
+            }
+            html += "</div>";
+          }
+
+          html += "</div>";
+        }
+
+        html += "</div>";
+        container.innerHTML = html;
+      }
+
+      // -- Auto-refresh --
       function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
         refreshTimer = setInterval(() => {
@@ -795,16 +1666,18 @@
               .then((data) => renderRuns(data.runs || []))
               .catch(() => {});
           }
+          // Refresh agents if on that tab
+          if (activeTab === "agents") loadAgents();
         }, 30000);
       }
 
-      // ── Status ───────────────────────────────────────────────────────────
+      // -- Status --
       function setStatus(text, ok) {
         document.getElementById("statusDot").className = "status-dot" + (ok ? "" : " error");
         document.getElementById("statusText").textContent = text;
       }
 
-      // ── Toast ────────────────────────────────────────────────────────────
+      // -- Toast --
       function toast(msg, type = "info") {
         const container = document.getElementById("toastContainer");
         const el = document.createElement("div");
@@ -818,7 +1691,7 @@
         }, 4000);
       }
 
-      // ── Formatting helpers ───────────────────────────────────────────────
+      // -- Formatting helpers --
       function formatRelative(isoStr) {
         if (!isoStr) return '<span style="color: var(--text-muted)">-</span>';
         try {
@@ -827,7 +1700,6 @@
           const diff = now - d.getTime();
 
           if (diff < 0) {
-            // Future
             const absDiff = Math.abs(diff);
             if (absDiff < 60000) return `in ${Math.floor(absDiff / 1000)}s`;
             if (absDiff < 3600000) return `in ${Math.floor(absDiff / 60000)}m`;
@@ -836,7 +1708,6 @@
             return `in ${Math.floor(absDiff / 86400000)}d`;
           }
 
-          // Past
           if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
           if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
           if (diff < 86400000)
@@ -873,12 +1744,36 @@
         return `${mins}m ${secs}s`;
       }
 
+      function formatNumber(n) {
+        if (n == null) return "-";
+        return n.toLocaleString();
+      }
+
       function esc(str) {
         if (!str) return "";
         const div = document.createElement("div");
         div.textContent = String(str);
         return div.innerHTML;
       }
+
+      // Close modals on overlay click
+      document.getElementById("jobModal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeJobModal();
+      });
+      document.getElementById("confirmDialog").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeConfirm();
+      });
+
+      // Close modals on Escape key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          if (document.getElementById("confirmDialog").classList.contains("visible")) {
+            closeConfirm();
+          } else if (document.getElementById("jobModal").classList.contains("visible")) {
+            closeJobModal();
+          }
+        }
+      });
     </script>
   </body>
 </html>

@@ -120,6 +120,29 @@ export class SessionStore {
     log.info({ chatId }, "session cleared");
   }
 
+  /** List all sessions ordered by most-recently-used */
+  listSessions(): SessionInfo[] {
+    const rows = this.db
+      .prepare(
+        "SELECT chat_id, session_id, created_at, last_used_at, message_count FROM sessions ORDER BY last_used_at DESC",
+      )
+      .all() as Array<{
+      chat_id: string;
+      session_id: string;
+      created_at: string;
+      last_used_at: string;
+      message_count: number;
+    }>;
+
+    return rows.map((r) => ({
+      chatId: r.chat_id,
+      sessionId: r.session_id,
+      createdAt: r.created_at,
+      lastUsedAt: r.last_used_at,
+      messageCount: r.message_count,
+    }));
+  }
+
   /** Get session info for /status command */
   getSessionInfo(chatId: string): SessionInfo | null {
     const row = this.db

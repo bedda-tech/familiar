@@ -6,10 +6,17 @@
  *   POST /hooks/agent  — run an isolated agent turn and return the result
  *
  * REST API Endpoints:
- *   GET  /health              — simple health check
- *   GET  /api/cron/jobs       — list all cron jobs with state
- *   GET  /api/cron/jobs/:id/runs — run history for a specific job
- *   POST /api/cron/jobs/:id/run  — trigger a cron job manually
+ *   GET  /health                  — simple health check
+ *   GET  /api/cron/jobs           — list all cron jobs with state
+ *   GET  /api/cron/jobs/:id       — get single job config + state
+ *   GET  /api/cron/jobs/:id/runs  — run history for a specific job
+ *   POST /api/cron/jobs           — create a new cron job
+ *   POST /api/cron/jobs/:id/run   — trigger a cron job manually
+ *   PUT  /api/cron/jobs/:id       — update a cron job config
+ *   DELETE /api/cron/jobs/:id     — delete a cron job
+ *   GET  /api/agents              — list agents
+ *   GET  /api/agents/:id          — get single agent details
+ *   GET  /api/config              — get sanitized config
  *
  * Dashboard:
  *   GET  /                    — web dashboard (redirects to /dashboard)
@@ -72,11 +79,21 @@ export class WebhookServer {
     this.apiRouter.setAgentStore(store);
   }
 
+  /** Set the config file path for CRUD operations on cron jobs. */
+  setConfigPath(path: string): void {
+    this.apiRouter.setConfigPath(path);
+  }
+
+  /** Set handler to call when config is changed via API (e.g. cron job CRUD). */
+  setConfigChangeHandler(handler: () => Promise<void>): void {
+    this.apiRouter.setConfigChangeHandler(handler);
+  }
+
   async start(): Promise<void> {
     this.server = createServer((req, res) => {
       // CORS headers for web dashboard
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
       res.setHeader(
         "Access-Control-Allow-Headers",
         "Content-Type, Authorization, x-familiar-token",
@@ -134,11 +151,20 @@ export class WebhookServer {
 
     // REST API routes — delegate to ApiRouter
     if (url.startsWith("/api/")) {
-      if (method !== "GET" && method !== "POST") {
+      if (!["GET", "POST", "PUT", "DELETE"].includes(method)) {
         sendJson(res, 405, { error: "Method not allowed" });
         return;
       }
-      const handled = await this.apiRouter.handle(method, url, res);
+      let body: Record<string, unknown> | undefined;
+      if (method === "POST" || method === "PUT") {
+        try {
+          body = await readJsonBody(req);
+        } catch {
+          sendJson(res, 400, { error: "Invalid JSON body" });
+          return;
+        }
+      }
+      const handled = await this.apiRouter.handle(method, url, res, body);
       if (!handled) {
         sendJson(res, 404, { error: "Not found" });
       }

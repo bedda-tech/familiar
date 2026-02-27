@@ -4,6 +4,21 @@ All notable changes to Familiar are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Web dashboard — REST API (Phase 1)** — Extended the webhook server with a full REST API for managing agents and cron jobs. ([#60](https://github.com/bedda-tech/familiar/issues/60))
+  - `GET /api/agents` — list all agents (active + recent)
+  - `GET /api/agents/:id` — get a single agent by ID
+  - `GET /api/cron/jobs` — list all cron jobs with state
+  - `GET /api/cron/jobs/:id` — get a single job's config and state
+  - `GET /api/cron/jobs/:id/runs?limit=N` — run history (default 20, max 100)
+  - `POST /api/cron/jobs` — create a new cron job (persists to config.json)
+  - `POST /api/cron/jobs/:id/run` — manually trigger a cron job
+  - `PUT /api/cron/jobs/:id` — update a cron job's config fields
+  - `DELETE /api/cron/jobs/:id` — delete a cron job from config
+  - `GET /api/config` — sanitized config view (tokens masked, last 4 chars shown)
+  - Dashboard UI updated with tab navigation, agent panel, config panel, and cron CRUD forms
+- **`SessionStore.listSessions()`** — new method returning all sessions ordered by most-recently-used; used by the dashboard sessions tab.
+
 ### Security
 - **Input length limit for Telegram messages** — Regular messages are now capped at 64 KB; oversized messages are rejected with a user-visible error before any processing occurs. ([#59](https://github.com/bedda-tech/familiar/issues/59))
 - **Document extension sanitization** — File extensions from user-uploaded documents are validated against `^[a-zA-Z0-9]{1,10}$` before use in the local temp filename; unrecognised extensions fall back to `bin`. ([#59](https://github.com/bedda-tech/familiar/issues/59))
