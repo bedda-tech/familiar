@@ -36,6 +36,7 @@ import type { CronJobConfig } from "../cron/types.js";
 import type { CronScheduler } from "../cron/scheduler.js";
 import { getLogger } from "../util/logger.js";
 import { ApiRouter } from "../api/router.js";
+import type Database from "better-sqlite3";
 import type { AgentStore } from "../agents/store.js";
 import type { AgentCrudStore } from "../agents/agent-store.js";
 import type { TaskStore } from "../tasks/store.js";
@@ -109,6 +110,11 @@ export class WebhookServer {
     this.apiRouter.setToolStore(store);
   }
 
+  /** Attach the database for activity log queries. */
+  setDb(db: Database.Database): void {
+    this.apiRouter.setDb(db);
+  }
+
   /** Set the config file path for CRUD operations on cron jobs. */
   setConfigPath(path: string): void {
     this.apiRouter.setConfigPath(path);
@@ -117,6 +123,11 @@ export class WebhookServer {
   /** Set handler to call when config is changed via API (e.g. cron job CRUD). */
   setConfigChangeHandler(handler: () => Promise<void>): void {
     this.apiRouter.setConfigChangeHandler(handler);
+  }
+
+  /** Get the underlying HTTP server (for WebSocket upgrades). Only available after start(). */
+  getHttpServer(): Server | null {
+    return this.server;
   }
 
   async start(): Promise<void> {

@@ -21,6 +21,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import type { ServerResponse } from "node:http";
+import type Database from "better-sqlite3";
 import type { CronScheduler } from "../cron/scheduler.js";
 import type { AgentStore } from "../agents/store.js";
 import type { AgentCrudStore } from "../agents/agent-store.js";
@@ -40,6 +41,7 @@ export class ApiRouter {
   private scheduleStore: ScheduleStore | null = null;
   private projectStore: ProjectStore | null = null;
   private toolStore: ToolStore | null = null;
+  private db: Database.Database | null = null;
   private configPath: string | null = null;
   private onConfigChange: (() => Promise<void>) | null = null;
 
@@ -73,6 +75,10 @@ export class ApiRouter {
 
   setToolStore(store: ToolStore): void {
     this.toolStore = store;
+  }
+
+  setDb(db: Database.Database): void {
+    this.db = db;
   }
 
   setConfigChangeHandler(handler: () => Promise<void>): void {
@@ -937,8 +943,37 @@ export class ApiRouter {
   // ── Activity Handler ──────────────────────────────────────────────
 
   private handleListActivity(queryString: string, res: ServerResponse): void {
-    // Activity log is optional -- uses the shared DB from cron scheduler
-    sendJson(res, 200, { activity: [] });
+    if (!this.db) {
+      sendJson(res, 200, { activity: [] });
+      return;
+    }
+
+    const params = new URLSearchParams(queryString);
+    const limit = Math.min(parseInt(params.get("limit") ?? "50", 10), 200);
+    const type = params.get("type") ?? undefined;
+    const agentId = params.get("agent_id") ?? undefined;
+
+    let sql = "SELECT * FROM activity_log WHERE 1=1";
+    const sqlParams: unknown[] = [];
+
+    if (type) {
+      sql += " AND type = ?";
+      sqlParams.push(type);
+    }
+    if (agentId) {
+      sql += " AND agent_id = ?";
+      sqlParams.push(agentId);
+    }
+
+    sql += " ORDER BY id DESC LIMIT ?";
+    sqlParams.push(limit);
+
+    try {
+      const activity = this.db.prepare(sql).all(...sqlParams);
+      sendJson(res, 200, { activity });
+    } catch {
+      sendJson(res, 200, { activity: [] });
+    }
   }
 
   // ── Config Handler ──────────────────────────────────────────────────

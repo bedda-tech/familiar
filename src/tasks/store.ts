@@ -182,12 +182,13 @@ export class TaskStore {
     return this.get(task.id);
   }
 
-  /** Agent marks a task complete with a result. Recurring tasks reset to ready. */
+  /** Agent marks a task complete with a result. Recurring tasks with a schedule stay completed until the ticker resets them. Recurring tasks without a schedule reset immediately. */
   complete(id: number, result: string): Task | undefined {
     const task = this.get(id);
     if (!task) return undefined;
 
-    if (task.recurring) {
+    if (task.recurring && !task.recurrence_schedule) {
+      // No schedule -- reset to ready immediately (legacy behavior)
       this.db
         .prepare(
           `UPDATE tasks SET status = 'ready', result = ?, last_completed_at = datetime('now'),
@@ -195,19 +196,34 @@ export class TaskStore {
            WHERE id = ?`,
         )
         .run(result, id);
-      log.info({ id }, "recurring task completed, reset to ready");
+      log.info({ id }, "recurring task completed, reset to ready (no schedule)");
     } else {
+      // Non-recurring or has recurrence_schedule -- mark completed
+      // The recurring ticker will reset scheduled tasks when due
       this.db
         .prepare(
           `UPDATE tasks SET status = 'completed', result = ?, last_completed_at = datetime('now'),
-           updated_at = datetime('now')
+           claimed_by = NULL, claimed_at = NULL, updated_at = datetime('now')
            WHERE id = ?`,
         )
         .run(result, id);
-      log.info({ id }, "task completed");
+      log.info({ id, recurring: !!task.recurring }, "task completed");
     }
 
     return this.get(id);
+  }
+
+  /** List recurring tasks that are completed and due for reset based on their recurrence_schedule. */
+  listRecurringDue(): Task[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM tasks
+         WHERE recurring = 1
+           AND recurrence_schedule IS NOT NULL
+           AND status = 'completed'
+         ORDER BY last_completed_at ASC`,
+      )
+      .all() as Task[];
   }
 
   /** Get the next task for a specific agent without claiming it. */

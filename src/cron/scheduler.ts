@@ -10,6 +10,8 @@ import { AgentWorkspace } from "../agents/workspace.js";
 import { getLogger } from "../util/logger.js";
 import type { Agent } from "../agents/types.js";
 import type { Schedule } from "../schedules/types.js";
+import type { WsServer } from "../ws/server.js";
+import type { WsEvent } from "../ws/types.js";
 
 const log = getLogger("cron-scheduler");
 
@@ -32,6 +34,8 @@ export class CronScheduler {
   private sharedDb: Database.Database | null = null;
   /** Recurring task ticker -- resets completed recurring tasks on schedule. */
   private recurringTicker: Cron | null = null;
+  /** WebSocket server for broadcasting events. */
+  private wsServer: WsServer | null = null;
 
   constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
     this.claudeConfig = claudeConfig;
@@ -52,6 +56,11 @@ export class CronScheduler {
   /** Set the shared DB handle for reading agents/schedules tables. */
   setSharedDb(db: Database.Database): void {
     this.sharedDb = db;
+  }
+
+  /** Set the WebSocket server for broadcasting events. */
+  setWsServer(ws: WsServer): void {
+    this.wsServer = ws;
   }
 
   private migrate(): void {
@@ -97,6 +106,9 @@ export class CronScheduler {
     if (this.sharedDb) {
       this.startFromDb();
     }
+
+    // Start recurring task ticker (every minute)
+    this.startRecurringTicker();
 
     // Legacy config-based jobs (skip any already scheduled from DB)
     for (const [id, config] of this.configs) {
@@ -211,6 +223,10 @@ export class CronScheduler {
 
   /** Stop all cron jobs. */
   stop(): void {
+    if (this.recurringTicker) {
+      this.recurringTicker.stop();
+      this.recurringTicker = null;
+    }
     for (const [id, cron] of this.jobs) {
       cron.stop();
       log.debug({ jobId: id }, "stopped job");
@@ -405,6 +421,83 @@ export class CronScheduler {
       isError: r.is_error === 1,
       resultPreview: r.result_text?.slice(0, 200) ?? "",
     }));
+  }
+
+  /** Start the recurring task ticker -- runs every minute to reset due recurring tasks. */
+  private startRecurringTicker(): void {
+    if (this.recurringTicker) {
+      this.recurringTicker.stop();
+    }
+
+    this.recurringTicker = new Cron("* * * * *", { protect: true }, () => {
+      this.tickRecurringTasks();
+    });
+
+    log.info("recurring task ticker started (every minute)");
+  }
+
+  /** Check completed recurring tasks and reset those that are due. */
+  private tickRecurringTasks(): void {
+    if (!this.sharedDb) return;
+
+    try {
+      const tasks = this.sharedDb
+        .prepare(
+          `SELECT * FROM tasks
+           WHERE recurring = 1
+             AND recurrence_schedule IS NOT NULL
+             AND status = 'completed'
+             AND last_completed_at IS NOT NULL`,
+        )
+        .all() as Array<{
+        id: number;
+        title: string;
+        recurrence_schedule: string;
+        last_completed_at: string;
+      }>;
+
+      if (tasks.length === 0) return;
+
+      const now = new Date();
+      let resetCount = 0;
+
+      for (const task of tasks) {
+        try {
+          // Use croner to find the next occurrence after the last completion
+          const lastCompleted = new Date(task.last_completed_at);
+          const cron = new Cron(task.recurrence_schedule);
+          const nextDue = cron.nextRun(lastCompleted);
+          cron.stop();
+
+          if (nextDue && nextDue <= now) {
+            // Task is due -- reset to ready
+            this.sharedDb!
+              .prepare(
+                `UPDATE tasks SET status = 'ready', claimed_by = NULL, claimed_at = NULL,
+                 result = NULL, updated_at = datetime('now')
+                 WHERE id = ?`,
+              )
+              .run(task.id);
+            resetCount++;
+            log.info(
+              { taskId: task.id, title: task.title, schedule: task.recurrence_schedule },
+              "recurring task reset to ready",
+            );
+          }
+        } catch (e) {
+          log.warn(
+            { taskId: task.id, schedule: task.recurrence_schedule, err: e },
+            "failed to evaluate recurrence schedule",
+          );
+        }
+      }
+
+      if (resetCount > 0) {
+        log.info({ resetCount, checked: tasks.length }, "recurring task tick complete");
+      }
+    } catch (e) {
+      log.error({ err: e }, "recurring task ticker failed");
+    }
   }
 
   private async acquireSlot(jobId: string): Promise<void> {
