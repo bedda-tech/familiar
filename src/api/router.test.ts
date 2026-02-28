@@ -396,9 +396,7 @@ describe("ApiRouter — /api/config", () => {
 
   it("short tokens are fully masked", async () => {
     router.setConfigPath("/fake/config.json");
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({ telegram: { botToken: "abc" } }),
-    );
+    mockReadFileSync.mockReturnValue(JSON.stringify({ telegram: { botToken: "abc" } }));
     const { res, result } = makeMockRes();
     await router.handle("GET", "/api/config", res);
     const config = (result().body as { config: Record<string, any> }).config;

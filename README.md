@@ -49,7 +49,14 @@ You (Telegram / TUI)  ──>  Familiar  ──>  claude -p (with full toolset)
 - **Governing docs** -- Personality system via SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md
 - **First-run onboarding** -- BOOTSTRAP.md walks new users through naming and configuring their familiar
 
+### Task Queue
+- **Task database** -- SQLite-backed task queue with claim/complete workflow for inter-agent coordination
+- **REST API** -- Full CRUD: create, update, delete, claim, complete tasks with priority, tags, and agent assignment
+- **Recurring tasks** -- Tasks with cron schedules auto-reset to "ready" after completion
+- **Agent awareness** -- Agents check `/api/tasks/next?agent=ID` before starting default work
+
 ### Operations
+- **Web dashboard** -- Browser-based UI for managing cron jobs, tasks, agents, and pipeline health. Token-authenticated, dark theme, auto-refreshing
 - **TUI mode** -- `familiar tui` opens the full Claude Code TUI, resuming the same Telegram session
 - **Runtime model switching** -- `/model opus`, `/model sonnet`, `/model haiku` -- switch without restart
 - **Config hot-reload** -- Edit config.json and changes apply live
@@ -354,10 +361,16 @@ src/
     queue.ts        # File-based self-spawn queue
   delivery/
     queue.ts        # SQLite-backed retry with exponential backoff
+  tasks/
+    store.ts        # SQLite task queue (claim/complete workflow, recurring tasks)
   memory/
     store.ts        # Hybrid FTS5 + sqlite-vec semantic search
   webhooks/
     server.ts       # HTTP server (wake, agent, health endpoints)
+  api/
+    router.ts       # REST API router (cron CRUD, tasks CRUD, agents, config)
+  dashboard/
+    index.html      # Web dashboard UI (cron, tasks, agents, pipeline health)
   voice/
     transcribe.ts   # Whisper transcription (ffmpeg + OpenAI API)
 ```

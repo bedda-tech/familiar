@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { CronJobConfig, CronRunResult } from "./types.js";
 import type { ClaudeConfig } from "../config.js";
@@ -9,6 +10,27 @@ import type { AgentWorkspace } from "../agents/workspace.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("cron-runner");
+
+/** Resolve a prompt string -- if it's a file path (.md), read the file. Otherwise return as-is. */
+function resolvePrompt(prompt: string): string {
+  if (!prompt) return prompt;
+  const trimmed = prompt.trim();
+  // Detect file paths: starts with / or ~ or ends with .md
+  if (trimmed.startsWith("/") || trimmed.startsWith("~") || trimmed.endsWith(".md")) {
+    const resolved = trimmed.startsWith("~") ? trimmed.replace("~", homedir()) : trimmed;
+    if (existsSync(resolved)) {
+      try {
+        const content = readFileSync(resolved, "utf-8");
+        // Strip YAML frontmatter if present
+        const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+        return fmMatch ? fmMatch[2].trim() : content.trim();
+      } catch (e) {
+        log.warn({ path: resolved }, "failed to read prompt file, using path as prompt");
+      }
+    }
+  }
+  return prompt;
+}
 
 export interface RunCronJobOptions {
   /** Optional agent workspace — when provided, the job gets a persistent workspace. */
@@ -60,7 +82,7 @@ export async function runCronJob(
   // the agent knows where its persistent state, memory, and output dirs live.
   {
     const parts: string[] = [];
-    if (job.systemPrompt) parts.push(job.systemPrompt);
+    if (job.systemPrompt) parts.push(resolvePrompt(job.systemPrompt));
     if (workspacePrompt) parts.push(workspacePrompt);
     if (parts.length > 0) {
       args.push("--append-system-prompt", parts.join("\n\n"));
@@ -98,7 +120,7 @@ export async function runCronJob(
     spawnError = err;
   });
 
-  proc.stdin.write(job.prompt);
+  proc.stdin.write(resolvePrompt(job.prompt));
   proc.stdin.end();
 
   let stderr = "";

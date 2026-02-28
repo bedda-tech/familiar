@@ -171,7 +171,9 @@
         cursor: pointer;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        transition: color 0.15s, border-color 0.15s;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
       }
 
       .tab-btn:hover {
@@ -958,8 +960,11 @@
 
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="cron" onclick="switchTab('cron')">Cron Jobs</button>
+      <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
       <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')">Agents</button>
-      <button class="tab-btn" data-tab="pipeline" onclick="switchTab('pipeline')">Pipeline Health</button>
+      <button class="tab-btn" data-tab="pipeline" onclick="switchTab('pipeline')">
+        Pipeline Health
+      </button>
     </div>
 
     <main>
@@ -986,6 +991,44 @@
             <button class="close-btn" onclick="closeHistory()">&times;</button>
           </div>
           <div id="runsContainer"></div>
+        </div>
+      </div>
+
+      <!-- Tasks Tab -->
+      <div class="tab-panel" id="tab-tasks">
+        <div class="section-header">
+          <h2>Tasks <span class="count" id="taskCount">0</span></h2>
+          <div class="section-header-actions">
+            <select
+              id="taskStatusFilter"
+              onchange="renderTasks()"
+              style="
+                background: var(--bg-input);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                color: var(--text);
+                font-family: var(--font-mono);
+                font-size: 11px;
+                padding: 4px 8px;
+                outline: none;
+              "
+            >
+              <option value="">All</option>
+              <option value="ready">Ready</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button class="create-btn" onclick="openCreateTaskModal()">+ Create Task</button>
+            <button class="refresh-btn" onclick="loadTasks()">Refresh</button>
+          </div>
+        </div>
+
+        <div id="tasksContainer">
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>Loading tasks...</div>
+          </div>
         </div>
       </div>
 
@@ -1050,7 +1093,12 @@
             </div>
             <div class="form-group">
               <label for="jobFormTimezone">Timezone</label>
-              <input type="text" id="jobFormTimezone" placeholder="America/Chicago" value="America/Chicago" />
+              <input
+                type="text"
+                id="jobFormTimezone"
+                placeholder="America/Chicago"
+                value="America/Chicago"
+              />
             </div>
           </div>
           <div class="form-group">
@@ -1087,6 +1135,68 @@
         <div class="modal-footer">
           <button class="btn-cancel" onclick="closeJobModal()">Cancel</button>
           <button class="btn-save" id="jobModalSave" onclick="saveJob()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div class="modal-overlay" id="taskModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="taskModalTitle">Create Task</h3>
+          <button class="close-btn" onclick="closeTaskModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="taskModalMode" value="create" />
+          <input type="hidden" id="taskFormId" value="" />
+          <div class="form-group">
+            <label>Title *</label>
+            <input type="text" id="taskFormTitle" placeholder="Task title" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="taskFormDescription" rows="3" placeholder="Task description"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Assigned Agent</label>
+              <select id="taskFormAgent">
+                <option value="">Unassigned</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Priority (1=highest)</label>
+              <input type="number" id="taskFormPriority" value="5" min="1" max="10" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Status</label>
+              <select id="taskFormStatus">
+                <option value="ready">Ready</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label style="display: flex; align-items: center; gap: 8px">
+                <input type="checkbox" id="taskFormRecurring" /> Recurring
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Recurrence Schedule (cron)</label>
+            <input type="text" id="taskFormRecurrenceSchedule" placeholder="0 * * * * (optional)" />
+          </div>
+          <div class="form-group">
+            <label>Tags (comma-separated)</label>
+            <input type="text" id="taskFormTags" placeholder="engineering, pipeline" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeTaskModal()">Cancel</button>
+          <button class="btn-save" id="taskModalSave" onclick="saveTask()">Create</button>
         </div>
       </div>
     </div>
@@ -1145,6 +1255,7 @@
           panel.classList.toggle("active", panel.id === "tab-" + tab);
         });
 
+        if (tab === "tasks") loadTasks();
         if (tab === "agents") loadAgents();
         if (tab === "pipeline") loadPipelineHealth();
       }
@@ -1505,23 +1616,28 @@
         container.innerHTML = '<div class="loading">Loading agents</div>';
 
         try {
-          const data = await apiFetch("/api/agents");
-          agents = data.agents || [];
-          renderAgents();
+          // Load cron agents (the actual configured agents) + sub-agents
+          const [cronData, subData] = await Promise.all([
+            apiFetch("/api/cron/jobs"),
+            apiFetch("/api/agents").catch(() => ({ active: [], recent: [] })),
+          ]);
+          const cronAgents = cronData.jobs || [];
+          const subAgents = [...(subData.active || []), ...(subData.recent || [])];
+          renderAgents(cronAgents, subAgents);
         } catch (e) {
           container.innerHTML = `<div class="empty-state"><div>Failed to load agents: ${esc(e.message)}</div></div>`;
         }
       }
 
-      function renderAgents() {
+      function renderAgents(cronAgents, subAgents) {
         const container = document.getElementById("agentsContainer");
-        document.getElementById("agentCount").textContent = agents.length;
+        document.getElementById("agentCount").textContent = cronAgents.length;
 
-        if (agents.length === 0) {
+        if (cronAgents.length === 0) {
           container.innerHTML = `
           <div class="empty-state">
             <div class="icon">&gt;_</div>
-            <div>No active agents</div>
+            <div>No agents configured</div>
           </div>`;
           return;
         }
@@ -1530,39 +1646,68 @@
         <table class="agents-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Label</th>
+              <th>Agent</th>
+              <th>Model</th>
+              <th>Schedule</th>
               <th>Status</th>
-              <th class="hide-mobile">Chat ID</th>
-              <th>Started</th>
-              <th>Cost</th>
+              <th class="hide-mobile">Last Run</th>
+              <th class="hide-mobile">Runs</th>
             </tr>
           </thead>
           <tbody>
       `;
 
-        for (const agent of agents) {
-          const statusClass = agent.status === "active" || agent.status === "running"
-            ? "badge-active"
-            : agent.status === "idle"
-              ? "badge-idle"
-              : agent.status === "error"
-                ? "badge-error"
-                : "badge-ok";
+        for (const agent of cronAgents) {
+          const isRunning = runningJobs.has(agent.id);
+          const statusHtml =
+            agent.enabled === false
+              ? '<span class="badge badge-disabled">disabled</span>'
+              : isRunning
+                ? '<span class="badge badge-running">running</span>'
+                : !agent.lastRun
+                  ? '<span class="badge badge-never">never run</span>'
+                  : '<span class="badge badge-ok">ok</span>';
 
           html += `
           <tr>
-            <td><span class="job-id">${esc(agent.id)}</span></td>
-            <td>${esc(agent.label || "-")}</td>
-            <td><span class="badge ${statusClass}">${esc(agent.status || "unknown")}</span></td>
-            <td class="hide-mobile">${esc(agent.chatId || "-")}</td>
-            <td>${formatRelative(agent.started_at || agent.startedAt)}</td>
-            <td>${agent.cost != null || agent.costUsd != null ? "$" + (agent.cost ?? agent.costUsd).toFixed(4) : "-"}</td>
+            <td>
+              <span class="job-id">${esc(agent.id)}</span>
+              ${agent.label ? `<div class="job-label">${esc(agent.label)}</div>` : ""}
+            </td>
+            <td><span class="badge badge-idle">${esc(agent.model || "sonnet")}</span></td>
+            <td>${esc(agent.schedule)}</td>
+            <td>${statusHtml}</td>
+            <td class="hide-mobile">${formatRelative(agent.lastRun)}</td>
+            <td class="hide-mobile">${agent.runCount ?? 0}</td>
           </tr>
         `;
         }
 
         html += "</tbody></table>";
+
+        // Show active sub-agents if any
+        if (subAgents.length > 0) {
+          html += `<h3 style="margin-top:24px;font-size:13px;color:var(--text-bright);margin-bottom:8px">Active Sub-Agents <span class="count">${subAgents.length}</span></h3>`;
+          html += `<table class="agents-table"><thead><tr><th>ID</th><th>Status</th><th>Started</th><th>Cost</th></tr></thead><tbody>`;
+          for (const sa of subAgents) {
+            const statusClass =
+              sa.status === "active" || sa.status === "running"
+                ? "badge-active"
+                : sa.status === "idle"
+                  ? "badge-idle"
+                  : sa.status === "error"
+                    ? "badge-error"
+                    : "badge-ok";
+            html += `<tr>
+              <td><span class="job-id">${esc(sa.id)}</span></td>
+              <td><span class="badge ${statusClass}">${esc(sa.status || "unknown")}</span></td>
+              <td>${formatRelative(sa.started_at || sa.startedAt)}</td>
+              <td>${sa.cost != null || sa.costUsd != null ? "$" + (sa.cost ?? sa.costUsd).toFixed(4) : "-"}</td>
+            </tr>`;
+          }
+          html += "</tbody></table>";
+        }
+
         container.innerHTML = html;
       }
 
@@ -1606,13 +1751,14 @@
         let html = '<div class="pipeline-cards">';
 
         for (const p of pipelines) {
-          const statusClass = p.status === "healthy"
-            ? "badge-ok"
-            : p.status === "degraded"
-              ? "badge-running"
-              : p.status === "down"
-                ? "badge-error"
-                : "badge-never";
+          const statusClass =
+            p.status === "healthy"
+              ? "badge-ok"
+              : p.status === "degraded"
+                ? "badge-running"
+                : p.status === "down"
+                  ? "badge-error"
+                  : "badge-never";
 
           html += `
           <div class="pipeline-card">
@@ -1655,6 +1801,294 @@
         container.innerHTML = html;
       }
 
+      // -- Tasks --
+      let tasks = [];
+
+      async function loadTasks() {
+        if (!token) return;
+        const container = document.getElementById("tasksContainer");
+        container.innerHTML = '<div class="loading">Loading tasks</div>';
+
+        try {
+          const data = await apiFetch("/api/tasks");
+          tasks = data.tasks || [];
+          renderTasks();
+        } catch (e) {
+          container.innerHTML = `<div class="empty-state"><div>Failed to load tasks: ${esc(e.message)}</div></div>`;
+        }
+      }
+
+      function renderTasks() {
+        const container = document.getElementById("tasksContainer");
+        const filterVal = document.getElementById("taskStatusFilter")?.value || "";
+        const filtered = filterVal ? tasks.filter((t) => t.status === filterVal) : tasks;
+        document.getElementById("taskCount").textContent = filtered.length;
+
+        if (filtered.length === 0) {
+          container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">&gt;_</div>
+            <div>${filterVal ? "No " + filterVal.replace("_", " ") + " tasks" : "No tasks. Create one to get started."}</div>
+          </div>`;
+          return;
+        }
+
+        let html = `
+        <table class="jobs-table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Agent</th>
+              <th class="hide-mobile">Priority</th>
+              <th class="hide-mobile">Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+        `;
+
+        for (const task of filtered) {
+          const statusClass =
+            task.status === "completed"
+              ? "badge-ok"
+              : task.status === "in_progress"
+                ? "badge-running"
+                : task.status === "ready"
+                  ? "badge-active"
+                  : task.status === "failed"
+                    ? "badge-error"
+                    : "badge-never";
+
+          const recurringInfo = task.recurring
+            ? `<span class="badge badge-idle" style="font-size:9px">recurring${task.recurrence_schedule ? ": " + esc(task.recurrence_schedule) : ""}</span>`
+            : "";
+
+          let taskTags = [];
+          try {
+            taskTags = task.tags ? JSON.parse(task.tags) : [];
+          } catch {
+            taskTags = [];
+          }
+          const tagsHtml =
+            taskTags.length > 0
+              ? `<div style="margin-top:2px">${taskTags.map((t) => `<span style="font-size:9px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-right:3px">${esc(t)}</span>`).join("")}</div>`
+              : "";
+
+          html += `
+          <tr style="cursor:pointer" onclick="openEditTaskModal(${task.id})">
+            <td>
+              <div class="job-id">${esc(task.title)}</div>
+              ${task.description ? `<div class="job-label">${esc(task.description.slice(0, 80))}${task.description.length > 80 ? "..." : ""}</div>` : ""}
+              ${recurringInfo}
+              ${tagsHtml}
+            </td>
+            <td><span class="badge ${statusClass}">${esc(task.status)}</span></td>
+            <td>${esc(task.assigned_agent || "-")}</td>
+            <td class="hide-mobile">${task.priority ?? "-"}</td>
+            <td class="hide-mobile">${formatRelative(task.updated_at)}</td>
+            <td>
+              <div class="action-group">
+                <button class="action-btn" onclick="event.stopPropagation(); openEditTaskModal(${task.id})" title="Edit">Edit</button>
+                ${task.status === "ready" ? `<button class="run-now-btn" onclick="event.stopPropagation(); claimTask(${task.id})">Claim</button>` : ""}
+                ${task.status === "in_progress" ? `<button class="run-now-btn" onclick="event.stopPropagation(); completeTask(${task.id})">Done</button>` : ""}
+                <button class="action-btn delete" onclick="event.stopPropagation(); confirmDeleteTask(${task.id})" title="Delete">Del</button>
+              </div>
+            </td>
+          </tr>
+          `;
+        }
+
+        html += "</tbody></table>";
+
+        // Show result of last completed task if available
+        const completed = tasks.filter((t) => t.status === "completed" && t.result);
+        if (completed.length > 0) {
+          const last = completed[completed.length - 1];
+          html += `
+          <div style="margin-top: 16px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Last completed: ${esc(last.title)}</div>
+            <div class="result-preview">${esc(last.result?.slice(0, 200) || "")}</div>
+          </div>`;
+        }
+
+        container.innerHTML = html;
+      }
+
+      function openCreateTaskModal() {
+        document.getElementById("taskModalMode").value = "create";
+        document.getElementById("taskModalTitle").textContent = "Create Task";
+        document.getElementById("taskModalSave").textContent = "Create";
+        document.getElementById("taskFormTitle").value = "";
+        document.getElementById("taskFormDescription").value = "";
+        document.getElementById("taskFormAgent").value = "";
+        document.getElementById("taskFormPriority").value = "5";
+        document.getElementById("taskFormRecurring").checked = false;
+        document.getElementById("taskFormRecurrenceSchedule").value = "";
+        document.getElementById("taskFormTags").value = "";
+        document.getElementById("taskFormStatus").value = "ready";
+        document.getElementById("taskFormId").value = "";
+        document.getElementById("taskModal").classList.add("visible");
+
+        // Populate agent dropdown from loaded jobs
+        populateAgentDropdown();
+      }
+
+      function openEditTaskModal(taskId) {
+        const task = tasks.find((t) => t.id === taskId);
+        if (!task) return;
+
+        document.getElementById("taskModalMode").value = "edit";
+        document.getElementById("taskModalTitle").textContent = `Edit Task #${task.id}`;
+        document.getElementById("taskModalSave").textContent = "Save";
+        document.getElementById("taskFormTitle").value = task.title;
+        document.getElementById("taskFormDescription").value = task.description || "";
+        document.getElementById("taskFormAgent").value = task.assigned_agent || "";
+        document.getElementById("taskFormPriority").value = task.priority ?? 5;
+        document.getElementById("taskFormRecurring").checked = !!task.recurring;
+        document.getElementById("taskFormRecurrenceSchedule").value =
+          task.recurrence_schedule || "";
+        let parsedTags = [];
+        try {
+          parsedTags = task.tags ? JSON.parse(task.tags) : [];
+        } catch {
+          parsedTags = [];
+        }
+        document.getElementById("taskFormTags").value = parsedTags.join(", ");
+        document.getElementById("taskFormStatus").value = task.status || "ready";
+        document.getElementById("taskFormId").value = task.id;
+        document.getElementById("taskModal").classList.add("visible");
+
+        populateAgentDropdown();
+      }
+
+      function populateAgentDropdown() {
+        const select = document.getElementById("taskFormAgent");
+        const current = select.value;
+        // Keep first option (unassigned)
+        select.innerHTML = '<option value="">Unassigned</option>';
+        for (const job of jobs) {
+          const opt = document.createElement("option");
+          opt.value = job.id;
+          opt.textContent = job.label || job.id;
+          select.appendChild(opt);
+        }
+        select.value = current;
+      }
+
+      function closeTaskModal() {
+        document.getElementById("taskModal").classList.remove("visible");
+      }
+
+      async function saveTask() {
+        const mode = document.getElementById("taskModalMode").value;
+        const title = document.getElementById("taskFormTitle").value.trim();
+        if (!title) {
+          toast("Title is required", "error");
+          return;
+        }
+
+        const tagsRaw = document.getElementById("taskFormTags").value.trim();
+        const tags = tagsRaw
+          ? tagsRaw
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : undefined;
+
+        const payload = {
+          title,
+          description: document.getElementById("taskFormDescription").value.trim() || undefined,
+          assigned_agent: document.getElementById("taskFormAgent").value || undefined,
+          priority: parseInt(document.getElementById("taskFormPriority").value) || 5,
+          recurring: document.getElementById("taskFormRecurring").checked,
+          recurrence_schedule:
+            document.getElementById("taskFormRecurrenceSchedule").value.trim() || undefined,
+          tags: tags,
+        };
+
+        if (mode === "edit") {
+          payload.status = document.getElementById("taskFormStatus").value;
+        }
+
+        const saveBtn = document.getElementById("taskModalSave");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+
+        try {
+          if (mode === "create") {
+            await apiFetch("/api/tasks", { method: "POST", body: JSON.stringify(payload) });
+            toast("Task created", "success");
+          } else {
+            const id = document.getElementById("taskFormId").value;
+            await apiFetch(`/api/tasks/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            toast("Task updated", "success");
+          }
+          closeTaskModal();
+          await loadTasks();
+        } catch (e) {
+          toast(`Failed to save task: ${e.message}`, "error");
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = mode === "create" ? "Create" : "Save";
+        }
+      }
+
+      async function completeTask(taskId) {
+        const task = tasks.find((t) => t.id === taskId);
+        document.getElementById("confirmMessage").innerHTML =
+          `Complete task "<strong>${esc(task?.title || taskId)}</strong>"?`;
+        document.getElementById("confirmAction").textContent = "Complete";
+        document.getElementById("confirmAction").className = "btn-save";
+        pendingConfirmCallback = async () => {
+          closeConfirm();
+          try {
+            await apiFetch(`/api/tasks/${taskId}/complete`, {
+              method: "POST",
+              body: JSON.stringify({ result: "Completed via dashboard" }),
+            });
+            toast("Task completed", "success");
+            await loadTasks();
+          } catch (e) {
+            toast(`Failed to complete task: ${e.message}`, "error");
+          }
+          // Reset confirm button style
+          document.getElementById("confirmAction").textContent = "Delete";
+          document.getElementById("confirmAction").className = "btn-danger";
+        };
+        document.getElementById("confirmDialog").classList.add("visible");
+      }
+
+      async function claimTask(taskId) {
+        try {
+          await apiFetch(`/api/tasks/${taskId}/claim`, {
+            method: "POST",
+            body: JSON.stringify({ agent: "dashboard-user" }),
+          });
+          toast("Task claimed", "success");
+          await loadTasks();
+        } catch (e) {
+          toast(`Failed to claim task: ${e.message}`, "error");
+        }
+      }
+
+      function confirmDeleteTask(taskId) {
+        const task = tasks.find((t) => t.id === taskId);
+        document.getElementById("confirmMessage").textContent =
+          `Delete task "${task?.title || taskId}"? This cannot be undone.`;
+        pendingConfirmCallback = async () => {
+          closeConfirm();
+          try {
+            await apiFetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+            toast("Task deleted", "success");
+            await loadTasks();
+          } catch (e) {
+            toast(`Failed to delete task: ${e.message}`, "error");
+          }
+        };
+        document.getElementById("confirmDialog").classList.add("visible");
+      }
+
       // -- Auto-refresh --
       function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
@@ -1666,7 +2100,8 @@
               .then((data) => renderRuns(data.runs || []))
               .catch(() => {});
           }
-          // Refresh agents if on that tab
+          // Refresh current tab
+          if (activeTab === "tasks") loadTasks();
           if (activeTab === "agents") loadAgents();
         }, 30000);
       }
@@ -1760,6 +2195,9 @@
       document.getElementById("jobModal").addEventListener("click", (e) => {
         if (e.target === e.currentTarget) closeJobModal();
       });
+      document.getElementById("taskModal").addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) closeTaskModal();
+      });
       document.getElementById("confirmDialog").addEventListener("click", (e) => {
         if (e.target === e.currentTarget) closeConfirm();
       });
@@ -1769,6 +2207,8 @@
         if (e.key === "Escape") {
           if (document.getElementById("confirmDialog").classList.contains("visible")) {
             closeConfirm();
+          } else if (document.getElementById("taskModal").classList.contains("visible")) {
+            closeTaskModal();
           } else if (document.getElementById("jobModal").classList.contains("visible")) {
             closeJobModal();
           }

@@ -4,20 +4,32 @@ All notable changes to Familiar are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-02-28
+
 ### Added
-- **Web dashboard — REST API (Phase 1)** — Extended the webhook server with a full REST API for managing agents and cron jobs. ([#60](https://github.com/bedda-tech/familiar/issues/60))
-  - `GET /api/agents` — list all agents (active + recent)
-  - `GET /api/agents/:id` — get a single agent by ID
-  - `GET /api/cron/jobs` — list all cron jobs with state
-  - `GET /api/cron/jobs/:id` — get a single job's config and state
-  - `GET /api/cron/jobs/:id/runs?limit=N` — run history (default 20, max 100)
-  - `POST /api/cron/jobs` — create a new cron job (persists to config.json)
-  - `POST /api/cron/jobs/:id/run` — manually trigger a cron job
-  - `PUT /api/cron/jobs/:id` — update a cron job's config fields
-  - `DELETE /api/cron/jobs/:id` — delete a cron job from config
-  - `GET /api/config` — sanitized config view (tokens masked, last 4 chars shown)
-  - Dashboard UI updated with tab navigation, agent panel, config panel, and cron CRUD forms
-- **`SessionStore.listSessions()`** — new method returning all sessions ordered by most-recently-used; used by the dashboard sessions tab.
+- **Task queue system** — SQLite-backed task database with full REST API for managing work items across agents.
+  - `GET /api/tasks` — list all tasks
+  - `POST /api/tasks` — create a task
+  - `PUT /api/tasks/:id` — update a task
+  - `DELETE /api/tasks/:id` — delete a task
+  - `POST /api/tasks/:id/claim` — agent claims a task
+  - `POST /api/tasks/:id/complete` — agent completes a task with result
+  - `GET /api/tasks/next?agent=ID` — get next task for an agent
+  - Supports: priority, assigned agent, recurring tasks with cron schedules, tags
+  - Recurring tasks auto-reset to "ready" on completion
+- **Web dashboard — REST API + UI (Phase 1)** — Extended the webhook server with a full REST API for managing agents and cron jobs. ([#60](https://github.com/bedda-tech/familiar/issues/60))
+  - Full CRUD for cron jobs: create, edit, delete, trigger, view run history
+  - Tasks tab: create, edit, delete, claim, complete tasks with status filtering
+  - Agents tab: shows all cron agents with model, schedule, run count, and status; plus active sub-agents
+  - Pipeline Health tab: grid cards with inventory, success rates, and blockers
+  - `GET /api/config` — sanitized config view (tokens masked)
+  - Clickable task rows open edit modal, recurring tasks display schedule inline, tags shown as badges
+- **`SessionStore.listSessions()`** — new method returning all sessions ordered by most-recently-used.
+
+### Fixed
+- **Dashboard task modal close button** — used wrong CSS class, preventing the X button from working
+- **Dashboard task tags parsing** — `JSON.parse` on malformed tags no longer crashes the edit modal
+- **Dashboard complete task** — replaced browser `prompt()` with proper confirmation dialog
 
 ### Security
 - **Input length limit for Telegram messages** — Regular messages are now capped at 64 KB; oversized messages are rejected with a user-visible error before any processing occurs. ([#59](https://github.com/bedda-tech/familiar/issues/59))

@@ -19,7 +19,13 @@ import { DeliveryQueue } from "./delivery/queue.js";
 import { AgentRegistry } from "./agents/registry.js";
 import { AgentManager } from "./agents/manager.js";
 import { AgentStore } from "./agents/store.js";
+import { AgentCrudStore } from "./agents/agent-store.js";
 import { SpawnQueue } from "./agents/queue.js";
+import { TaskStore } from "./tasks/store.js";
+import { ScheduleStore } from "./schedules/store.js";
+import { ProjectStore } from "./projects/store.js";
+import { ToolStore } from "./tools/store.js";
+import { runMigration } from "./migrations/001-entity-separation.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
 
@@ -291,16 +297,37 @@ async function cmdStart(configPath?: string): Promise<void> {
     config.sessions.rotateAfterMessages,
   );
 
+  // Run entity separation migration (idempotent)
+  const db = sessions.getDb();
+  const configDir = getConfigDir();
+  const migrationResult = runMigration(db, join(configDir, "config.json"));
+  log.info(
+    {
+      agents: migrationResult.agents,
+      schedules: migrationResult.schedules,
+      projects: migrationResult.projects,
+      tools: migrationResult.tools,
+      skipped: migrationResult.skipped,
+    },
+    "migration 001 complete",
+  );
+
+  // Initialize entity stores (DB-backed)
+  const agentCrudStore = new AgentCrudStore(db);
+  const scheduleStore = new ScheduleStore(db);
+  const projectStore = new ProjectStore(db);
+  const toolStore = new ToolStore(db);
+
   const claude = new ClaudeCLI(config.claude);
   const telegram = new TelegramChannel(config.telegram);
 
   // Initialize delivery queue — wraps sendDirectMessage with retry + persistence
-  const deliveryQueue = new DeliveryQueue(sessions.getDb());
+  const deliveryQueue = new DeliveryQueue(db);
   deliveryQueue.onSend((chatId, text) => telegram.sendDirectMessage(chatId, text));
   deliveryQueue.start();
 
   // Initialize sub-agent system
-  const agentRegistry = new AgentRegistry(sessions.getDb());
+  const agentRegistry = new AgentRegistry(db);
   const agentManager = new AgentManager(agentRegistry, config.claude);
 
   // Deliver sub-agent results via the delivery queue (retry-safe)
@@ -337,22 +364,26 @@ async function cmdStart(configPath?: string): Promise<void> {
     }
   }
 
-  // Start cron scheduler if jobs are configured
+  // Start cron scheduler -- reads from DB schedules + legacy config jobs
   let cron: CronScheduler | null = null;
-  if (config.cron?.jobs && config.cron.jobs.length > 0) {
-    cron = new CronScheduler(config.cron.jobs as CronJobConfig[], config.claude);
+  const configJobs = (config.cron?.jobs ?? []) as CronJobConfig[];
+  // Always create scheduler if we have DB agents or config jobs
+  const hasDbAgents = agentCrudStore.count() > 0;
+  if (configJobs.length > 0 || hasDbAgents) {
+    cron = new CronScheduler(configJobs, config.claude);
+    cron.setSharedDb(db);
 
     cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig) => {
       const chatId = jobConfig.deliverTo ?? defaultChatId;
       const label = jobConfig.label ?? jobConfig.id;
-      const prefix = result.isError ? `*Cron Error — ${label}*` : `*Cron — ${label}*`;
+      const prefix = result.isError ? `*Cron Error -- ${label}*` : `*Cron -- ${label}*`;
       const meta = `_${result.durationMs}ms | $${result.costUsd.toFixed(4)} | ${result.numTurns} turns_`;
       const text = `${prefix}\n${meta}\n\n${result.text}`;
       await deliveryQueue.deliver(chatId, text);
     });
 
     cron.start();
-    log.info({ jobs: config.cron.jobs.length }, "cron scheduler started");
+    log.info({ configJobs: configJobs.length, dbAgents: agentCrudStore.count() }, "cron scheduler started");
   }
 
   const bridge = new Bridge(
@@ -381,13 +412,23 @@ async function cmdStart(configPath?: string): Promise<void> {
       webhooks.setCronScheduler(cron);
     }
 
-    // Wire up agent store for REST API
+    // Wire up agent store for REST API (sub-agents)
     webhooks.setAgentStore(new AgentStore(agentManager));
 
-    // Set config path for cron CRUD operations
-    webhooks.setConfigPath(join(getConfigDir(), "config.json"));
+    // Wire up persistent entity stores
+    webhooks.setAgentCrudStore(agentCrudStore);
+    webhooks.setScheduleStore(scheduleStore);
+    webhooks.setProjectStore(projectStore);
+    webhooks.setToolStore(toolStore);
+
+    // Wire up task store for REST API
+    webhooks.setTaskStore(new TaskStore(db));
+
+    // Set config path for legacy cron CRUD operations
+    webhooks.setConfigPath(join(configDir, "config.json"));
     webhooks.setConfigChangeHandler(async () => {
-      log.info("config changed via API — restart required for schedule changes");
+      if (cron) await cron.reload();
+      log.info("config changed via API -- scheduler reloaded");
     });
 
     // Wake handler — inject message into a chat (defaults to first allowed user)

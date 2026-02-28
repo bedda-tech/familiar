@@ -37,6 +37,11 @@ import type { CronScheduler } from "../cron/scheduler.js";
 import { getLogger } from "../util/logger.js";
 import { ApiRouter } from "../api/router.js";
 import type { AgentStore } from "../agents/store.js";
+import type { AgentCrudStore } from "../agents/agent-store.js";
+import type { TaskStore } from "../tasks/store.js";
+import type { ScheduleStore } from "../schedules/store.js";
+import type { ProjectStore } from "../projects/store.js";
+import type { ToolStore } from "../tools/store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -77,6 +82,31 @@ export class WebhookServer {
   /** Attach the agent store for REST API access. */
   setAgentStore(store: AgentStore): void {
     this.apiRouter.setAgentStore(store);
+  }
+
+  /** Attach the task store for REST API access. */
+  setTaskStore(store: TaskStore): void {
+    this.apiRouter.setTaskStore(store);
+  }
+
+  /** Attach the persistent agent CRUD store. */
+  setAgentCrudStore(store: AgentCrudStore): void {
+    this.apiRouter.setAgentCrudStore(store);
+  }
+
+  /** Attach the schedule store. */
+  setScheduleStore(store: ScheduleStore): void {
+    this.apiRouter.setScheduleStore(store);
+  }
+
+  /** Attach the project store. */
+  setProjectStore(store: ProjectStore): void {
+    this.apiRouter.setProjectStore(store);
+  }
+
+  /** Attach the tool store. */
+  setToolStore(store: ToolStore): void {
+    this.apiRouter.setToolStore(store);
   }
 
   /** Set the config file path for CRUD operations on cron jobs. */

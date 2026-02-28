@@ -60,6 +60,24 @@ export class SessionStore {
         cost_usd REAL DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_agent TEXT,
+        status TEXT DEFAULT 'ready',
+        priority INTEGER DEFAULT 5,
+        recurring INTEGER DEFAULT 0,
+        recurrence_schedule TEXT,
+        last_completed_at TEXT,
+        result TEXT,
+        tags TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        claimed_by TEXT,
+        claimed_at TEXT
+      );
     `);
   }
 
