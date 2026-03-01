@@ -20,14 +20,11 @@
         --red: #f85149;
         --yellow: #d29922;
         --orange: #db6d28;
+        --purple: #bc8cff;
         --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Consolas, monospace;
       }
 
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
 
       body {
         font-family: var(--font-mono);
@@ -38,125 +35,106 @@
         line-height: 1.5;
       }
 
-      /* Header */
+      /* ── Header ── */
       header {
         background: var(--bg-card);
         border-bottom: 1px solid var(--border);
-        padding: 16px 24px;
+        padding: 12px 24px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 16px;
         position: sticky;
         top: 0;
         z-index: 100;
       }
 
       header h1 {
-        font-size: 16px;
-        font-weight: 600;
+        font-size: 15px;
+        font-weight: 700;
         color: var(--text-bright);
         letter-spacing: -0.3px;
+        white-space: nowrap;
       }
 
-      header h1 span {
-        color: var(--accent);
-      }
+      header h1 span { color: var(--accent); }
 
-      .header-right {
+      .header-token {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 8px;
+        flex: 1;
+        max-width: 480px;
       }
 
-      .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--green);
-        animation: pulse 2s ease-in-out infinite;
-      }
-
-      .status-dot.error {
-        background: var(--red);
-        animation: none;
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.4;
-        }
-      }
-
-      /* Token input */
-      .token-bar {
-        background: var(--bg-card);
-        border-bottom: 1px solid var(--border);
-        padding: 10px 24px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .token-bar label {
-        font-size: 11px;
+      .header-token label {
+        font-size: 10px;
         color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         white-space: nowrap;
       }
 
-      .token-bar input {
+      .header-token input {
         flex: 1;
-        max-width: 400px;
         background: var(--bg-input);
         border: 1px solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: var(--font-mono);
-        font-size: 12px;
-        padding: 6px 10px;
+        font-size: 11px;
+        padding: 5px 8px;
         outline: none;
       }
 
-      .token-bar input:focus {
-        border-color: var(--border-focus);
-      }
+      .header-token input:focus { border-color: var(--border-focus); }
 
-      .token-bar button {
+      .header-token button {
         background: var(--accent);
         color: var(--bg);
         border: none;
         border-radius: 4px;
-        padding: 6px 14px;
+        padding: 5px 12px;
         font-family: var(--font-mono);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         cursor: pointer;
+        white-space: nowrap;
       }
 
-      .token-bar button:hover {
-        opacity: 0.9;
+      .ws-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--text-muted);
+        white-space: nowrap;
       }
 
-      /* Tab navigation */
+      .ws-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        flex-shrink: 0;
+      }
+
+      .ws-dot.connected { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+      .ws-dot.error { background: var(--red); }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      /* ── Tab bar ── */
       .tab-bar {
         background: var(--bg-card);
         border-bottom: 1px solid var(--border);
         padding: 0 24px;
         display: flex;
         gap: 0;
+        overflow-x: auto;
       }
 
       .tab-btn {
@@ -165,342 +143,101 @@
         border-bottom: 2px solid transparent;
         color: var(--text-muted);
         font-family: var(--font-mono);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
-        padding: 12px 20px;
+        padding: 10px 18px;
         cursor: pointer;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        transition:
-          color 0.15s,
-          border-color 0.15s;
+        white-space: nowrap;
+        transition: color 0.15s, border-color 0.15s;
       }
 
-      .tab-btn:hover {
-        color: var(--text);
-      }
+      .tab-btn:hover { color: var(--text); }
+      .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-      .tab-btn.active {
-        color: var(--accent);
-        border-bottom-color: var(--accent);
-      }
-
-      /* Main content */
+      /* ── Main layout ── */
       main {
         max-width: 1200px;
         margin: 0 auto;
         padding: 24px;
       }
 
-      .tab-panel {
-        display: none;
-      }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
 
-      .tab-panel.active {
-        display: block;
-      }
-
+      /* ── Section header ── */
       .section-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         margin-bottom: 16px;
+        gap: 8px;
       }
 
       .section-header h2 {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text-bright);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .section-header .count {
-        background: var(--bg);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 1px 8px;
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-left: 8px;
-      }
-
-      .section-header-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .refresh-btn {
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 4px 10px;
-        cursor: pointer;
-      }
-
-      .refresh-btn:hover {
-        color: var(--text);
-        border-color: var(--text-muted);
-      }
-
-      .create-btn {
-        background: var(--green);
-        color: var(--bg);
-        border: none;
-        border-radius: 4px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-weight: 600;
-        padding: 5px 12px;
-        cursor: pointer;
-      }
-
-      .create-btn:hover {
-        opacity: 0.9;
-      }
-
-      /* Jobs table */
-      .jobs-table {
-        width: 100%;
-        border-collapse: collapse;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        overflow: hidden;
-      }
-
-      .jobs-table thead th {
-        background: var(--bg-card);
-        padding: 10px 14px;
-        text-align: left;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--border);
-      }
-
-      .jobs-table tbody tr {
-        cursor: pointer;
-        transition: background 0.15s;
-      }
-
-      .jobs-table tbody tr:hover {
-        background: var(--bg-hover);
-      }
-
-      .jobs-table tbody tr.selected {
-        background: var(--bg-hover);
-        outline: 1px solid var(--border-focus);
-        outline-offset: -1px;
-      }
-
-      .jobs-table td {
-        padding: 10px 14px;
-        border-bottom: 1px solid var(--border);
-        vertical-align: middle;
-      }
-
-      .jobs-table tbody tr:last-child td {
-        border-bottom: none;
-      }
-
-      .job-id {
-        color: var(--accent);
-        font-weight: 600;
-      }
-
-      .job-label {
-        color: var(--text-muted);
-        font-size: 11px;
-        margin-top: 2px;
-      }
-
-      .badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-      }
-
-      .badge-ok {
-        background: rgba(63, 185, 80, 0.15);
-        color: var(--green);
-      }
-
-      .badge-error {
-        background: rgba(248, 81, 73, 0.15);
-        color: var(--red);
-      }
-
-      .badge-disabled {
-        background: rgba(139, 148, 158, 0.15);
-        color: var(--text-muted);
-      }
-
-      .badge-never {
-        background: rgba(139, 148, 158, 0.1);
-        color: var(--text-muted);
-      }
-
-      .badge-running {
-        background: rgba(210, 153, 34, 0.15);
-        color: var(--yellow);
-      }
-
-      .badge-active {
-        background: rgba(63, 185, 80, 0.15);
-        color: var(--green);
-      }
-
-      .badge-idle {
-        background: rgba(88, 166, 255, 0.15);
-        color: var(--accent);
-      }
-
-      .run-now-btn {
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 3px 10px;
-        cursor: pointer;
-        white-space: nowrap;
-      }
-
-      .run-now-btn:hover {
-        color: var(--accent);
-        border-color: var(--accent);
-      }
-
-      .run-now-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-
-      .run-now-btn.running {
-        color: var(--yellow);
-        border-color: var(--yellow);
-        cursor: wait;
-      }
-
-      .action-btn {
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 3px 8px;
-        cursor: pointer;
-        white-space: nowrap;
-      }
-
-      .action-btn:hover {
-        color: var(--text);
-        border-color: var(--text-muted);
-      }
-
-      .action-btn.delete:hover {
-        color: var(--red);
-        border-color: var(--red);
-      }
-
-      .action-group {
-        display: flex;
-        gap: 4px;
-        align-items: center;
-      }
-
-      /* Run history panel */
-      .run-history {
-        margin-top: 24px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        overflow: hidden;
-        display: none;
-      }
-
-      .run-history.visible {
-        display: block;
-      }
-
-      .run-history-header {
-        background: var(--bg-card);
-        padding: 12px 14px;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .run-history-header h3 {
         font-size: 13px;
         font-weight: 600;
         color: var(--text-bright);
-      }
-
-      .close-btn {
-        background: transparent;
-        border: none;
-        color: var(--text-muted);
-        font-size: 18px;
-        cursor: pointer;
-        padding: 0 4px;
-        line-height: 1;
-      }
-
-      .close-btn:hover {
-        color: var(--text);
-      }
-
-      .runs-table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      .runs-table thead th {
-        background: var(--bg-card);
-        padding: 8px 14px;
-        text-align: left;
-        font-size: 10px;
-        font-weight: 600;
-        color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--border);
       }
 
-      .runs-table td {
-        padding: 8px 14px;
-        border-bottom: 1px solid var(--border);
-        font-size: 12px;
-      }
-
-      .runs-table tbody tr:last-child td {
-        border-bottom: none;
-      }
-
-      .result-preview {
-        max-width: 400px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .count-badge {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1px 7px;
+        font-size: 10px;
         color: var(--text-muted);
-        font-size: 11px;
       }
 
-      /* Agents table */
-      .agents-table {
+      .section-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* ── Buttons ── */
+      .btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+
+      .btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+      .btn-primary {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+
+      .btn-primary:hover { opacity: 0.85; color: var(--bg); border-color: var(--accent); }
+
+      .btn-success {
+        background: var(--green);
+        color: var(--bg);
+        border-color: var(--green);
+        font-weight: 600;
+      }
+
+      .btn-success:hover { opacity: 0.85; color: var(--bg); border-color: var(--green); }
+
+      .btn-danger { color: var(--red); border-color: var(--red); }
+      .btn-danger:hover { background: var(--red); color: var(--bg); }
+
+      .btn-sm { padding: 3px 7px; font-size: 10px; }
+
+      /* ── Tables ── */
+      .data-table {
         width: 100%;
         border-collapse: collapse;
         border: 1px solid var(--border);
@@ -508,135 +245,304 @@
         overflow: hidden;
       }
 
-      .agents-table thead th {
+      .data-table thead th {
         background: var(--bg-card);
-        padding: 10px 14px;
+        padding: 9px 12px;
         text-align: left;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
         color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         border-bottom: 1px solid var(--border);
+        white-space: nowrap;
       }
 
-      .agents-table td {
-        padding: 10px 14px;
+      .data-table tbody tr {
         border-bottom: 1px solid var(--border);
+        transition: background 0.1s;
+      }
+
+      .data-table tbody tr:last-child { border-bottom: none; }
+      .data-table tbody tr:hover { background: var(--bg-hover); }
+      .data-table tbody tr.clickable { cursor: pointer; }
+
+      .data-table tbody td {
+        padding: 9px 12px;
         vertical-align: middle;
       }
 
-      .agents-table tbody tr:last-child td {
-        border-bottom: none;
-      }
-
-      /* Pipeline health cards */
-      .pipeline-cards {
+      /* ── Cards ── */
+      .card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 12px;
       }
 
-      .pipeline-card {
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+
+      .card:hover { border-color: var(--accent); background: var(--bg-hover); }
+
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-bright);
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .card-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+        line-height: 1.4;
+        max-height: 36px;
+        overflow: hidden;
+      }
+
+      .card-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      /* ── Badges ── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 600;
+        border: 1px solid transparent;
+      }
+
+      .badge-green { background: rgba(63,185,80,0.15); color: var(--green); border-color: rgba(63,185,80,0.3); }
+      .badge-red { background: rgba(248,81,73,0.15); color: var(--red); border-color: rgba(248,81,73,0.3); }
+      .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); border-color: rgba(88,166,255,0.3); }
+      .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); border-color: rgba(210,153,34,0.3); }
+      .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.3); }
+      .badge-gray { background: rgba(139,148,158,0.15); color: var(--text-muted); border-color: rgba(139,148,158,0.3); }
+      .badge-orange { background: rgba(219,109,40,0.15); color: var(--orange); border-color: rgba(219,109,40,0.3); }
+
+      /* ── Empty state ── */
+      .empty-state {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--text-muted);
+        border: 1px dashed var(--border);
+        border-radius: 8px;
+      }
+
+      .empty-state .empty-icon {
+        font-size: 32px;
+        margin-bottom: 12px;
+        opacity: 0.5;
+      }
+
+      .empty-state .empty-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+
+      .empty-state .empty-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 16px;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* ── Activity feed ── */
+      .activity-filters {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .activity-feed {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .activity-entry {
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: 6px;
-        padding: 16px;
-      }
-
-      .pipeline-card-header {
+        padding: 10px 14px;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 12px;
+        gap: 12px;
+        align-items: flex-start;
+        transition: border-color 0.15s;
+        animation: fadeIn 0.2s ease;
       }
 
-      .pipeline-card-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text-bright);
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+      .activity-entry:hover { border-color: var(--border-focus); }
+
+      .activity-entry.new { border-color: var(--accent); }
+
+      .activity-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        width: 20px;
+        text-align: center;
+        line-height: 1.5;
       }
 
-      .pipeline-stat-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-bottom: 12px;
+      .activity-body { flex: 1; min-width: 0; }
+
+      .activity-summary {
+        font-size: 12px;
+        color: var(--text);
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
-      .pipeline-stat {
+      .activity-meta {
+        font-size: 10px;
+        color: var(--text-muted);
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .activity-details {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 6px;
+        padding: 6px 8px;
         background: var(--bg);
         border-radius: 4px;
-        padding: 8px 10px;
+        font-family: var(--font-mono);
+        display: none;
+        white-space: pre-wrap;
+        word-break: break-all;
       }
 
-      .pipeline-stat-label {
-        font-size: 10px;
+      .activity-details.open { display: block; }
+
+      .activity-expand {
+        background: none;
+        border: none;
         color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 2px;
-      }
-
-      .pipeline-stat-value {
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text-bright);
-      }
-
-      .pipeline-blockers {
-        margin-top: 8px;
-      }
-
-      .pipeline-blockers-label {
+        font-family: var(--font-mono);
         font-size: 10px;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 4px;
+        cursor: pointer;
+        padding: 0;
+        margin-left: auto;
+        flex-shrink: 0;
+        align-self: center;
       }
 
-      .pipeline-blocker-item {
+      .activity-expand:hover { color: var(--text); }
+
+      /* ── Toggle ── */
+      .toggle {
+        position: relative;
+        display: inline-block;
+        width: 32px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+
+      .toggle input { opacity: 0; width: 0; height: 0; }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: var(--border);
+        border-radius: 9px;
+        transition: background 0.2s;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 12px;
+        width: 12px;
+        left: 3px;
+        bottom: 3px;
+        background: var(--text-muted);
+        border-radius: 50%;
+        transition: transform 0.2s, background 0.2s;
+      }
+
+      .toggle input:checked + .toggle-slider { background: rgba(63,185,80,0.3); }
+      .toggle input:checked + .toggle-slider:before { transform: translateX(14px); background: var(--green); }
+
+      /* ── Filters ── */
+      .filter-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .filter-select, .filter-input {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: var(--font-mono);
         font-size: 11px;
-        color: var(--orange);
-        padding: 2px 0;
+        padding: 5px 8px;
+        outline: none;
       }
 
-      /* Modal */
+      .filter-select:focus, .filter-input:focus { border-color: var(--border-focus); }
+
+      /* ── Modal ── */
       .modal-overlay {
         display: none;
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
-        z-index: 300;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        z-index: 200;
         align-items: center;
         justify-content: center;
+        padding: 20px;
       }
 
-      .modal-overlay.visible {
-        display: flex;
-      }
+      .modal-overlay.visible { display: flex; }
 
       .modal {
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: 8px;
-        width: 90%;
+        width: 100%;
         max-width: 560px;
         max-height: 90vh;
         overflow-y: auto;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       }
 
       .modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--border);
       }
 
       .modal-header h3 {
@@ -645,10 +551,29 @@
         color: var(--text-bright);
       }
 
-      .modal-body {
-        padding: 20px;
+      .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 18px;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px;
       }
 
+      .modal-close:hover { color: var(--text); }
+
+      .modal-body { padding: 20px; }
+
+      .modal-footer {
+        padding: 14px 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      /* ── Form ── */
       .form-group {
         margin-bottom: 14px;
       }
@@ -656,15 +581,16 @@
       .form-group label {
         display: block;
         font-size: 11px;
+        font-weight: 600;
         color: var(--text-muted);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 4px;
+        letter-spacing: 0.4px;
+        margin-bottom: 5px;
       }
 
-      .form-group input,
-      .form-group select,
-      .form-group textarea {
+      .form-group label .required { color: var(--red); margin-left: 2px; }
+
+      .form-control {
         width: 100%;
         background: var(--bg-input);
         border: 1px solid var(--border);
@@ -672,208 +598,49 @@
         color: var(--text);
         font-family: var(--font-mono);
         font-size: 12px;
-        padding: 8px 10px;
+        padding: 7px 10px;
         outline: none;
+        transition: border-color 0.15s;
       }
 
-      .form-group input:focus,
-      .form-group select:focus,
-      .form-group textarea:focus {
-        border-color: var(--border-focus);
-      }
+      .form-control:focus { border-color: var(--border-focus); }
 
-      .form-group textarea {
-        min-height: 80px;
+      textarea.form-control {
         resize: vertical;
+        min-height: 80px;
+        line-height: 1.5;
       }
 
-      .form-group select {
-        appearance: none;
-        -webkit-appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        padding-right: 30px;
+      .form-hint {
+        font-size: 10px;
+        color: var(--text-muted);
+        margin-top: 3px;
       }
 
       .form-row {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 12px;
       }
 
-      .form-row .form-group {
-        flex: 1;
-      }
-
-      .form-group-checkbox {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 14px;
-      }
-
-      .form-group-checkbox input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
-
-      .form-group-checkbox label {
-        font-size: 12px;
-        color: var(--text);
-        cursor: pointer;
-        text-transform: none;
-        letter-spacing: 0;
-      }
-
-      .modal-footer {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 8px;
-        padding: 16px 20px;
-        border-top: 1px solid var(--border);
-      }
-
-      .btn-cancel {
-        background: transparent;
+      /* ── Result preview ── */
+      .result-preview {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: var(--bg);
+        padding: 8px;
+        border-radius: 4px;
         border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 12px;
-        padding: 6px 16px;
-        cursor: pointer;
       }
 
-      .btn-cancel:hover {
-        color: var(--text);
-        border-color: var(--text-muted);
-      }
-
-      .btn-save {
-        background: var(--accent);
-        color: var(--bg);
-        border: none;
-        border-radius: 4px;
-        font-family: var(--font-mono);
-        font-size: 12px;
-        font-weight: 600;
-        padding: 7px 18px;
-        cursor: pointer;
-      }
-
-      .btn-save:hover {
-        opacity: 0.9;
-      }
-
-      .btn-save:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .btn-danger {
-        background: var(--red);
-        color: var(--bg);
-        border: none;
-        border-radius: 4px;
-        font-family: var(--font-mono);
-        font-size: 12px;
-        font-weight: 600;
-        padding: 7px 18px;
-        cursor: pointer;
-      }
-
-      .btn-danger:hover {
-        opacity: 0.9;
-      }
-
-      /* Confirm dialog */
-      .confirm-overlay {
-        display: none;
+      /* ── Toast ── */
+      #toast-container {
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
-        z-index: 400;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .confirm-overlay.visible {
-        display: flex;
-      }
-
-      .confirm-dialog {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 24px;
-        max-width: 400px;
-        width: 90%;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      }
-
-      .confirm-dialog p {
-        margin-bottom: 20px;
-        font-size: 13px;
-        color: var(--text);
-        line-height: 1.6;
-      }
-
-      .confirm-dialog .confirm-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-      }
-
-      /* Empty & loading states */
-      .empty-state {
-        text-align: center;
-        padding: 48px 24px;
-        color: var(--text-muted);
-      }
-
-      .empty-state .icon {
-        font-size: 32px;
-        margin-bottom: 12px;
-        opacity: 0.4;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 24px;
-        color: var(--text-muted);
-      }
-
-      .loading::after {
-        content: "";
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid var(--border);
-        border-top-color: var(--accent);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin-left: 8px;
-        vertical-align: middle;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      /* Toast notifications */
-      .toast-container {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 200;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -886,1334 +653,1722 @@
         padding: 10px 16px;
         font-size: 12px;
         color: var(--text);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        animation: slideIn 0.2s ease-out;
-        max-width: 360px;
+        max-width: 320px;
+        animation: slideIn 0.2s ease;
       }
 
-      .toast.success {
-        border-color: var(--green);
+      @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+      .toast.success { border-color: var(--green); color: var(--green); }
+      .toast.error { border-color: var(--red); color: var(--red); }
+
+      /* ── Confirm dialog ── */
+      .confirm-dialog {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 400px;
+        width: 100%;
       }
 
-      .toast.error {
-        border-color: var(--red);
+      .confirm-dialog p {
+        margin-bottom: 20px;
+        color: var(--text);
+        line-height: 1.5;
+        font-size: 13px;
       }
 
-      @keyframes slideIn {
-        from {
-          transform: translateX(20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
+      .confirm-dialog .confirm-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
       }
 
-      /* Responsive */
-      @media (max-width: 768px) {
-        main {
-          padding: 16px;
-        }
-        .jobs-table td,
-        .jobs-table th {
-          padding: 8px 10px;
-        }
-        .agents-table td,
-        .agents-table th {
-          padding: 8px 10px;
-        }
-        .hide-mobile {
-          display: none;
-        }
-        .tab-btn {
-          padding: 10px 12px;
-          font-size: 11px;
-        }
-        .pipeline-cards {
-          grid-template-columns: 1fr;
-        }
+      /* ── Loading ── */
+      .loading {
+        padding: 32px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      /* ── Code inline ── */
+      code {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 11px;
+        color: var(--accent);
+      }
+
+      /* ── Run history ── */
+      .run-bar {
+        display: inline-block;
+        width: 8px;
+        height: 18px;
+        border-radius: 2px;
+        margin-right: 2px;
+        background: var(--green);
+        cursor: help;
+        vertical-align: bottom;
+      }
+
+      .run-bar.error { background: var(--red); }
+
+      /* ── Responsive ── */
+      @media (max-width: 600px) {
+        main { padding: 12px; }
+        header { padding: 10px 12px; gap: 8px; }
+        .tab-bar { padding: 0 12px; }
+        .form-row { grid-template-columns: 1fr; }
+        .card-grid { grid-template-columns: 1fr; }
+        .hide-mobile { display: none; }
       }
     </style>
   </head>
   <body>
+    <!-- Header -->
     <header>
-      <h1><span>&gt;</span> Familiar Dashboard</h1>
-      <div class="header-right">
-        <div class="status-indicator">
-          <div class="status-dot" id="statusDot"></div>
-          <span id="statusText">connecting...</span>
-        </div>
+      <h1>familiar<span>.</span></h1>
+      <div class="header-token">
+        <label>Token</label>
+        <input id="tokenInput" type="password" placeholder="x-familiar-token" autocomplete="off" />
+        <button onclick="applyToken()">Connect</button>
+      </div>
+      <div class="ws-status">
+        <div id="wsDot" class="ws-dot"></div>
+        <span id="wsLabel">disconnected</span>
       </div>
     </header>
 
-    <div class="token-bar" id="tokenBar">
-      <label for="tokenInput">API Token</label>
-      <input
-        type="password"
-        id="tokenInput"
-        placeholder="paste your familiar webhook token"
-        autocomplete="off"
-      />
-      <button onclick="saveToken()">Connect</button>
-    </div>
+    <!-- Tab bar -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="activity">Activity</button>
+      <button class="tab-btn" data-tab="agents">Agents</button>
+      <button class="tab-btn" data-tab="schedules">Schedules</button>
+      <button class="tab-btn" data-tab="tasks">Tasks</button>
+      <button class="tab-btn" data-tab="projects">Projects</button>
+      <button class="tab-btn" data-tab="tools">Tools</button>
+    </nav>
 
-    <div class="tab-bar">
-      <button class="tab-btn active" data-tab="cron" onclick="switchTab('cron')">Cron Jobs</button>
-      <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
-      <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')">Agents</button>
-      <button class="tab-btn" data-tab="pipeline" onclick="switchTab('pipeline')">
-        Pipeline Health
-      </button>
-    </div>
-
+    <!-- Tab panels -->
     <main>
-      <!-- Cron Jobs Tab -->
-      <div class="tab-panel active" id="tab-cron">
+      <!-- ── Activity ── -->
+      <div id="tab-activity" class="tab-panel active">
         <div class="section-header">
-          <h2>Cron Jobs <span class="count" id="jobCount">0</span></h2>
-          <div class="section-header-actions">
-            <button class="create-btn" onclick="openCreateJobModal()">+ Create Job</button>
-            <button class="refresh-btn" onclick="loadJobs()">Refresh</button>
+          <h2>Activity</h2>
+          <span id="activityCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadActivity()">Refresh</button>
           </div>
         </div>
-
-        <div id="jobsContainer">
-          <div class="empty-state" id="emptyState">
-            <div class="icon">&gt;_</div>
-            <div>Enter your API token above to connect</div>
-          </div>
+        <div class="activity-filters">
+          <select class="filter-select" id="activityTypeFilter" onchange="renderActivity()">
+            <option value="">All types</option>
+            <option value="schedule_run">Schedule runs</option>
+            <option value="task_change">Task changes</option>
+            <option value="agent_spawn">Agent spawns</option>
+            <option value="chat">Chat</option>
+            <option value="error">Errors</option>
+          </select>
+          <select class="filter-select" id="activityAgentFilter" onchange="renderActivity()">
+            <option value="">All agents</option>
+          </select>
         </div>
-
-        <div class="run-history" id="runHistory">
-          <div class="run-history-header">
-            <h3 id="runHistoryTitle">Run History</h3>
-            <button class="close-btn" onclick="closeHistory()">&times;</button>
-          </div>
-          <div id="runsContainer"></div>
+        <div id="activityFeed" class="activity-feed">
+          <div class="loading">Loading activity...</div>
         </div>
       </div>
 
-      <!-- Tasks Tab -->
-      <div class="tab-panel" id="tab-tasks">
+      <!-- ── Agents ── -->
+      <div id="tab-agents" class="tab-panel">
         <div class="section-header">
-          <h2>Tasks <span class="count" id="taskCount">0</span></h2>
-          <div class="section-header-actions">
-            <select
-              id="taskStatusFilter"
-              onchange="renderTasks()"
-              style="
-                background: var(--bg-input);
-                border: 1px solid var(--border);
-                border-radius: 4px;
-                color: var(--text);
-                font-family: var(--font-mono);
-                font-size: 11px;
-                padding: 4px 8px;
-                outline: none;
-              "
-            >
-              <option value="">All</option>
-              <option value="ready">Ready</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
-            </select>
-            <button class="create-btn" onclick="openCreateTaskModal()">+ Create Task</button>
-            <button class="refresh-btn" onclick="loadTasks()">Refresh</button>
+          <h2>Agents</h2>
+          <span id="agentCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadAgents()">Refresh</button>
+            <button class="btn btn-sm btn-success" onclick="openAgentModal()">+ New Agent</button>
           </div>
         </div>
+        <div id="agentsGrid" class="card-grid">
+          <div class="loading">Loading agents...</div>
+        </div>
+      </div>
 
+      <!-- ── Schedules ── -->
+      <div id="tab-schedules" class="tab-panel">
+        <div class="section-header">
+          <h2>Schedules</h2>
+          <span id="scheduleCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadSchedules()">Refresh</button>
+            <button class="btn btn-sm btn-success" onclick="openScheduleModal()">+ New Schedule</button>
+          </div>
+        </div>
+        <div id="schedulesContainer">
+          <div class="loading">Loading schedules...</div>
+        </div>
+      </div>
+
+      <!-- ── Tasks ── -->
+      <div id="tab-tasks" class="tab-panel">
+        <div class="section-header">
+          <h2>Tasks</h2>
+          <span id="taskCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadTasks()">Refresh</button>
+            <button class="btn btn-sm btn-success" onclick="openTaskModal()">+ New Task</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <select class="filter-select" id="taskStatusFilter" onchange="renderTasks()">
+            <option value="">All statuses</option>
+            <option value="ready">Ready</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+          <select class="filter-select" id="taskAgentFilter" onchange="renderTasks()">
+            <option value="">All agents</option>
+          </select>
+        </div>
         <div id="tasksContainer">
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>Loading tasks...</div>
-          </div>
+          <div class="loading">Loading tasks...</div>
         </div>
       </div>
 
-      <!-- Agents Tab -->
-      <div class="tab-panel" id="tab-agents">
+      <!-- ── Projects ── -->
+      <div id="tab-projects" class="tab-panel">
         <div class="section-header">
-          <h2>Active Agents <span class="count" id="agentCount">0</span></h2>
-          <div class="section-header-actions">
-            <button class="refresh-btn" onclick="loadAgents()">Refresh</button>
+          <h2>Projects</h2>
+          <span id="projectCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadProjects()">Refresh</button>
+            <button class="btn btn-sm btn-success" onclick="openProjectModal()">+ New Project</button>
           </div>
         </div>
-
-        <div id="agentsContainer">
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>Loading agents...</div>
-          </div>
+        <div id="projectsGrid" class="card-grid">
+          <div class="loading">Loading projects...</div>
         </div>
       </div>
 
-      <!-- Pipeline Health Tab -->
-      <div class="tab-panel" id="tab-pipeline">
+      <!-- ── Tools ── -->
+      <div id="tab-tools" class="tab-panel">
         <div class="section-header">
-          <h2>Pipeline Health</h2>
-          <div class="section-header-actions">
-            <button class="refresh-btn" onclick="loadPipelineHealth()">Refresh</button>
+          <h2>Tools</h2>
+          <span id="toolCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadTools()">Refresh</button>
           </div>
         </div>
-
-        <div id="pipelineContainer">
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>Loading pipeline health...</div>
-          </div>
+        <div id="toolsContainer">
+          <div class="loading">Loading tools...</div>
         </div>
       </div>
     </main>
 
-    <div class="toast-container" id="toastContainer"></div>
-
-    <!-- Job Create/Edit Modal -->
-    <div class="modal-overlay" id="jobModal">
+    <!-- ── Agent Modal ── -->
+    <div id="agentModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="jobModalTitle">Create Job</h3>
-          <button class="close-btn" onclick="closeJobModal()">&times;</button>
+          <h3 id="agentModalTitle">New Agent</h3>
+          <button class="modal-close" onclick="closeModal('agentModal')">&times;</button>
         </div>
         <div class="modal-body">
-          <input type="hidden" id="jobModalMode" value="create" />
-          <div class="form-group">
-            <label for="jobFormId">ID</label>
-            <input type="text" id="jobFormId" placeholder="my-cron-job" />
-          </div>
-          <div class="form-group">
-            <label for="jobFormLabel">Label</label>
-            <input type="text" id="jobFormLabel" placeholder="Human-readable description" />
-          </div>
+          <input type="hidden" id="agentFormId" />
           <div class="form-row">
             <div class="form-group">
-              <label for="jobFormSchedule">Schedule (cron)</label>
-              <input type="text" id="jobFormSchedule" placeholder="*/30 * * * *" />
+              <label>ID <span class="required">*</span></label>
+              <input class="form-control" id="agentFormIdInput" placeholder="engineering" />
             </div>
             <div class="form-group">
-              <label for="jobFormTimezone">Timezone</label>
-              <input
-                type="text"
-                id="jobFormTimezone"
-                placeholder="America/Chicago"
-                value="America/Chicago"
-              />
+              <label>Name <span class="required">*</span></label>
+              <input class="form-control" id="agentFormName" placeholder="Engineering Agent" />
             </div>
           </div>
           <div class="form-group">
-            <label for="jobFormPrompt">Prompt</label>
-            <textarea id="jobFormPrompt" placeholder="What should the agent do?"></textarea>
+            <label>Description</label>
+            <input class="form-control" id="agentFormDescription" placeholder="What does this agent do?" />
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="jobFormModel">Model</label>
-              <select id="jobFormModel">
-                <option value="sonnet">sonnet</option>
-                <option value="opus">opus</option>
-                <option value="haiku">haiku</option>
+              <label>Model</label>
+              <select class="form-control" id="agentFormModel">
+                <option value="sonnet">claude-sonnet (default)</option>
+                <option value="haiku">claude-haiku (fast)</option>
+                <option value="opus">claude-opus (powerful)</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="jobFormMaxTurns">Max Turns</label>
-              <input type="number" id="jobFormMaxTurns" placeholder="25" value="25" min="1" />
+              <label>Max Turns</label>
+              <input class="form-control" id="agentFormMaxTurns" type="number" min="1" max="100" value="25" />
             </div>
           </div>
           <div class="form-group">
-            <label for="jobFormWorkDir">Working Directory</label>
-            <input type="text" id="jobFormWorkDir" placeholder="/home/mwhit/clawd" />
+            <label>System Prompt</label>
+            <textarea class="form-control" id="agentFormSystemPrompt" rows="4" placeholder="You are an agent that..."></textarea>
+            <div class="form-hint">Inline text or path to .md file (e.g. ~/.familiar/prompts/agent.md)</div>
           </div>
-          <div class="form-group-checkbox">
-            <input type="checkbox" id="jobFormAnnounce" />
-            <label for="jobFormAnnounce">Announce results to chat</label>
+          <div class="form-group">
+            <label>Working Directory</label>
+            <input class="form-control" id="agentFormWorkingDirectory" placeholder="~/workspace" />
           </div>
-          <div class="form-group-checkbox">
-            <input type="checkbox" id="jobFormEnabled" checked />
-            <label for="jobFormEnabled">Enabled</label>
+          <div class="form-group">
+            <label>Tools (comma-separated)</label>
+            <input class="form-control" id="agentFormTools" placeholder="Bash,Read,Write,Edit,Glob,Grep" />
+            <div class="form-hint">Available: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Suppress Pattern</label>
+              <input class="form-control" id="agentFormSuppressPattern" placeholder="HEARTBEAT_OK" />
+              <div class="form-hint">Regex — suppress delivery if output matches</div>
+            </div>
+            <div class="form-group">
+              <label>Deliver To (chat ID)</label>
+              <input class="form-control" id="agentFormDeliverTo" placeholder="Optional override" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Enabled</label>
+            <label class="toggle" style="margin-top: 4px;">
+              <input type="checkbox" id="agentFormEnabled" checked />
+              <span class="toggle-slider"></span>
+            </label>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" onclick="closeJobModal()">Cancel</button>
-          <button class="btn-save" id="jobModalSave" onclick="saveJob()">Create</button>
+          <button class="btn" onclick="closeModal('agentModal')">Cancel</button>
+          <button class="btn btn-primary" id="agentModalSave" onclick="saveAgent()">Create</button>
         </div>
       </div>
     </div>
 
-    <!-- Task Modal -->
-    <div class="modal-overlay" id="taskModal">
+    <!-- ── Schedule Modal ── -->
+    <div id="scheduleModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="taskModalTitle">Create Task</h3>
-          <button class="close-btn" onclick="closeTaskModal()">&times;</button>
+          <h3 id="scheduleModalTitle">New Schedule</h3>
+          <button class="modal-close" onclick="closeModal('scheduleModal')">&times;</button>
         </div>
         <div class="modal-body">
-          <input type="hidden" id="taskModalMode" value="create" />
-          <input type="hidden" id="taskFormId" value="" />
+          <input type="hidden" id="scheduleFormId" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Schedule ID <span class="required">*</span></label>
+              <input class="form-control" id="scheduleFormIdInput" placeholder="engineering-daily" />
+            </div>
+            <div class="form-group">
+              <label>Name</label>
+              <input class="form-control" id="scheduleFormName" placeholder="Daily run" />
+            </div>
+          </div>
           <div class="form-group">
-            <label>Title *</label>
-            <input type="text" id="taskFormTitle" placeholder="Task title" />
+            <label>Agent <span class="required">*</span></label>
+            <select class="form-control" id="scheduleFormAgent">
+              <option value="">Select an agent...</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cron Expression <span class="required">*</span></label>
+              <input class="form-control" id="scheduleFormSchedule" placeholder="0 */6 * * *" />
+              <div class="form-hint">e.g. "0 */6 * * *" = every 6h</div>
+            </div>
+            <div class="form-group">
+              <label>Timezone</label>
+              <input class="form-control" id="scheduleFormTimezone" value="UTC" placeholder="UTC" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Prompt <span class="required">*</span></label>
+            <textarea class="form-control" id="scheduleFormPrompt" rows="5" placeholder="Check the task queue for work assigned to you..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Enabled</label>
+            <label class="toggle" style="margin-top: 4px;">
+              <input type="checkbox" id="scheduleFormEnabled" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal('scheduleModal')">Cancel</button>
+          <button class="btn btn-primary" id="scheduleModalSave" onclick="saveSchedule()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Task Modal ── -->
+    <div id="taskModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="taskModalTitle">New Task</h3>
+          <button class="modal-close" onclick="closeModal('taskModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="taskFormId" />
+          <input type="hidden" id="taskFormMode" value="create" />
+          <div class="form-group">
+            <label>Title <span class="required">*</span></label>
+            <input class="form-control" id="taskFormTitle" placeholder="Task title" />
           </div>
           <div class="form-group">
             <label>Description</label>
-            <textarea id="taskFormDescription" rows="3" placeholder="Task description"></textarea>
+            <textarea class="form-control" id="taskFormDescription" rows="4" placeholder="Full context for the agent..."></textarea>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>Assigned Agent</label>
-              <select id="taskFormAgent">
+              <select class="form-control" id="taskFormAgent">
                 <option value="">Unassigned</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Priority (1=highest)</label>
-              <input type="number" id="taskFormPriority" value="5" min="1" max="10" />
+              <label>Priority</label>
+              <input class="form-control" id="taskFormPriority" type="number" min="1" max="10" value="5" />
+              <div class="form-hint">1 = highest, 10 = lowest</div>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>Status</label>
-              <select id="taskFormStatus">
+              <select class="form-control" id="taskFormStatus">
                 <option value="ready">Ready</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
               </select>
             </div>
             <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px">
-                <input type="checkbox" id="taskFormRecurring" /> Recurring
-              </label>
+              <label>Tags (comma-separated)</label>
+              <input class="form-control" id="taskFormTags" placeholder="bug, urgent" />
             </div>
           </div>
           <div class="form-group">
-            <label>Recurrence Schedule (cron)</label>
-            <input type="text" id="taskFormRecurrenceSchedule" placeholder="0 * * * * (optional)" />
+            <label style="display:flex;align-items:center;gap:8px;">
+              <label class="toggle">
+                <input type="checkbox" id="taskFormRecurring" onchange="toggleRecurrenceField()" />
+                <span class="toggle-slider"></span>
+              </label>
+              Recurring
+            </label>
           </div>
-          <div class="form-group">
-            <label>Tags (comma-separated)</label>
-            <input type="text" id="taskFormTags" placeholder="engineering, pipeline" />
+          <div class="form-group" id="taskRecurrenceGroup" style="display:none;">
+            <label>Recurrence Schedule</label>
+            <input class="form-control" id="taskFormRecurrenceSchedule" placeholder="0 */6 * * *" />
+            <div class="form-hint">Cron expression — task resets to ready after this interval</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" onclick="closeTaskModal()">Cancel</button>
-          <button class="btn-save" id="taskModalSave" onclick="saveTask()">Create</button>
+          <button class="btn" onclick="closeModal('taskModal')">Cancel</button>
+          <button class="btn btn-primary" id="taskModalSave" onclick="saveTask()">Create</button>
         </div>
       </div>
     </div>
 
-    <!-- Confirm Delete Dialog -->
-    <div class="confirm-overlay" id="confirmDialog">
+    <!-- ── Project Modal ── -->
+    <div id="projectModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="projectModalTitle">New Project</h3>
+          <button class="modal-close" onclick="closeModal('projectModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="projectFormId" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>ID <span class="required">*</span></label>
+              <input class="form-control" id="projectFormIdInput" placeholder="my-project" />
+            </div>
+            <div class="form-group">
+              <label>Name <span class="required">*</span></label>
+              <input class="form-control" id="projectFormName" placeholder="My Project" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea class="form-control" id="projectFormDescription" rows="3" placeholder="What is this project?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Path</label>
+            <input class="form-control" id="projectFormPath" placeholder="~/projects/my-project" />
+          </div>
+          <div class="form-group">
+            <label>Context File</label>
+            <input class="form-control" id="projectFormContextFile" placeholder="~/.familiar/projects/my-project.md" />
+          </div>
+          <div class="form-group">
+            <label>Tags (comma-separated)</label>
+            <input class="form-control" id="projectFormTags" placeholder="frontend, typescript" />
+          </div>
+          <div class="form-group">
+            <label>Enabled</label>
+            <label class="toggle" style="margin-top: 4px;">
+              <input type="checkbox" id="projectFormEnabled" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal('projectModal')">Cancel</button>
+          <button class="btn btn-primary" id="projectModalSave" onclick="saveProject()">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tool Modal ── -->
+    <div id="toolModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="toolModalTitle">Edit Tool</h3>
+          <button class="modal-close" onclick="closeModal('toolModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="toolFormId" />
+          <div class="form-group">
+            <label>Name</label>
+            <input class="form-control" id="toolFormName" readonly />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input class="form-control" id="toolFormDescription" placeholder="What does this tool do?" />
+          </div>
+          <div class="form-group">
+            <label>Config (JSON)</label>
+            <textarea class="form-control" id="toolFormConfig" rows="5" placeholder='{"command": "...", "args": []}'></textarea>
+          </div>
+          <div class="form-group">
+            <label>Enabled</label>
+            <label class="toggle" style="margin-top: 4px;">
+              <input type="checkbox" id="toolFormEnabled" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal('toolModal')">Cancel</button>
+          <button class="btn btn-primary" id="toolModalSave" onclick="saveTool()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Confirm dialog ── -->
+    <div id="confirmOverlay" class="modal-overlay">
       <div class="confirm-dialog">
         <p id="confirmMessage">Are you sure?</p>
         <div class="confirm-actions">
-          <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
-          <button class="btn-danger" id="confirmAction" onclick="confirmCallback()">Delete</button>
+          <button class="btn" onclick="closeConfirm()">Cancel</button>
+          <button class="btn btn-danger" id="confirmAction" onclick="runConfirm()">Delete</button>
         </div>
       </div>
     </div>
 
-    <script>
-      // -- State --
-      let token = localStorage.getItem("familiar_token") || "";
-      let jobs = [];
-      let agents = [];
-      let selectedJobId = null;
-      let refreshTimer = null;
-      let runningJobs = new Set();
-      let activeTab = "cron";
-      let pendingConfirmCallback = null;
+    <!-- Toast -->
+    <div id="toast-container"></div>
 
-      // -- Init --
-      document.addEventListener("DOMContentLoaded", () => {
-        const input = document.getElementById("tokenInput");
-        input.value = token;
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") saveToken();
+    <script>
+      'use strict';
+
+      // ── State ─────────────────────────────────────────────────────────
+      let token = localStorage.getItem('familiarToken') || '';
+      let ws = null;
+      let activeTab = 'activity';
+      let activityEntries = [];
+      let agents = [];
+      let schedules = [];
+      let cronJobs = [];
+      let tasks = [];
+      let projects = [];
+      let tools = [];
+      let confirmCallback = null;
+
+      // ── Init ──────────────────────────────────────────────────────────
+      if (token) {
+        document.getElementById('tokenInput').value = token;
+        connectWs();
+        loadAll();
+      }
+
+      // Tab switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('tab-' + tab).classList.add('active');
+          activeTab = tab;
         });
-        if (token) {
-          loadJobs();
-          startAutoRefresh();
+      });
+
+      // Modal overlay click-to-close
+      document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', e => {
+          if (e.target === overlay) {
+            overlay.classList.remove('visible');
+          }
+        });
+      });
+
+      // Escape key closes modals
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          document.querySelectorAll('.modal-overlay.visible').forEach(m => m.classList.remove('visible'));
         }
       });
 
-      // -- Token --
-      function saveToken() {
-        token = document.getElementById("tokenInput").value.trim();
+      // ── Token ─────────────────────────────────────────────────────────
+      function applyToken() {
+        token = document.getElementById('tokenInput').value.trim();
+        if (!token) { toast('Enter a token first', 'error'); return; }
+        localStorage.setItem('familiarToken', token);
+        connectWs();
+        loadAll();
+      }
+
+      document.getElementById('tokenInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') applyToken();
+      });
+
+      // ── WebSocket ─────────────────────────────────────────────────────
+      function connectWs() {
         if (!token) return;
-        localStorage.setItem("familiar_token", token);
-        loadJobs();
-        startAutoRefresh();
+        if (ws) { ws.close(); ws = null; }
+
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const url = `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+
+        setWsStatus('connecting');
+        try {
+          ws = new WebSocket(url);
+        } catch (e) {
+          setWsStatus('error');
+          return;
+        }
+
+        ws.onopen = () => setWsStatus('connected');
+        ws.onclose = () => { setWsStatus('error'); ws = null; setTimeout(connectWs, 5000); };
+        ws.onerror = () => setWsStatus('error');
+
+        ws.onmessage = e => {
+          let msg;
+          try { msg = JSON.parse(e.data); } catch { return; }
+          handleWsEvent(msg);
+        };
       }
 
-      // -- Tab Navigation --
-      function switchTab(tab) {
-        activeTab = tab;
-        document.querySelectorAll(".tab-btn").forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.tab === tab);
-        });
-        document.querySelectorAll(".tab-panel").forEach((panel) => {
-          panel.classList.toggle("active", panel.id === "tab-" + tab);
-        });
-
-        if (tab === "tasks") loadTasks();
-        if (tab === "agents") loadAgents();
-        if (tab === "pipeline") loadPipelineHealth();
+      function setWsStatus(state) {
+        const dot = document.getElementById('wsDot');
+        const label = document.getElementById('wsLabel');
+        dot.className = 'ws-dot' + (state === 'connected' ? ' connected' : state === 'error' ? ' error' : '');
+        label.textContent = state;
       }
 
-      // -- API helpers --
-      function apiBase() {
-        return window.location.origin;
+      function handleWsEvent(msg) {
+        if (msg.type === 'connected') return;
+
+        if (msg.type === 'activity') {
+          prependActivity(msg.entry, true);
+          return;
+        }
+
+        if (msg.type === 'schedule:started' || msg.type === 'schedule:completed') {
+          const entry = {
+            type: 'schedule_run',
+            agent_id: msg.agentId,
+            schedule_id: msg.scheduleId,
+            summary: msg.type === 'schedule:started'
+              ? `Schedule ${msg.scheduleId} started`
+              : `Schedule ${msg.scheduleId} ${msg.isError ? 'failed' : 'completed'} (${formatDuration(msg.durationMs)}, $${(msg.costUsd || 0).toFixed(4)})`,
+            details: msg.type === 'schedule:completed' ? JSON.stringify({ durationMs: msg.durationMs, costUsd: msg.costUsd, isError: msg.isError }) : null,
+            created_at: new Date().toISOString(),
+          };
+          prependActivity(entry, true);
+
+          if (msg.type === 'schedule:completed' && activeTab === 'schedules') {
+            loadSchedules();
+          }
+        }
+
+        if (msg.type === 'task:updated') {
+          const updated = msg.task;
+          const idx = tasks.findIndex(t => t.id === updated.id);
+          if (idx >= 0) tasks[idx] = updated;
+          else tasks.unshift(updated);
+          if (activeTab === 'tasks') renderTasks();
+        }
       }
 
-      async function apiFetch(path, opts = {}) {
-        const res = await fetch(apiBase() + path, {
-          ...opts,
-          headers: {
-            "Content-Type": "application/json",
-            "x-familiar-token": token,
-            ...(opts.headers || {}),
-          },
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        return data;
-      }
-
-      // -- Load Jobs --
-      async function loadJobs() {
+      // ── Load all data ─────────────────────────────────────────────────
+      function loadAll() {
         if (!token) return;
-
-        try {
-          const data = await apiFetch("/api/cron/jobs");
-          jobs = data.jobs || [];
-          renderJobs();
-          setStatus("connected", true);
-        } catch (e) {
-          setStatus(e.message, false);
-          if (e.message.includes("Unauthorized")) {
-            toast("Invalid token", "error");
-          }
-        }
+        loadActivity();
+        loadAgents();
+        loadSchedules();
+        loadTasks();
+        loadProjects();
+        loadTools();
       }
 
-      // -- Render Jobs --
-      function renderJobs() {
-        const container = document.getElementById("jobsContainer");
-        document.getElementById("jobCount").textContent = jobs.length;
-
-        if (jobs.length === 0) {
-          container.innerHTML = `
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>No cron jobs configured</div>
-          </div>
-        `;
-          return;
-        }
-
-        let html = `
-        <table class="jobs-table">
-          <thead>
-            <tr>
-              <th>Job</th>
-              <th>Schedule</th>
-              <th>Status</th>
-              <th>Last Run</th>
-              <th class="hide-mobile">Next Run</th>
-              <th class="hide-mobile">Runs</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-        for (const job of jobs) {
-          const isSelected = selectedJobId === job.id;
-          const isRunning = runningJobs.has(job.id);
-
-          html += `
-          <tr class="${isSelected ? "selected" : ""}" onclick="selectJob('${esc(job.id)}')">
-            <td>
-              <div class="job-id">${esc(job.id)}</div>
-              ${job.label ? `<div class="job-label">${esc(job.label)}</div>` : ""}
-            </td>
-            <td>${esc(job.schedule)}</td>
-            <td>${statusBadge(job)}</td>
-            <td>${formatRelative(job.lastRun)}</td>
-            <td class="hide-mobile">${formatRelative(job.nextRun)}</td>
-            <td class="hide-mobile">${job.runCount}</td>
-            <td>
-              <div class="action-group">
-                <button class="run-now-btn ${isRunning ? "running" : ""}"
-                        onclick="event.stopPropagation(); triggerJob('${esc(job.id)}')"
-                        ${isRunning || job.enabled === false ? "disabled" : ""}>
-                  ${isRunning ? "Running..." : "Run"}
-                </button>
-                <button class="action-btn"
-                        onclick="event.stopPropagation(); openEditJobModal('${esc(job.id)}')"
-                        title="Edit">Edit</button>
-                <button class="action-btn delete"
-                        onclick="event.stopPropagation(); confirmDeleteJob('${esc(job.id)}')"
-                        title="Delete">Del</button>
-              </div>
-            </td>
-          </tr>
-        `;
-        }
-
-        html += "</tbody></table>";
-        container.innerHTML = html;
-      }
-
-      function statusBadge(job) {
-        if (job.enabled === false) return '<span class="badge badge-disabled">disabled</span>';
-        if (runningJobs.has(job.id)) return '<span class="badge badge-running">running</span>';
-        if (!job.lastRun) return '<span class="badge badge-never">never run</span>';
-        return '<span class="badge badge-ok">ok</span>';
-      }
-
-      // -- Select Job / Run History --
-      async function selectJob(jobId) {
-        if (selectedJobId === jobId) {
-          closeHistory();
-          return;
-        }
-
-        selectedJobId = jobId;
-        renderJobs();
-
-        const panel = document.getElementById("runHistory");
-        const titleEl = document.getElementById("runHistoryTitle");
-        const container = document.getElementById("runsContainer");
-
-        titleEl.textContent = `Run History: ${jobId}`;
-        container.innerHTML = '<div class="loading">Loading runs</div>';
-        panel.classList.add("visible");
-
-        try {
-          const data = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/runs`);
-          renderRuns(data.runs || []);
-        } catch (e) {
-          container.innerHTML = `<div class="empty-state"><div>Failed to load: ${esc(e.message)}</div></div>`;
-        }
-      }
-
-      function renderRuns(runs) {
-        const container = document.getElementById("runsContainer");
-
-        if (runs.length === 0) {
-          container.innerHTML = '<div class="empty-state"><div>No runs recorded yet</div></div>';
-          return;
-        }
-
-        let html = `
-        <table class="runs-table">
-          <thead>
-            <tr>
-              <th>Started</th>
-              <th>Duration</th>
-              <th>Cost</th>
-              <th>Turns</th>
-              <th>Status</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-        for (const run of runs) {
-          html += `
-          <tr>
-            <td>${formatTimestamp(run.startedAt)}</td>
-            <td>${formatDuration(run.durationMs)}</td>
-            <td>${run.costUsd != null ? "$" + run.costUsd.toFixed(4) : "-"}</td>
-            <td>${run.numTurns ?? "-"}</td>
-            <td>${run.isError ? '<span class="badge badge-error">error</span>' : '<span class="badge badge-ok">ok</span>'}</td>
-            <td><div class="result-preview" title="${esc(run.resultPreview || "")}">${esc(run.resultPreview || "-")}</div></td>
-          </tr>
-        `;
-        }
-
-        html += "</tbody></table>";
-        container.innerHTML = html;
-      }
-
-      function closeHistory() {
-        selectedJobId = null;
-        document.getElementById("runHistory").classList.remove("visible");
-        renderJobs();
-      }
-
-      // -- Job CRUD Modal --
-      function openCreateJobModal() {
-        document.getElementById("jobModalMode").value = "create";
-        document.getElementById("jobModalTitle").textContent = "Create Job";
-        document.getElementById("jobModalSave").textContent = "Create";
-        document.getElementById("jobFormId").value = "";
-        document.getElementById("jobFormId").disabled = false;
-        document.getElementById("jobFormLabel").value = "";
-        document.getElementById("jobFormSchedule").value = "";
-        document.getElementById("jobFormTimezone").value = "America/Chicago";
-        document.getElementById("jobFormPrompt").value = "";
-        document.getElementById("jobFormModel").value = "sonnet";
-        document.getElementById("jobFormMaxTurns").value = "25";
-        document.getElementById("jobFormWorkDir").value = "";
-        document.getElementById("jobFormAnnounce").checked = false;
-        document.getElementById("jobFormEnabled").checked = true;
-        document.getElementById("jobModal").classList.add("visible");
-      }
-
-      function openEditJobModal(jobId) {
-        const job = jobs.find((j) => j.id === jobId);
-        if (!job) return;
-
-        document.getElementById("jobModalMode").value = "edit";
-        document.getElementById("jobModalTitle").textContent = `Edit: ${job.id}`;
-        document.getElementById("jobModalSave").textContent = "Save";
-        document.getElementById("jobFormId").value = job.id;
-        document.getElementById("jobFormId").disabled = true;
-        document.getElementById("jobFormLabel").value = job.label || "";
-        document.getElementById("jobFormSchedule").value = job.schedule || "";
-        document.getElementById("jobFormTimezone").value = job.timezone || "America/Chicago";
-        document.getElementById("jobFormPrompt").value = job.prompt || "";
-        document.getElementById("jobFormModel").value = job.model || "sonnet";
-        document.getElementById("jobFormMaxTurns").value = job.maxTurns ?? 25;
-        document.getElementById("jobFormWorkDir").value = job.workingDirectory || "";
-        document.getElementById("jobFormAnnounce").checked = !!job.announce;
-        document.getElementById("jobFormEnabled").checked = job.enabled !== false;
-        document.getElementById("jobModal").classList.add("visible");
-      }
-
-      function closeJobModal() {
-        document.getElementById("jobModal").classList.remove("visible");
-      }
-
-      async function saveJob() {
-        const mode = document.getElementById("jobModalMode").value;
-        const id = document.getElementById("jobFormId").value.trim();
-        if (!id) {
-          toast("Job ID is required", "error");
-          return;
-        }
-
-        const schedule = document.getElementById("jobFormSchedule").value.trim();
-        if (!schedule) {
-          toast("Schedule is required", "error");
-          return;
-        }
-
-        const payload = {
-          id: id,
-          label: document.getElementById("jobFormLabel").value.trim() || undefined,
-          schedule: schedule,
-          timezone: document.getElementById("jobFormTimezone").value.trim() || undefined,
-          prompt: document.getElementById("jobFormPrompt").value.trim() || undefined,
-          model: document.getElementById("jobFormModel").value,
-          maxTurns: parseInt(document.getElementById("jobFormMaxTurns").value) || 25,
-          workingDirectory: document.getElementById("jobFormWorkDir").value.trim() || undefined,
-          announce: document.getElementById("jobFormAnnounce").checked,
-          enabled: document.getElementById("jobFormEnabled").checked,
+      // ── API helpers ───────────────────────────────────────────────────
+      async function api(method, path, body) {
+        const opts = {
+          method: method || 'GET',
+          headers: { 'x-familiar-token': token },
         };
-
-        const saveBtn = document.getElementById("jobModalSave");
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving...";
-
-        try {
-          if (mode === "create") {
-            await apiFetch("/api/cron/jobs", {
-              method: "POST",
-              body: JSON.stringify(payload),
-            });
-            toast(`Job "${id}" created`, "success");
-          } else {
-            await apiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, {
-              method: "PUT",
-              body: JSON.stringify(payload),
-            });
-            toast(`Job "${id}" updated`, "success");
-          }
-          closeJobModal();
-          await loadJobs();
-        } catch (e) {
-          toast(`Failed to save: ${e.message}`, "error");
-        } finally {
-          saveBtn.disabled = false;
-          saveBtn.textContent = mode === "create" ? "Create" : "Save";
+        if (body != null) {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body);
         }
+        const res = await fetch(path, opts);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.statusText }));
+          throw new Error(err.error || res.statusText);
+        }
+        return res.json();
       }
 
-      // -- Delete Job --
-      function confirmDeleteJob(jobId) {
-        document.getElementById("confirmMessage").textContent =
-          `Delete job "${jobId}"? This cannot be undone.`;
-        pendingConfirmCallback = async () => {
-          closeConfirm();
-          try {
-            await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}`, {
-              method: "DELETE",
-            });
-            toast(`Job "${jobId}" deleted`, "success");
-            if (selectedJobId === jobId) closeHistory();
-            await loadJobs();
-          } catch (e) {
-            toast(`Failed to delete: ${e.message}`, "error");
+      // ── Escape helper ─────────────────────────────────────────────────
+      function esc(str) {
+        if (!str) return '';
+        const d = document.createElement('div');
+        d.textContent = String(str);
+        return d.innerHTML;
+      }
+
+      // ── Format helpers ────────────────────────────────────────────────
+      function formatRelative(isoStr) {
+        if (!isoStr) return '<span style="color:var(--text-muted)">—</span>';
+        try {
+          const diff = Date.now() - new Date(isoStr).getTime();
+          if (diff < 0) {
+            const a = Math.abs(diff);
+            if (a < 60000) return `in ${Math.floor(a/1000)}s`;
+            if (a < 3600000) return `in ${Math.floor(a/60000)}m`;
+            if (a < 86400000) return `in ${Math.floor(a/3600000)}h`;
+            return `in ${Math.floor(a/86400000)}d`;
           }
-        };
-        document.getElementById("confirmDialog").classList.add("visible");
+          if (diff < 60000) return `${Math.floor(diff/1000)}s ago`;
+          if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+          if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+          return `${Math.floor(diff/86400000)}d ago`;
+        } catch { return esc(isoStr); }
       }
 
-      function confirmCallback() {
-        if (pendingConfirmCallback) pendingConfirmCallback();
+      function formatDuration(ms) {
+        if (ms == null) return '—';
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms/1000).toFixed(1)}s`;
+        const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+        return `${m}m ${s}s`;
+      }
+
+      // ── Toast ─────────────────────────────────────────────────────────
+      function toast(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        document.getElementById('toast-container').appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 4000);
+      }
+
+      // ── Confirm ───────────────────────────────────────────────────────
+      function confirm(msg, actionLabel, cb) {
+        document.getElementById('confirmMessage').textContent = msg;
+        document.getElementById('confirmAction').textContent = actionLabel || 'Delete';
+        confirmCallback = cb;
+        document.getElementById('confirmOverlay').classList.add('visible');
+      }
+
+      function runConfirm() {
+        closeConfirm();
+        if (confirmCallback) confirmCallback();
       }
 
       function closeConfirm() {
-        document.getElementById("confirmDialog").classList.remove("visible");
-        pendingConfirmCallback = null;
+        document.getElementById('confirmOverlay').classList.remove('visible');
+        confirmCallback = null;
       }
 
-      // -- Trigger Job --
-      async function triggerJob(jobId) {
-        if (runningJobs.has(jobId)) return;
+      function closeModal(id) {
+        document.getElementById(id).classList.remove('visible');
+      }
 
-        runningJobs.add(jobId);
-        renderJobs();
-        toast(`Triggering ${jobId}...`, "info");
-
+      // ── Activity tab ──────────────────────────────────────────────────
+      async function loadActivity() {
+        if (!token) return;
         try {
-          const result = await apiFetch(`/api/cron/jobs/${encodeURIComponent(jobId)}/run`, {
-            method: "POST",
-          });
-
-          runningJobs.delete(jobId);
-
-          if (result.status === "error") {
-            toast(
-              `${jobId} completed with error: ${result.text?.slice(0, 100) || "unknown"}`,
-              "error",
-            );
-          } else {
-            const cost = result.costUsd != null ? ` ($${result.costUsd.toFixed(4)})` : "";
-            const dur = result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : "";
-            toast(`${jobId} completed${dur}${cost}`, "success");
-          }
-
-          await loadJobs();
-          if (selectedJobId === jobId) {
-            selectJob(jobId);
-          }
+          const data = await api('GET', '/api/activity?limit=100');
+          activityEntries = data.activity || [];
+          renderActivity();
+          populateActivityAgentFilter();
         } catch (e) {
-          runningJobs.delete(jobId);
-          toast(`Failed to trigger ${jobId}: ${e.message}`, "error");
-          renderJobs();
+          document.getElementById('activityFeed').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
         }
       }
 
-      // -- Agents --
+      function populateActivityAgentFilter() {
+        const sel = document.getElementById('activityAgentFilter');
+        const current = sel.value;
+        const agentIds = [...new Set(activityEntries.map(a => a.agent_id).filter(Boolean))];
+        sel.innerHTML = '<option value="">All agents</option>' +
+          agentIds.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join('');
+        sel.value = current;
+      }
+
+      function prependActivity(entry, isNew = false) {
+        activityEntries.unshift(entry);
+        if (activityEntries.length > 200) activityEntries.pop();
+        if (activeTab === 'activity') renderActivity(isNew ? entry : null);
+      }
+
+      function renderActivity(newEntry = null) {
+        const typeFilter = document.getElementById('activityTypeFilter').value;
+        const agentFilter = document.getElementById('activityAgentFilter').value;
+        const feed = document.getElementById('activityFeed');
+
+        const filtered = activityEntries.filter(e => {
+          if (typeFilter && e.type !== typeFilter) return false;
+          if (agentFilter && e.agent_id !== agentFilter) return false;
+          return true;
+        });
+
+        document.getElementById('activityCount').textContent = filtered.length;
+
+        if (filtered.length === 0) {
+          feed.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">◌</div>
+              <div class="empty-title">No activity yet</div>
+              <div class="empty-desc">Activity will appear here when schedules run or tasks are updated.</div>
+            </div>`;
+          return;
+        }
+
+        const icons = {
+          schedule_run: '⚙',
+          task_change: '✓',
+          agent_spawn: '🤖',
+          chat: '💬',
+          error: '✗',
+        };
+
+        let html = '';
+        for (const entry of filtered) {
+          const isRecent = newEntry && entry === newEntry;
+          const icon = icons[entry.type] || '·';
+          const hasDetails = !!entry.details;
+          const entryId = 'ae-' + (entry.id || Math.random().toString(36).slice(2));
+
+          html += `
+            <div class="activity-entry${isRecent ? ' new' : ''}">
+              <div class="activity-icon">${icon}</div>
+              <div class="activity-body">
+                <div class="activity-summary">${esc(entry.summary)}</div>
+                <div class="activity-meta">
+                  <span>${formatRelative(entry.created_at)}</span>
+                  ${entry.agent_id ? `<span>agent: <code>${esc(entry.agent_id)}</code></span>` : ''}
+                  ${entry.schedule_id ? `<span>schedule: <code>${esc(entry.schedule_id)}</code></span>` : ''}
+                  ${entry.task_id ? `<span>task: <code>#${entry.task_id}</code></span>` : ''}
+                </div>
+                ${hasDetails ? `<div class="activity-details" id="${entryId}">${esc(formatDetails(entry.details))}</div>` : ''}
+              </div>
+              ${hasDetails ? `<button class="activity-expand" onclick="toggleDetails('${entryId}')">+</button>` : ''}
+            </div>`;
+        }
+
+        feed.innerHTML = html;
+      }
+
+      function formatDetails(str) {
+        try { return JSON.stringify(JSON.parse(str), null, 2); } catch { return str; }
+      }
+
+      function toggleDetails(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const btn = el.closest('.activity-entry').querySelector('.activity-expand');
+        el.classList.toggle('open');
+        if (btn) btn.textContent = el.classList.contains('open') ? '−' : '+';
+      }
+
+      // ── Agents tab ────────────────────────────────────────────────────
       async function loadAgents() {
         if (!token) return;
-        const container = document.getElementById("agentsContainer");
-        container.innerHTML = '<div class="loading">Loading agents</div>';
-
         try {
-          // Load cron agents (the actual configured agents) + sub-agents
-          const [cronData, subData] = await Promise.all([
-            apiFetch("/api/cron/jobs"),
-            apiFetch("/api/agents").catch(() => ({ active: [], recent: [] })),
+          const [agentData, scheduleData] = await Promise.all([
+            api('GET', '/api/agents'),
+            api('GET', '/api/schedules').catch(() => ({ schedules: [] })),
           ]);
-          const cronAgents = cronData.jobs || [];
-          const subAgents = [...(subData.active || []), ...(subData.recent || [])];
-          renderAgents(cronAgents, subAgents);
+          agents = agentData.agents || [];
+          // Count schedules per agent
+          const schedCounts = {};
+          for (const s of (scheduleData.schedules || [])) {
+            schedCounts[s.agent_id] = (schedCounts[s.agent_id] || 0) + 1;
+          }
+          agents.forEach(a => { a._scheduleCount = schedCounts[a.id] || 0; });
+          document.getElementById('agentCount').textContent = agents.length;
+          renderAgents();
+          populateAgentDropdowns();
         } catch (e) {
-          container.innerHTML = `<div class="empty-state"><div>Failed to load agents: ${esc(e.message)}</div></div>`;
+          document.getElementById('agentsGrid').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
         }
       }
 
-      function renderAgents(cronAgents, subAgents) {
-        const container = document.getElementById("agentsContainer");
-        document.getElementById("agentCount").textContent = cronAgents.length;
+      function renderAgents() {
+        const grid = document.getElementById('agentsGrid');
 
-        if (cronAgents.length === 0) {
-          container.innerHTML = `
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>No agents configured</div>
-          </div>`;
+        if (agents.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+              <div class="empty-icon">◎</div>
+              <div class="empty-title">No agents yet</div>
+              <div class="empty-desc">Create your first agent to get started, or chat with your familiar to have it set things up for you.</div>
+              <button class="btn btn-success" onclick="openAgentModal()">+ Create Agent</button>
+            </div>`;
           return;
         }
+
+        const modelColors = { sonnet: 'badge-blue', haiku: 'badge-green', opus: 'badge-purple' };
+
+        grid.innerHTML = agents.map(a => {
+          const modelBadge = `<span class="badge ${modelColors[a.model] || 'badge-gray'}">${esc(a.model || 'sonnet')}</span>`;
+          const enabledBadge = a.enabled
+            ? `<span class="badge badge-green">on</span>`
+            : `<span class="badge badge-gray">off</span>`;
+          return `
+            <div class="card" onclick="openAgentModal('${esc(a.id)}')">
+              <div class="card-title">
+                ${esc(a.name)}
+                ${enabledBadge}
+              </div>
+              ${a.description ? `<div class="card-desc">${esc(a.description)}</div>` : '<div class="card-desc" style="opacity:0.4">No description</div>'}
+              <div class="card-meta">
+                ${modelBadge}
+                ${a._scheduleCount > 0 ? `<span class="badge badge-gray">${a._scheduleCount} schedule${a._scheduleCount !== 1 ? 's' : ''}</span>` : ''}
+                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteAgent('${esc(a.id)}', '${esc(a.name)}')">Delete</button>
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      function populateAgentDropdowns() {
+        // For schedules and tasks modal
+        ['scheduleFormAgent', 'taskFormAgent'].forEach(selId => {
+          const sel = document.getElementById(selId);
+          if (!sel) return;
+          const current = sel.value;
+          sel.innerHTML = (selId === 'taskFormAgent' ? '<option value="">Unassigned</option>' : '<option value="">Select an agent...</option>') +
+            agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+          sel.value = current;
+        });
+
+        // Task agent filter
+        const taskAgentFilter = document.getElementById('taskAgentFilter');
+        if (taskAgentFilter) {
+          const current = taskAgentFilter.value;
+          taskAgentFilter.innerHTML = '<option value="">All agents</option>' +
+            agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+          taskAgentFilter.value = current;
+        }
+      }
+
+      function openAgentModal(agentId) {
+        const isEdit = !!agentId;
+        document.getElementById('agentModalTitle').textContent = isEdit ? 'Edit Agent' : 'New Agent';
+        document.getElementById('agentModalSave').textContent = isEdit ? 'Save' : 'Create';
+        document.getElementById('agentFormId').value = agentId || '';
+
+        if (isEdit) {
+          const a = agents.find(x => x.id === agentId);
+          if (!a) return;
+          document.getElementById('agentFormIdInput').value = a.id;
+          document.getElementById('agentFormIdInput').disabled = true;
+          document.getElementById('agentFormName').value = a.name || '';
+          document.getElementById('agentFormDescription').value = a.description || '';
+          document.getElementById('agentFormModel').value = a.model || 'sonnet';
+          document.getElementById('agentFormMaxTurns').value = a.max_turns ?? 25;
+          document.getElementById('agentFormSystemPrompt').value = a.system_prompt || '';
+          document.getElementById('agentFormWorkingDirectory').value = a.working_directory || '';
+          document.getElementById('agentFormTools').value = a.tools ? JSON.parse(a.tools || '[]').join(', ') : '';
+          document.getElementById('agentFormSuppressPattern').value = a.suppress_pattern || '';
+          document.getElementById('agentFormDeliverTo').value = a.deliver_to || '';
+          document.getElementById('agentFormEnabled').checked = !!a.enabled;
+        } else {
+          document.getElementById('agentFormIdInput').value = '';
+          document.getElementById('agentFormIdInput').disabled = false;
+          document.getElementById('agentFormName').value = '';
+          document.getElementById('agentFormDescription').value = '';
+          document.getElementById('agentFormModel').value = 'sonnet';
+          document.getElementById('agentFormMaxTurns').value = 25;
+          document.getElementById('agentFormSystemPrompt').value = '';
+          document.getElementById('agentFormWorkingDirectory').value = '';
+          document.getElementById('agentFormTools').value = 'Bash,Read,Write,Edit,Glob,Grep';
+          document.getElementById('agentFormSuppressPattern').value = '';
+          document.getElementById('agentFormDeliverTo').value = '';
+          document.getElementById('agentFormEnabled').checked = true;
+        }
+
+        document.getElementById('agentModal').classList.add('visible');
+      }
+
+      async function saveAgent() {
+        const id = document.getElementById('agentFormId').value;
+        const isEdit = !!id;
+        const newId = document.getElementById('agentFormIdInput').value.trim();
+        const name = document.getElementById('agentFormName').value.trim();
+
+        if (!name) { toast('Name is required', 'error'); return; }
+        if (!isEdit && !newId) { toast('ID is required', 'error'); return; }
+
+        const toolsRaw = document.getElementById('agentFormTools').value.trim();
+        const tools = toolsRaw ? toolsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+        const payload = {
+          ...(isEdit ? {} : { id: newId }),
+          name,
+          description: document.getElementById('agentFormDescription').value.trim() || null,
+          model: document.getElementById('agentFormModel').value,
+          max_turns: parseInt(document.getElementById('agentFormMaxTurns').value) || 25,
+          system_prompt: document.getElementById('agentFormSystemPrompt').value.trim() || null,
+          working_directory: document.getElementById('agentFormWorkingDirectory').value.trim() || null,
+          tools: tools.length ? JSON.stringify(tools) : null,
+          suppress_pattern: document.getElementById('agentFormSuppressPattern').value.trim() || null,
+          deliver_to: document.getElementById('agentFormDeliverTo').value.trim() || null,
+          enabled: document.getElementById('agentFormEnabled').checked ? 1 : 0,
+        };
+
+        const btn = document.getElementById('agentModalSave');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        try {
+          if (isEdit) {
+            await api('PUT', `/api/agents/${encodeURIComponent(id)}`, payload);
+            toast('Agent updated', 'success');
+          } else {
+            await api('POST', '/api/agents', payload);
+            toast('Agent created', 'success');
+          }
+          closeModal('agentModal');
+          await loadAgents();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = isEdit ? 'Save' : 'Create';
+        }
+      }
+
+      async function deleteAgent(id, name) {
+        confirm(`Delete agent "${name}"? This will also delete all its schedules. This cannot be undone.`, 'Delete', async () => {
+          try {
+            await api('DELETE', `/api/agents/${encodeURIComponent(id)}`);
+            toast('Agent deleted', 'success');
+            await loadAgents();
+            await loadSchedules();
+          } catch (e) {
+            toast(`Failed: ${e.message}`, 'error');
+          }
+        });
+      }
+
+      // ── Schedules tab ──────────────────────────────────────────────────
+      async function loadSchedules() {
+        if (!token) return;
+        try {
+          const [schedData, cronData] = await Promise.all([
+            api('GET', '/api/schedules'),
+            api('GET', '/api/cron').catch(() => ({ jobs: [] })),
+          ]);
+          schedules = schedData.schedules || [];
+          cronJobs = cronData.jobs || [];
+
+          // Merge run state from cronJobs into schedules by agentId
+          const cronByAgent = {};
+          for (const j of cronJobs) { cronByAgent[j.id] = j; }
+          schedules.forEach(s => {
+            const cron = cronByAgent[s.agent_id];
+            s._nextRun = cron?.nextRun ?? null;
+            s._lastRun = cron?.lastRun ?? null;
+            s._runCount = cron?.runCount ?? 0;
+          });
+
+          document.getElementById('scheduleCount').textContent = schedules.length;
+          renderSchedules();
+        } catch (e) {
+          document.getElementById('schedulesContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderSchedules() {
+        const container = document.getElementById('schedulesContainer');
+
+        if (schedules.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">◷</div>
+              <div class="empty-title">No schedules yet</div>
+              <div class="empty-desc">Schedules define when agents run and what work they do. Create an agent first, then add a schedule.</div>
+              <button class="btn btn-success" onclick="openScheduleModal()">+ Create Schedule</button>
+            </div>`;
+          return;
+        }
+
+        // Build agent name lookup
+        const agentNames = {};
+        agents.forEach(a => { agentNames[a.id] = a.name || a.id; });
 
         let html = `
-        <table class="agents-table">
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Model</th>
-              <th>Schedule</th>
-              <th>Status</th>
-              <th class="hide-mobile">Last Run</th>
-              <th class="hide-mobile">Runs</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name / ID</th>
+                <th>Agent</th>
+                <th>Schedule</th>
+                <th class="hide-mobile">Next Run</th>
+                <th class="hide-mobile">Last Run</th>
+                <th class="hide-mobile">Runs</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>`;
 
-        for (const agent of cronAgents) {
-          const isRunning = runningJobs.has(agent.id);
-          const statusHtml =
-            agent.enabled === false
-              ? '<span class="badge badge-disabled">disabled</span>'
-              : isRunning
-                ? '<span class="badge badge-running">running</span>'
-                : !agent.lastRun
-                  ? '<span class="badge badge-never">never run</span>'
-                  : '<span class="badge badge-ok">ok</span>';
+        for (const s of schedules) {
+          const enabledBadge = s.enabled
+            ? `<span class="badge badge-green">on</span>`
+            : `<span class="badge badge-gray">off</span>`;
 
           html += `
-          <tr>
-            <td>
-              <span class="job-id">${esc(agent.id)}</span>
-              ${agent.label ? `<div class="job-label">${esc(agent.label)}</div>` : ""}
-            </td>
-            <td><span class="badge badge-idle">${esc(agent.model || "sonnet")}</span></td>
-            <td>${esc(agent.schedule)}</td>
-            <td>${statusHtml}</td>
-            <td class="hide-mobile">${formatRelative(agent.lastRun)}</td>
-            <td class="hide-mobile">${agent.runCount ?? 0}</td>
-          </tr>
-        `;
-        }
-
-        html += "</tbody></table>";
-
-        // Show active sub-agents if any
-        if (subAgents.length > 0) {
-          html += `<h3 style="margin-top:24px;font-size:13px;color:var(--text-bright);margin-bottom:8px">Active Sub-Agents <span class="count">${subAgents.length}</span></h3>`;
-          html += `<table class="agents-table"><thead><tr><th>ID</th><th>Status</th><th>Started</th><th>Cost</th></tr></thead><tbody>`;
-          for (const sa of subAgents) {
-            const statusClass =
-              sa.status === "active" || sa.status === "running"
-                ? "badge-active"
-                : sa.status === "idle"
-                  ? "badge-idle"
-                  : sa.status === "error"
-                    ? "badge-error"
-                    : "badge-ok";
-            html += `<tr>
-              <td><span class="job-id">${esc(sa.id)}</span></td>
-              <td><span class="badge ${statusClass}">${esc(sa.status || "unknown")}</span></td>
-              <td>${formatRelative(sa.started_at || sa.startedAt)}</td>
-              <td>${sa.cost != null || sa.costUsd != null ? "$" + (sa.cost ?? sa.costUsd).toFixed(4) : "-"}</td>
+            <tr class="clickable" onclick="openScheduleModal('${esc(s.id)}')">
+              <td>
+                <div style="font-weight:600;color:var(--text-bright)">${esc(s.name || s.id)}</div>
+                ${s.name ? `<div style="font-size:10px;color:var(--text-muted)">${esc(s.id)}</div>` : ''}
+              </td>
+              <td>${esc(agentNames[s.agent_id] || s.agent_id)}</td>
+              <td><code>${esc(s.schedule)}</code></td>
+              <td class="hide-mobile">${formatRelative(s._nextRun)}</td>
+              <td class="hide-mobile">${formatRelative(s._lastRun)}</td>
+              <td class="hide-mobile">${s._runCount ?? 0}</td>
+              <td>${enabledBadge}</td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn btn-sm" onclick="event.stopPropagation(); runScheduleNow('${esc(s.agent_id)}')" title="Run now">Run</button>
+                  <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteSchedule('${esc(s.id)}', '${esc(s.name || s.id)}')">Del</button>
+                </div>
+              </td>
             </tr>`;
-          }
-          html += "</tbody></table>";
         }
 
+        html += '</tbody></table>';
         container.innerHTML = html;
       }
 
-      // -- Pipeline Health --
-      async function loadPipelineHealth() {
-        if (!token) return;
-        const container = document.getElementById("pipelineContainer");
-        container.innerHTML = '<div class="loading">Loading pipeline health</div>';
+      function openScheduleModal(scheduleId) {
+        const isEdit = !!scheduleId;
+        document.getElementById('scheduleModalTitle').textContent = isEdit ? 'Edit Schedule' : 'New Schedule';
+        document.getElementById('scheduleModalSave').textContent = isEdit ? 'Save' : 'Create';
+        document.getElementById('scheduleFormId').value = scheduleId || '';
+
+        // Populate agent dropdown
+        const sel = document.getElementById('scheduleFormAgent');
+        sel.innerHTML = '<option value="">Select an agent...</option>' +
+          agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+
+        if (isEdit) {
+          const s = schedules.find(x => x.id === scheduleId);
+          if (!s) return;
+          document.getElementById('scheduleFormIdInput').value = s.id;
+          document.getElementById('scheduleFormIdInput').disabled = true;
+          document.getElementById('scheduleFormName').value = s.name || '';
+          sel.value = s.agent_id;
+          document.getElementById('scheduleFormSchedule').value = s.schedule;
+          document.getElementById('scheduleFormTimezone').value = s.timezone || 'UTC';
+          document.getElementById('scheduleFormPrompt').value = s.prompt || '';
+          document.getElementById('scheduleFormEnabled').checked = !!s.enabled;
+        } else {
+          document.getElementById('scheduleFormIdInput').value = '';
+          document.getElementById('scheduleFormIdInput').disabled = false;
+          document.getElementById('scheduleFormName').value = '';
+          sel.value = '';
+          document.getElementById('scheduleFormSchedule').value = '';
+          document.getElementById('scheduleFormTimezone').value = 'UTC';
+          document.getElementById('scheduleFormPrompt').value = '';
+          document.getElementById('scheduleFormEnabled').checked = true;
+        }
+
+        document.getElementById('scheduleModal').classList.add('visible');
+      }
+
+      async function saveSchedule() {
+        const id = document.getElementById('scheduleFormId').value;
+        const isEdit = !!id;
+        const newId = document.getElementById('scheduleFormIdInput').value.trim();
+        const agentId = document.getElementById('scheduleFormAgent').value;
+        const schedule = document.getElementById('scheduleFormSchedule').value.trim();
+        const prompt = document.getElementById('scheduleFormPrompt').value.trim();
+
+        if (!isEdit && !newId) { toast('Schedule ID is required', 'error'); return; }
+        if (!agentId) { toast('Agent is required', 'error'); return; }
+        if (!schedule) { toast('Cron expression is required', 'error'); return; }
+        if (!prompt) { toast('Prompt is required', 'error'); return; }
+
+        const payload = {
+          ...(isEdit ? {} : { id: newId }),
+          agent_id: agentId,
+          name: document.getElementById('scheduleFormName').value.trim() || null,
+          schedule,
+          timezone: document.getElementById('scheduleFormTimezone').value.trim() || 'UTC',
+          prompt,
+          enabled: document.getElementById('scheduleFormEnabled').checked ? 1 : 0,
+        };
+
+        const btn = document.getElementById('scheduleModalSave');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
 
         try {
-          const data = await apiFetch("/api/pipeline-health");
-          renderPipelineHealth(data.pipelines || []);
-        } catch (e) {
-          if (e.message.includes("404") || e.message.includes("Not Found")) {
-            container.innerHTML = `
-            <div class="empty-state">
-              <div class="icon">&gt;_</div>
-              <div>Pipeline health endpoint not available yet</div>
-              <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted)">
-                GET /api/pipeline-health returned 404. This feature will be available once the endpoint is implemented.
-              </div>
-            </div>`;
+          if (isEdit) {
+            await api('PUT', `/api/schedules/${encodeURIComponent(id)}`, payload);
+            toast('Schedule updated', 'success');
           } else {
-            container.innerHTML = `<div class="empty-state"><div>Failed to load: ${esc(e.message)}</div></div>`;
+            await api('POST', '/api/schedules', payload);
+            toast('Schedule created', 'success');
           }
+          closeModal('scheduleModal');
+          await loadSchedules();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = isEdit ? 'Save' : 'Create';
         }
       }
 
-      function renderPipelineHealth(pipelines) {
-        const container = document.getElementById("pipelineContainer");
-
-        if (pipelines.length === 0) {
-          container.innerHTML = `
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>No pipeline data available</div>
-          </div>`;
-          return;
+      async function runScheduleNow(agentId) {
+        try {
+          toast('Triggering run...', 'info');
+          const res = await api('POST', `/api/cron/${encodeURIComponent(agentId)}/run`);
+          toast(`Run ${res.status === 'error' ? 'failed' : 'complete'}: ${(res.text || '').slice(0, 80)}`, res.status === 'error' ? 'error' : 'success');
+          await loadSchedules();
+          await loadActivity();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
         }
-
-        let html = '<div class="pipeline-cards">';
-
-        for (const p of pipelines) {
-          const statusClass =
-            p.status === "healthy"
-              ? "badge-ok"
-              : p.status === "degraded"
-                ? "badge-running"
-                : p.status === "down"
-                  ? "badge-error"
-                  : "badge-never";
-
-          html += `
-          <div class="pipeline-card">
-            <div class="pipeline-card-header">
-              <span class="pipeline-card-title">${esc(p.name || p.id)}</span>
-              <span class="badge ${statusClass}">${esc(p.status || "unknown")}</span>
-            </div>
-            <div class="pipeline-stat-grid">
-              <div class="pipeline-stat">
-                <div class="pipeline-stat-label">Inventory</div>
-                <div class="pipeline-stat-value">${formatNumber(p.inventory)}</div>
-              </div>
-              <div class="pipeline-stat">
-                <div class="pipeline-stat-label">24h Applied</div>
-                <div class="pipeline-stat-value">${formatNumber(p.applied24h)}</div>
-              </div>
-              <div class="pipeline-stat">
-                <div class="pipeline-stat-label">24h Failed</div>
-                <div class="pipeline-stat-value">${formatNumber(p.failed24h)}</div>
-              </div>
-              <div class="pipeline-stat">
-                <div class="pipeline-stat-label">Success Rate</div>
-                <div class="pipeline-stat-value">${p.successRate != null ? p.successRate.toFixed(1) + "%" : "-"}</div>
-              </div>
-            </div>`;
-
-          if (p.blockers && p.blockers.length > 0) {
-            html += `<div class="pipeline-blockers">
-              <div class="pipeline-blockers-label">Blockers</div>`;
-            for (const b of p.blockers) {
-              html += `<div class="pipeline-blocker-item">- ${esc(b)}</div>`;
-            }
-            html += "</div>";
-          }
-
-          html += "</div>";
-        }
-
-        html += "</div>";
-        container.innerHTML = html;
       }
 
-      // -- Tasks --
-      let tasks = [];
+      async function deleteSchedule(id, name) {
+        confirm(`Delete schedule "${name}"? This cannot be undone.`, 'Delete', async () => {
+          try {
+            await api('DELETE', `/api/schedules/${encodeURIComponent(id)}`);
+            toast('Schedule deleted', 'success');
+            await loadSchedules();
+          } catch (e) {
+            toast(`Failed: ${e.message}`, 'error');
+          }
+        });
+      }
 
+      // ── Tasks tab ─────────────────────────────────────────────────────
       async function loadTasks() {
         if (!token) return;
-        const container = document.getElementById("tasksContainer");
-        container.innerHTML = '<div class="loading">Loading tasks</div>';
-
         try {
-          const data = await apiFetch("/api/tasks");
+          const data = await api('GET', '/api/tasks');
           tasks = data.tasks || [];
+          document.getElementById('taskCount').textContent = tasks.length;
           renderTasks();
         } catch (e) {
-          container.innerHTML = `<div class="empty-state"><div>Failed to load tasks: ${esc(e.message)}</div></div>`;
+          document.getElementById('tasksContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
         }
       }
 
       function renderTasks() {
-        const container = document.getElementById("tasksContainer");
-        const filterVal = document.getElementById("taskStatusFilter")?.value || "";
-        const filtered = filterVal ? tasks.filter((t) => t.status === filterVal) : tasks;
-        document.getElementById("taskCount").textContent = filtered.length;
+        const statusFilter = document.getElementById('taskStatusFilter').value;
+        const agentFilter = document.getElementById('taskAgentFilter').value;
+        const container = document.getElementById('tasksContainer');
+
+        const filtered = tasks.filter(t => {
+          if (statusFilter && t.status !== statusFilter) return false;
+          if (agentFilter && t.assigned_agent !== agentFilter) return false;
+          return true;
+        });
+
+        document.getElementById('taskCount').textContent = filtered.length;
 
         if (filtered.length === 0) {
           container.innerHTML = `
-          <div class="empty-state">
-            <div class="icon">&gt;_</div>
-            <div>${filterVal ? "No " + filterVal.replace("_", " ") + " tasks" : "No tasks. Create one to get started."}</div>
-          </div>`;
+            <div class="empty-state">
+              <div class="empty-icon">☐</div>
+              <div class="empty-title">${statusFilter ? `No ${statusFilter.replace('_', ' ')} tasks` : 'No tasks yet'}</div>
+              <div class="empty-desc">${statusFilter ? 'Try a different filter.' : 'Create a task for an agent to work on.'}</div>
+              ${!statusFilter ? `<button class="btn btn-success" onclick="openTaskModal()">+ Create Task</button>` : ''}
+            </div>`;
           return;
         }
 
+        const statusColors = {
+          ready: 'badge-blue',
+          in_progress: 'badge-yellow',
+          completed: 'badge-green',
+          failed: 'badge-red',
+        };
+
         let html = `
-        <table class="jobs-table">
-          <thead>
-            <tr>
-              <th>Task</th>
-              <th>Status</th>
-              <th>Agent</th>
-              <th class="hide-mobile">Priority</th>
-              <th class="hide-mobile">Updated</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-        `;
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Agent</th>
+                <th class="hide-mobile">Priority</th>
+                <th class="hide-mobile">Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>`;
 
-        for (const task of filtered) {
-          const statusClass =
-            task.status === "completed"
-              ? "badge-ok"
-              : task.status === "in_progress"
-                ? "badge-running"
-                : task.status === "ready"
-                  ? "badge-active"
-                  : task.status === "failed"
-                    ? "badge-error"
-                    : "badge-never";
+        for (const t of filtered) {
+          let tags = [];
+          try { tags = t.tags ? JSON.parse(t.tags) : []; } catch {}
 
-          const recurringInfo = task.recurring
-            ? `<span class="badge badge-idle" style="font-size:9px">recurring${task.recurrence_schedule ? ": " + esc(task.recurrence_schedule) : ""}</span>`
-            : "";
+          const tagsHtml = tags.length
+            ? tags.map(tag => `<span style="font-size:9px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 3px;margin-right:2px">${esc(tag)}</span>`).join('')
+            : '';
 
-          let taskTags = [];
-          try {
-            taskTags = task.tags ? JSON.parse(task.tags) : [];
-          } catch {
-            taskTags = [];
-          }
-          const tagsHtml =
-            taskTags.length > 0
-              ? `<div style="margin-top:2px">${taskTags.map((t) => `<span style="font-size:9px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-right:3px">${esc(t)}</span>`).join("")}</div>`
-              : "";
+          const recurringBadge = t.recurring
+            ? `<span class="badge badge-purple" style="font-size:9px;margin-right:4px">↺${t.recurrence_schedule ? ' ' + esc(t.recurrence_schedule) : ''}</span>`
+            : '';
 
           html += `
-          <tr style="cursor:pointer" onclick="openEditTaskModal(${task.id})">
-            <td>
-              <div class="job-id">${esc(task.title)}</div>
-              ${task.description ? `<div class="job-label">${esc(task.description.slice(0, 80))}${task.description.length > 80 ? "..." : ""}</div>` : ""}
-              ${recurringInfo}
-              ${tagsHtml}
-            </td>
-            <td><span class="badge ${statusClass}">${esc(task.status)}</span></td>
-            <td>${esc(task.assigned_agent || "-")}</td>
-            <td class="hide-mobile">${task.priority ?? "-"}</td>
-            <td class="hide-mobile">${formatRelative(task.updated_at)}</td>
-            <td>
-              <div class="action-group">
-                <button class="action-btn" onclick="event.stopPropagation(); openEditTaskModal(${task.id})" title="Edit">Edit</button>
-                ${task.status === "ready" ? `<button class="run-now-btn" onclick="event.stopPropagation(); claimTask(${task.id})">Claim</button>` : ""}
-                ${task.status === "in_progress" ? `<button class="run-now-btn" onclick="event.stopPropagation(); completeTask(${task.id})">Done</button>` : ""}
-                <button class="action-btn delete" onclick="event.stopPropagation(); confirmDeleteTask(${task.id})" title="Delete">Del</button>
-              </div>
-            </td>
-          </tr>
-          `;
+            <tr class="clickable" onclick="openTaskModal(${t.id})">
+              <td style="color:var(--text-muted);font-size:11px">#${t.id}</td>
+              <td>
+                <div style="font-weight:600;color:var(--text-bright)">${esc(t.title)}</div>
+                ${t.description ? `<div style="font-size:10px;color:var(--text-muted)">${esc(t.description.slice(0, 80))}${t.description.length > 80 ? '…' : ''}</div>` : ''}
+                <div style="margin-top:2px">${recurringBadge}${tagsHtml}</div>
+              </td>
+              <td><span class="badge ${statusColors[t.status] || 'badge-gray'}">${esc(t.status)}</span></td>
+              <td>${esc(t.assigned_agent || '—')}</td>
+              <td class="hide-mobile">${t.priority ?? '—'}</td>
+              <td class="hide-mobile">${formatRelative(t.updated_at)}</td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  ${t.status === 'ready' ? `<button class="btn btn-sm" onclick="event.stopPropagation(); claimTask(${t.id})">Claim</button>` : ''}
+                  ${t.status === 'in_progress' ? `<button class="btn btn-sm btn-success" onclick="event.stopPropagation(); completeTaskDialog(${t.id})">Done</button>` : ''}
+                  <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteTaskDialog(${t.id})">Del</button>
+                </div>
+              </td>
+            </tr>`;
         }
 
-        html += "</tbody></table>";
+        html += '</tbody></table>';
 
-        // Show result of last completed task if available
-        const completed = tasks.filter((t) => t.status === "completed" && t.result);
-        if (completed.length > 0) {
-          const last = completed[completed.length - 1];
+        // Show last completed result
+        const lastDone = tasks.find(t => t.status === 'completed' && t.result);
+        if (lastDone) {
           html += `
-          <div style="margin-top: 16px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;">
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Last completed: ${esc(last.title)}</div>
-            <div class="result-preview">${esc(last.result?.slice(0, 200) || "")}</div>
-          </div>`;
+            <div style="margin-top:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;">
+              <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Last completed: ${esc(lastDone.title)}</div>
+              <div class="result-preview">${esc(lastDone.result?.slice(0, 300) || '')}</div>
+            </div>`;
         }
 
         container.innerHTML = html;
       }
 
-      function openCreateTaskModal() {
-        document.getElementById("taskModalMode").value = "create";
-        document.getElementById("taskModalTitle").textContent = "Create Task";
-        document.getElementById("taskModalSave").textContent = "Create";
-        document.getElementById("taskFormTitle").value = "";
-        document.getElementById("taskFormDescription").value = "";
-        document.getElementById("taskFormAgent").value = "";
-        document.getElementById("taskFormPriority").value = "5";
-        document.getElementById("taskFormRecurring").checked = false;
-        document.getElementById("taskFormRecurrenceSchedule").value = "";
-        document.getElementById("taskFormTags").value = "";
-        document.getElementById("taskFormStatus").value = "ready";
-        document.getElementById("taskFormId").value = "";
-        document.getElementById("taskModal").classList.add("visible");
-
-        // Populate agent dropdown from loaded jobs
-        populateAgentDropdown();
+      function toggleRecurrenceField() {
+        const show = document.getElementById('taskFormRecurring').checked;
+        document.getElementById('taskRecurrenceGroup').style.display = show ? 'block' : 'none';
       }
 
-      function openEditTaskModal(taskId) {
-        const task = tasks.find((t) => t.id === taskId);
-        if (!task) return;
+      function openTaskModal(taskId) {
+        const isEdit = taskId != null;
+        document.getElementById('taskModalTitle').textContent = isEdit ? `Edit Task #${taskId}` : 'New Task';
+        document.getElementById('taskModalSave').textContent = isEdit ? 'Save' : 'Create';
+        document.getElementById('taskFormMode').value = isEdit ? 'edit' : 'create';
+        document.getElementById('taskFormId').value = taskId || '';
 
-        document.getElementById("taskModalMode").value = "edit";
-        document.getElementById("taskModalTitle").textContent = `Edit Task #${task.id}`;
-        document.getElementById("taskModalSave").textContent = "Save";
-        document.getElementById("taskFormTitle").value = task.title;
-        document.getElementById("taskFormDescription").value = task.description || "";
-        document.getElementById("taskFormAgent").value = task.assigned_agent || "";
-        document.getElementById("taskFormPriority").value = task.priority ?? 5;
-        document.getElementById("taskFormRecurring").checked = !!task.recurring;
-        document.getElementById("taskFormRecurrenceSchedule").value =
-          task.recurrence_schedule || "";
-        let parsedTags = [];
-        try {
-          parsedTags = task.tags ? JSON.parse(task.tags) : [];
-        } catch {
-          parsedTags = [];
+        // Populate agent dropdown
+        const sel = document.getElementById('taskFormAgent');
+        sel.innerHTML = '<option value="">Unassigned</option>' +
+          agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+
+        if (isEdit) {
+          const t = tasks.find(x => x.id === taskId);
+          if (!t) return;
+          document.getElementById('taskFormTitle').value = t.title || '';
+          document.getElementById('taskFormDescription').value = t.description || '';
+          sel.value = t.assigned_agent || '';
+          document.getElementById('taskFormPriority').value = t.priority ?? 5;
+          document.getElementById('taskFormStatus').value = t.status || 'ready';
+          document.getElementById('taskFormRecurring').checked = !!t.recurring;
+          document.getElementById('taskFormRecurrenceSchedule').value = t.recurrence_schedule || '';
+          let tags = [];
+          try { tags = t.tags ? JSON.parse(t.tags) : []; } catch {}
+          document.getElementById('taskFormTags').value = tags.join(', ');
+          toggleRecurrenceField();
+        } else {
+          document.getElementById('taskFormTitle').value = '';
+          document.getElementById('taskFormDescription').value = '';
+          sel.value = '';
+          document.getElementById('taskFormPriority').value = 5;
+          document.getElementById('taskFormStatus').value = 'ready';
+          document.getElementById('taskFormRecurring').checked = false;
+          document.getElementById('taskFormRecurrenceSchedule').value = '';
+          document.getElementById('taskFormTags').value = '';
+          document.getElementById('taskRecurrenceGroup').style.display = 'none';
         }
-        document.getElementById("taskFormTags").value = parsedTags.join(", ");
-        document.getElementById("taskFormStatus").value = task.status || "ready";
-        document.getElementById("taskFormId").value = task.id;
-        document.getElementById("taskModal").classList.add("visible");
 
-        populateAgentDropdown();
-      }
-
-      function populateAgentDropdown() {
-        const select = document.getElementById("taskFormAgent");
-        const current = select.value;
-        // Keep first option (unassigned)
-        select.innerHTML = '<option value="">Unassigned</option>';
-        for (const job of jobs) {
-          const opt = document.createElement("option");
-          opt.value = job.id;
-          opt.textContent = job.label || job.id;
-          select.appendChild(opt);
-        }
-        select.value = current;
-      }
-
-      function closeTaskModal() {
-        document.getElementById("taskModal").classList.remove("visible");
+        document.getElementById('taskModal').classList.add('visible');
       }
 
       async function saveTask() {
-        const mode = document.getElementById("taskModalMode").value;
-        const title = document.getElementById("taskFormTitle").value.trim();
-        if (!title) {
-          toast("Title is required", "error");
-          return;
-        }
+        const mode = document.getElementById('taskFormMode').value;
+        const id = document.getElementById('taskFormId').value;
+        const title = document.getElementById('taskFormTitle').value.trim();
+        if (!title) { toast('Title is required', 'error'); return; }
 
-        const tagsRaw = document.getElementById("taskFormTags").value.trim();
-        const tags = tagsRaw
-          ? tagsRaw
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : undefined;
+        const tagsRaw = document.getElementById('taskFormTags').value.trim();
+        const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : undefined;
 
         const payload = {
           title,
-          description: document.getElementById("taskFormDescription").value.trim() || undefined,
-          assigned_agent: document.getElementById("taskFormAgent").value || undefined,
-          priority: parseInt(document.getElementById("taskFormPriority").value) || 5,
-          recurring: document.getElementById("taskFormRecurring").checked,
-          recurrence_schedule:
-            document.getElementById("taskFormRecurrenceSchedule").value.trim() || undefined,
-          tags: tags,
+          description: document.getElementById('taskFormDescription').value.trim() || undefined,
+          assigned_agent: document.getElementById('taskFormAgent').value || undefined,
+          priority: parseInt(document.getElementById('taskFormPriority').value) || 5,
+          recurring: document.getElementById('taskFormRecurring').checked,
+          recurrence_schedule: document.getElementById('taskFormRecurrenceSchedule').value.trim() || undefined,
+          tags,
         };
 
-        if (mode === "edit") {
-          payload.status = document.getElementById("taskFormStatus").value;
+        if (mode === 'edit') {
+          payload.status = document.getElementById('taskFormStatus').value;
         }
 
-        const saveBtn = document.getElementById("taskModalSave");
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving...";
+        const btn = document.getElementById('taskModalSave');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
 
         try {
-          if (mode === "create") {
-            await apiFetch("/api/tasks", { method: "POST", body: JSON.stringify(payload) });
-            toast("Task created", "success");
+          if (mode === 'edit') {
+            await api('PUT', `/api/tasks/${id}`, payload);
+            toast('Task updated', 'success');
           } else {
-            const id = document.getElementById("taskFormId").value;
-            await apiFetch(`/api/tasks/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-            toast("Task updated", "success");
+            await api('POST', '/api/tasks', payload);
+            toast('Task created', 'success');
           }
-          closeTaskModal();
+          closeModal('taskModal');
           await loadTasks();
         } catch (e) {
-          toast(`Failed to save task: ${e.message}`, "error");
+          toast(`Failed: ${e.message}`, 'error');
         } finally {
-          saveBtn.disabled = false;
-          saveBtn.textContent = mode === "create" ? "Create" : "Save";
+          btn.disabled = false;
+          btn.textContent = mode === 'edit' ? 'Save' : 'Create';
         }
       }
 
-      async function completeTask(taskId) {
-        const task = tasks.find((t) => t.id === taskId);
-        document.getElementById("confirmMessage").innerHTML =
-          `Complete task "<strong>${esc(task?.title || taskId)}</strong>"?`;
-        document.getElementById("confirmAction").textContent = "Complete";
-        document.getElementById("confirmAction").className = "btn-save";
-        pendingConfirmCallback = async () => {
-          closeConfirm();
-          try {
-            await apiFetch(`/api/tasks/${taskId}/complete`, {
-              method: "POST",
-              body: JSON.stringify({ result: "Completed via dashboard" }),
-            });
-            toast("Task completed", "success");
-            await loadTasks();
-          } catch (e) {
-            toast(`Failed to complete task: ${e.message}`, "error");
-          }
-          // Reset confirm button style
-          document.getElementById("confirmAction").textContent = "Delete";
-          document.getElementById("confirmAction").className = "btn-danger";
-        };
-        document.getElementById("confirmDialog").classList.add("visible");
-      }
-
-      async function claimTask(taskId) {
+      async function claimTask(id) {
         try {
-          await apiFetch(`/api/tasks/${taskId}/claim`, {
-            method: "POST",
-            body: JSON.stringify({ agent: "dashboard-user" }),
-          });
-          toast("Task claimed", "success");
+          await api('POST', `/api/tasks/${id}/claim`, { agent: 'dashboard-user' });
+          toast('Task claimed', 'success');
           await loadTasks();
         } catch (e) {
-          toast(`Failed to claim task: ${e.message}`, "error");
+          toast(`Failed: ${e.message}`, 'error');
         }
       }
 
-      function confirmDeleteTask(taskId) {
-        const task = tasks.find((t) => t.id === taskId);
-        document.getElementById("confirmMessage").textContent =
-          `Delete task "${task?.title || taskId}"? This cannot be undone.`;
-        pendingConfirmCallback = async () => {
-          closeConfirm();
+      function completeTaskDialog(id) {
+        const t = tasks.find(x => x.id === id);
+        confirm(`Mark task "${t?.title || id}" as complete?`, 'Complete', async () => {
           try {
-            await apiFetch(`/api/tasks/${taskId}`, { method: "DELETE" });
-            toast("Task deleted", "success");
+            await api('POST', `/api/tasks/${id}/complete`, { result: 'Completed via dashboard' });
+            toast('Task completed', 'success');
             await loadTasks();
           } catch (e) {
-            toast(`Failed to delete task: ${e.message}`, "error");
+            toast(`Failed: ${e.message}`, 'error');
           }
+        });
+      }
+
+      function deleteTaskDialog(id) {
+        const t = tasks.find(x => x.id === id);
+        confirm(`Delete task "${t?.title || id}"? This cannot be undone.`, 'Delete', async () => {
+          try {
+            await api('DELETE', `/api/tasks/${id}`);
+            toast('Task deleted', 'success');
+            await loadTasks();
+          } catch (e) {
+            toast(`Failed: ${e.message}`, 'error');
+          }
+        });
+      }
+
+      // ── Projects tab ──────────────────────────────────────────────────
+      async function loadProjects() {
+        if (!token) return;
+        try {
+          const data = await api('GET', '/api/projects');
+          projects = data.projects || [];
+          document.getElementById('projectCount').textContent = projects.length;
+          renderProjects();
+        } catch (e) {
+          document.getElementById('projectsGrid').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderProjects() {
+        const grid = document.getElementById('projectsGrid');
+
+        if (projects.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+              <div class="empty-icon">◱</div>
+              <div class="empty-title">No projects yet</div>
+              <div class="empty-desc">Projects group related agents, tasks, and context together.</div>
+              <button class="btn btn-success" onclick="openProjectModal()">+ Create Project</button>
+            </div>`;
+          return;
+        }
+
+        grid.innerHTML = projects.map(p => {
+          let tags = [];
+          try { tags = p.tags ? JSON.parse(p.tags) : []; } catch {}
+          const tagsHtml = tags.length
+            ? tags.map(t => `<span class="badge badge-gray">${esc(t)}</span>`).join('')
+            : '';
+          const enabledBadge = p.enabled
+            ? `<span class="badge badge-green">on</span>`
+            : `<span class="badge badge-gray">off</span>`;
+
+          return `
+            <div class="card" onclick="openProjectModal('${esc(p.id)}')">
+              <div class="card-title">${esc(p.name)} ${enabledBadge}</div>
+              ${p.description ? `<div class="card-desc">${esc(p.description)}</div>` : '<div class="card-desc" style="opacity:0.4">No description</div>'}
+              <div class="card-meta">
+                ${p.path ? `<code style="font-size:10px">${esc(p.path)}</code>` : ''}
+                ${tagsHtml}
+                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProject('${esc(p.id)}', '${esc(p.name)}')">Delete</button>
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      function openProjectModal(projectId) {
+        const isEdit = !!projectId;
+        document.getElementById('projectModalTitle').textContent = isEdit ? 'Edit Project' : 'New Project';
+        document.getElementById('projectModalSave').textContent = isEdit ? 'Save' : 'Create';
+        document.getElementById('projectFormId').value = projectId || '';
+
+        if (isEdit) {
+          const p = projects.find(x => x.id === projectId);
+          if (!p) return;
+          document.getElementById('projectFormIdInput').value = p.id;
+          document.getElementById('projectFormIdInput').disabled = true;
+          document.getElementById('projectFormName').value = p.name || '';
+          document.getElementById('projectFormDescription').value = p.description || '';
+          document.getElementById('projectFormPath').value = p.path || '';
+          document.getElementById('projectFormContextFile').value = p.context_file || '';
+          let tags = [];
+          try { tags = p.tags ? JSON.parse(p.tags) : []; } catch {}
+          document.getElementById('projectFormTags').value = tags.join(', ');
+          document.getElementById('projectFormEnabled').checked = !!p.enabled;
+        } else {
+          document.getElementById('projectFormIdInput').value = '';
+          document.getElementById('projectFormIdInput').disabled = false;
+          document.getElementById('projectFormName').value = '';
+          document.getElementById('projectFormDescription').value = '';
+          document.getElementById('projectFormPath').value = '';
+          document.getElementById('projectFormContextFile').value = '';
+          document.getElementById('projectFormTags').value = '';
+          document.getElementById('projectFormEnabled').checked = true;
+        }
+
+        document.getElementById('projectModal').classList.add('visible');
+      }
+
+      async function saveProject() {
+        const id = document.getElementById('projectFormId').value;
+        const isEdit = !!id;
+        const newId = document.getElementById('projectFormIdInput').value.trim();
+        const name = document.getElementById('projectFormName').value.trim();
+
+        if (!name) { toast('Name is required', 'error'); return; }
+        if (!isEdit && !newId) { toast('ID is required', 'error'); return; }
+
+        const tagsRaw = document.getElementById('projectFormTags').value.trim();
+        const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+        const payload = {
+          ...(isEdit ? {} : { id: newId }),
+          name,
+          description: document.getElementById('projectFormDescription').value.trim() || null,
+          path: document.getElementById('projectFormPath').value.trim() || null,
+          context_file: document.getElementById('projectFormContextFile').value.trim() || null,
+          tags: tags.length ? JSON.stringify(tags) : null,
+          enabled: document.getElementById('projectFormEnabled').checked ? 1 : 0,
         };
-        document.getElementById("confirmDialog").classList.add("visible");
-      }
 
-      // -- Auto-refresh --
-      function startAutoRefresh() {
-        if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(() => {
-          loadJobs();
-          // Also refresh run history if a job is selected
-          if (selectedJobId) {
-            apiFetch(`/api/cron/jobs/${encodeURIComponent(selectedJobId)}/runs`)
-              .then((data) => renderRuns(data.runs || []))
-              .catch(() => {});
-          }
-          // Refresh current tab
-          if (activeTab === "tasks") loadTasks();
-          if (activeTab === "agents") loadAgents();
-        }, 30000);
-      }
+        const btn = document.getElementById('projectModalSave');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
 
-      // -- Status --
-      function setStatus(text, ok) {
-        document.getElementById("statusDot").className = "status-dot" + (ok ? "" : " error");
-        document.getElementById("statusText").textContent = text;
-      }
-
-      // -- Toast --
-      function toast(msg, type = "info") {
-        const container = document.getElementById("toastContainer");
-        const el = document.createElement("div");
-        el.className = `toast ${type}`;
-        el.textContent = msg;
-        container.appendChild(el);
-        setTimeout(() => {
-          el.style.opacity = "0";
-          el.style.transition = "opacity 0.3s";
-          setTimeout(() => el.remove(), 300);
-        }, 4000);
-      }
-
-      // -- Formatting helpers --
-      function formatRelative(isoStr) {
-        if (!isoStr) return '<span style="color: var(--text-muted)">-</span>';
         try {
-          const d = new Date(isoStr);
-          const now = Date.now();
-          const diff = now - d.getTime();
-
-          if (diff < 0) {
-            const absDiff = Math.abs(diff);
-            if (absDiff < 60000) return `in ${Math.floor(absDiff / 1000)}s`;
-            if (absDiff < 3600000) return `in ${Math.floor(absDiff / 60000)}m`;
-            if (absDiff < 86400000)
-              return `in ${Math.floor(absDiff / 3600000)}h ${Math.floor((absDiff % 3600000) / 60000)}m`;
-            return `in ${Math.floor(absDiff / 86400000)}d`;
+          if (isEdit) {
+            await api('PUT', `/api/projects/${encodeURIComponent(id)}`, payload);
+            toast('Project updated', 'success');
+          } else {
+            await api('POST', '/api/projects', payload);
+            toast('Project created', 'success');
           }
-
-          if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-          if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-          if (diff < 86400000)
-            return `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m ago`;
-          return `${Math.floor(diff / 86400000)}d ago`;
-        } catch {
-          return esc(isoStr);
+          closeModal('projectModal');
+          await loadProjects();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = isEdit ? 'Save' : 'Create';
         }
       }
 
-      function formatTimestamp(isoStr) {
-        if (!isoStr) return "-";
+      async function deleteProject(id, name) {
+        confirm(`Delete project "${name}"? This cannot be undone.`, 'Delete', async () => {
+          try {
+            await api('DELETE', `/api/projects/${encodeURIComponent(id)}`);
+            toast('Project deleted', 'success');
+            await loadProjects();
+          } catch (e) {
+            toast(`Failed: ${e.message}`, 'error');
+          }
+        });
+      }
+
+      // ── Tools tab ──────────────────────────────────────────────────────
+      async function loadTools() {
+        if (!token) return;
         try {
-          const d = new Date(isoStr);
-          return d.toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          });
-        } catch {
-          return esc(isoStr);
+          const data = await api('GET', '/api/tools');
+          tools = data.tools || [];
+          document.getElementById('toolCount').textContent = tools.length;
+          renderTools();
+        } catch (e) {
+          document.getElementById('toolsContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
         }
       }
 
-      function formatDuration(ms) {
-        if (ms == null) return "-";
-        if (ms < 1000) return `${ms}ms`;
-        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-        const mins = Math.floor(ms / 60000);
-        const secs = Math.floor((ms % 60000) / 1000);
-        return `${mins}m ${secs}s`;
-      }
+      function renderTools() {
+        const container = document.getElementById('toolsContainer');
 
-      function formatNumber(n) {
-        if (n == null) return "-";
-        return n.toLocaleString();
-      }
-
-      function esc(str) {
-        if (!str) return "";
-        const div = document.createElement("div");
-        div.textContent = String(str);
-        return div.innerHTML;
-      }
-
-      // Close modals on overlay click
-      document.getElementById("jobModal").addEventListener("click", (e) => {
-        if (e.target === e.currentTarget) closeJobModal();
-      });
-      document.getElementById("taskModal").addEventListener("click", (e) => {
-        if (e.target === e.currentTarget) closeTaskModal();
-      });
-      document.getElementById("confirmDialog").addEventListener("click", (e) => {
-        if (e.target === e.currentTarget) closeConfirm();
-      });
-
-      // Close modals on Escape key
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          if (document.getElementById("confirmDialog").classList.contains("visible")) {
-            closeConfirm();
-          } else if (document.getElementById("taskModal").classList.contains("visible")) {
-            closeTaskModal();
-          } else if (document.getElementById("jobModal").classList.contains("visible")) {
-            closeJobModal();
-          }
+        if (tools.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">◧</div>
+              <div class="empty-title">No tools yet</div>
+              <div class="empty-desc">Tools extend what agents can do. Builtin tools are seeded on first run.</div>
+            </div>`;
+          return;
         }
-      });
+
+        const typeColors = { builtin: 'badge-blue', cli: 'badge-orange', mcp: 'badge-purple' };
+
+        let html = `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+        for (const t of tools) {
+          const typeBadge = `<span class="badge ${typeColors[t.type] || 'badge-gray'}">${esc(t.type)}</span>`;
+          const isBuiltin = t.type === 'builtin';
+
+          html += `
+            <tr>
+              <td><strong>${esc(t.name)}</strong></td>
+              <td>${typeBadge}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(t.description || '—')}</td>
+              <td>
+                <label class="toggle" title="${isBuiltin ? 'Builtin tools cannot be disabled' : ''}">
+                  <input type="checkbox" ${t.enabled ? 'checked' : ''} ${isBuiltin ? 'disabled' : ''}
+                    onchange="toggleTool('${esc(t.id)}', this.checked)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </td>
+              <td>
+                ${!isBuiltin ? `<button class="btn btn-sm" onclick="openToolModal('${esc(t.id)}')">Edit</button>` : '<span style="color:var(--text-muted);font-size:10px">builtin</span>'}
+              </td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      }
+
+      function openToolModal(toolId) {
+        const t = tools.find(x => x.id === toolId);
+        if (!t) return;
+
+        document.getElementById('toolFormId').value = t.id;
+        document.getElementById('toolModalTitle').textContent = `Edit Tool: ${t.name}`;
+        document.getElementById('toolFormName').value = t.name;
+        document.getElementById('toolFormDescription').value = t.description || '';
+        let configStr = '';
+        try { configStr = t.config ? JSON.stringify(JSON.parse(t.config), null, 2) : ''; } catch { configStr = t.config || ''; }
+        document.getElementById('toolFormConfig').value = configStr;
+        document.getElementById('toolFormEnabled').checked = !!t.enabled;
+
+        document.getElementById('toolModal').classList.add('visible');
+      }
+
+      async function saveTool() {
+        const id = document.getElementById('toolFormId').value;
+        const configRaw = document.getElementById('toolFormConfig').value.trim();
+
+        let config = null;
+        if (configRaw) {
+          try { config = JSON.stringify(JSON.parse(configRaw)); }
+          catch { toast('Config must be valid JSON', 'error'); return; }
+        }
+
+        const payload = {
+          description: document.getElementById('toolFormDescription').value.trim() || null,
+          config,
+          enabled: document.getElementById('toolFormEnabled').checked ? 1 : 0,
+        };
+
+        const btn = document.getElementById('toolModalSave');
+        btn.disabled = true; btn.textContent = 'Saving...';
+
+        try {
+          await api('PUT', `/api/tools/${encodeURIComponent(id)}`, payload);
+          toast('Tool updated', 'success');
+          closeModal('toolModal');
+          await loadTools();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false; btn.textContent = 'Save';
+        }
+      }
+
+      async function toggleTool(id, enabled) {
+        try {
+          await api('PUT', `/api/tools/${encodeURIComponent(id)}`, { enabled: enabled ? 1 : 0 });
+          const t = tools.find(x => x.id === id);
+          if (t) t.enabled = enabled ? 1 : 0;
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+          await loadTools(); // revert
+        }
+      }
     </script>
   </body>
 </html>
