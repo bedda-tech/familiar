@@ -63,6 +63,32 @@ export class CronScheduler {
     this.wsServer = ws;
   }
 
+  /** Log an entry to the activity_log table (via sharedDb). */
+  private logActivity(
+    type: string,
+    summary: string,
+    opts?: { agentId?: string; scheduleId?: string; taskId?: number; details?: string },
+  ): void {
+    if (!this.sharedDb) return;
+    try {
+      this.sharedDb
+        .prepare(
+          `INSERT INTO activity_log (type, agent_id, schedule_id, task_id, summary, details)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          type,
+          opts?.agentId ?? null,
+          opts?.scheduleId ?? null,
+          opts?.taskId ?? null,
+          summary,
+          opts?.details ?? null,
+        );
+    } catch (e) {
+      log.warn({ err: e }, "failed to log activity");
+    }
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS cron_state (
@@ -558,6 +584,13 @@ export class CronScheduler {
     this.running.set(scheduleId, true);
     await this.acquireSlot(scheduleId);
 
+    // Broadcast start event
+    this.wsServer?.broadcast({ type: "schedule:started", scheduleId, agentId: config.id });
+    this.logActivity("schedule_run", `Schedule ${scheduleId} started`, {
+      agentId: config.id,
+      scheduleId,
+    });
+
     try {
       log.info({ scheduleId, agentId: config.id, concurrent: this.concurrentCount }, "executing DB job");
       const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
@@ -572,6 +605,24 @@ export class CronScheduler {
         const next = cron.nextRun();
         if (next) this.updateNextRun(scheduleId, next.toISOString());
       }
+
+      // Broadcast completion event + log activity
+      this.wsServer?.broadcast({
+        type: "schedule:completed",
+        scheduleId,
+        agentId: config.id,
+        durationMs: result.durationMs,
+        costUsd: result.costUsd,
+        isError: result.isError,
+      });
+      const summary = result.isError
+        ? `Schedule ${scheduleId} failed (${result.durationMs}ms)`
+        : `Schedule ${scheduleId} completed (${result.durationMs}ms, $${result.costUsd.toFixed(4)})`;
+      this.logActivity("schedule_run", summary, {
+        agentId: config.id,
+        scheduleId,
+        details: JSON.stringify({ durationMs: result.durationMs, costUsd: result.costUsd, isError: result.isError }),
+      });
 
       // Deliver result
       if (config.announce !== false && this.deliveryHandler) {
@@ -621,6 +672,10 @@ export class CronScheduler {
     this.running.set(config.id, true);
     await this.acquireSlot(config.id);
 
+    // Broadcast start event
+    this.wsServer?.broadcast({ type: "schedule:started", scheduleId: config.id, agentId: config.id });
+    this.logActivity("schedule_run", `Job ${config.id} started`, { agentId: config.id, scheduleId: config.id });
+
     try {
       log.info({ jobId: config.id, concurrent: this.concurrentCount }, "executing job");
       const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
@@ -632,6 +687,24 @@ export class CronScheduler {
         const next = cron.nextRun();
         if (next) this.updateNextRun(config.id, next.toISOString());
       }
+
+      // Broadcast completion event + log activity
+      this.wsServer?.broadcast({
+        type: "schedule:completed",
+        scheduleId: config.id,
+        agentId: config.id,
+        durationMs: result.durationMs,
+        costUsd: result.costUsd,
+        isError: result.isError,
+      });
+      const summary = result.isError
+        ? `Job ${config.id} failed (${result.durationMs}ms)`
+        : `Job ${config.id} completed (${result.durationMs}ms, $${result.costUsd.toFixed(4)})`;
+      this.logActivity("schedule_run", summary, {
+        agentId: config.id,
+        scheduleId: config.id,
+        details: JSON.stringify({ durationMs: result.durationMs, costUsd: result.costUsd, isError: result.isError }),
+      });
 
       // Deliver result (unless suppressed by pattern match)
       if (config.announce !== false && this.deliveryHandler) {

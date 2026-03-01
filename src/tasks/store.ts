@@ -50,7 +50,18 @@ export interface UpdateTaskInput {
 }
 
 export class TaskStore {
+  private updateHandler: ((task: Task) => void) | null = null;
+
   constructor(private db: Database.Database) {}
+
+  /** Register a callback fired after any task mutation (create/update/claim/complete). */
+  onUpdate(handler: (task: Task) => void): void {
+    this.updateHandler = handler;
+  }
+
+  private notifyUpdate(task: Task): void {
+    if (this.updateHandler) this.updateHandler(task);
+  }
 
   list(filters?: { status?: string; assigned_agent?: string; tag?: string }): Task[] {
     let sql = "SELECT * FROM tasks WHERE 1=1";
@@ -92,7 +103,9 @@ export class TaskStore {
       input.tags ? JSON.stringify(input.tags) : null,
     );
     log.info({ id: result.lastInsertRowid, title: input.title }, "task created");
-    return this.get(Number(result.lastInsertRowid))!;
+    const created = this.get(Number(result.lastInsertRowid))!;
+    this.notifyUpdate(created);
+    return created;
   }
 
   update(id: number, input: UpdateTaskInput): Task | undefined {
@@ -142,7 +155,9 @@ export class TaskStore {
 
     this.db.prepare(`UPDATE tasks SET ${fields.join(", ")} WHERE id = ?`).run(...values);
     log.info({ id }, "task updated");
-    return this.get(id);
+    const updated = this.get(id);
+    if (updated) this.notifyUpdate(updated);
+    return updated;
   }
 
   delete(id: number): boolean {
@@ -179,7 +194,9 @@ export class TaskStore {
       .run(agentId, task.id);
 
     log.info({ taskId: task.id, agent: agentId }, "task claimed");
-    return this.get(task.id);
+    const claimed = this.get(task.id);
+    if (claimed) this.notifyUpdate(claimed);
+    return claimed;
   }
 
   /** Agent marks a task complete with a result. Recurring tasks with a schedule stay completed until the ticker resets them. Recurring tasks without a schedule reset immediately. */
@@ -210,7 +227,9 @@ export class TaskStore {
       log.info({ id, recurring: !!task.recurring }, "task completed");
     }
 
-    return this.get(id);
+    const completed = this.get(id);
+    if (completed) this.notifyUpdate(completed);
+    return completed;
   }
 
   /** List recurring tasks that are completed and due for reset based on their recurrence_schedule. */

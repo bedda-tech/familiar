@@ -28,6 +28,7 @@ import { ToolStore } from "./tools/store.js";
 import { runMigration } from "./migrations/001-entity-separation.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
+import { WsServer } from "./ws/server.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -421,8 +422,9 @@ async function cmdStart(configPath?: string): Promise<void> {
     webhooks.setProjectStore(projectStore);
     webhooks.setToolStore(toolStore);
 
-    // Wire up task store for REST API
-    webhooks.setTaskStore(new TaskStore(db));
+    // Wire up task store for REST API (named so we can add onUpdate callback)
+    const taskStore = new TaskStore(db);
+    webhooks.setTaskStore(taskStore);
 
     // Set config path for legacy cron CRUD operations
     webhooks.setConfigPath(join(configDir, "config.json"));
@@ -439,6 +441,23 @@ async function cmdStart(configPath?: string): Promise<void> {
 
     await webhooks.start();
     log.info({ port: config.webhooks.port }, "webhook server started");
+
+    // Attach WebSocket server to the HTTP server
+    const httpServer = webhooks.getHttpServer();
+    if (httpServer) {
+      const wsServer = new WsServer(httpServer, config.webhooks.token);
+      log.info("ws server attached");
+
+      // Wire scheduler to broadcast schedule events
+      if (cron) {
+        cron.setWsServer(wsServer);
+      }
+
+      // Wire task store to broadcast task change events
+      taskStore.onUpdate((task) => {
+        wsServer.broadcast({ type: "task:updated", task: task as unknown as Record<string, unknown> });
+      });
+    }
   }
 
   // Watch config for hot-reload
