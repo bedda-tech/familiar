@@ -22,6 +22,7 @@ export interface Task {
   last_completed_at: string | null;
   result: string | null;
   tags: string | null;
+  model_hint: string | null;
   created_at: string;
   updated_at: string;
   claimed_by: string | null;
@@ -36,6 +37,7 @@ export interface CreateTaskInput {
   recurring?: boolean;
   recurrence_schedule?: string;
   tags?: string[];
+  model_hint?: string;
 }
 
 export interface UpdateTaskInput {
@@ -47,6 +49,7 @@ export interface UpdateTaskInput {
   recurring?: boolean;
   recurrence_schedule?: string;
   tags?: string[];
+  model_hint?: string | null;
 }
 
 export class TaskStore {
@@ -90,8 +93,8 @@ export class TaskStore {
 
   create(input: CreateTaskInput): Task {
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (title, description, assigned_agent, priority, recurring, recurrence_schedule, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (title, description, assigned_agent, priority, recurring, recurrence_schedule, tags, model_hint)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.title,
@@ -101,6 +104,7 @@ export class TaskStore {
       input.recurring ? 1 : 0,
       input.recurrence_schedule ?? null,
       input.tags ? JSON.stringify(input.tags) : null,
+      input.model_hint ?? null,
     );
     log.info({ id: result.lastInsertRowid, title: input.title }, "task created");
     const created = this.get(Number(result.lastInsertRowid))!;
@@ -146,6 +150,10 @@ export class TaskStore {
     if (input.tags !== undefined) {
       fields.push("tags = ?");
       values.push(JSON.stringify(input.tags));
+    }
+    if (input.model_hint !== undefined) {
+      fields.push("model_hint = ?");
+      values.push(input.model_hint ?? null);
     }
 
     if (fields.length === 0) return existing;

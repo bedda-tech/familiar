@@ -851,6 +851,7 @@ export class ApiRouter {
       recurring: body.recurring as boolean | undefined,
       recurrence_schedule: body.recurrence_schedule as string | undefined,
       tags: body.tags as string[] | undefined,
+      model_hint: body.model_hint as string | undefined,
     });
     sendJson(res, 201, { task });
   }
@@ -869,6 +870,7 @@ export class ApiRouter {
       recurring: body.recurring as boolean | undefined,
       recurrence_schedule: body.recurrence_schedule as string | undefined,
       tags: body.tags as string[] | undefined,
+      model_hint: "model_hint" in body ? (body.model_hint as string | null) : undefined,
     });
     if (!task) {
       sendJson(res, 404, { error: `Task ${id} not found` });

@@ -79,6 +79,13 @@ export class SessionStore {
         claimed_at TEXT
       );
     `);
+
+    // Additive migrations (idempotent)
+    try {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN model_hint TEXT");
+    } catch {
+      // Column already exists
+    }
   }
 
   /** Get the session ID for a chat, or null if expired/nonexistent */

@@ -35,6 +35,71 @@ function resolvePrompt(prompt: string): string {
 export interface RunCronJobOptions {
   /** Optional agent workspace — when provided, the job gets a persistent workspace. */
   workspace?: AgentWorkspace;
+  /**
+   * Optional model hint — overrides the job's model when set.
+   * Resolved via resolveModel() which applies complexity routing rules.
+   * Values: "opus" | "sonnet" | "haiku" or full model IDs.
+   */
+  modelHint?: string;
+}
+
+/**
+ * Resolve the effective model for a job run, applying complexity routing.
+ *
+ * Routing hierarchy (highest to lowest priority):
+ *   1. Explicit modelHint (from task.model_hint)
+ *   2. Job-level model override (job.model)
+ *   3. Default config model
+ *
+ * Smart routing for tasks:
+ *   - "opus"  → priority 1 tasks or tasks tagged "complex"
+ *   - "haiku" → heartbeat/monitoring/extraction tasks (by tag or keyword)
+ *   - "sonnet" → everything else (default)
+ */
+export function resolveModel(
+  job: CronJobConfig,
+  defaultConfig: ClaudeConfig,
+  modelHint?: string,
+): string | undefined {
+  if (modelHint) return modelHint;
+  return job.model ?? defaultConfig.model;
+}
+
+/**
+ * Infer a model tier from task attributes (priority + tags).
+ * Returns "opus", "haiku", or "sonnet" (default).
+ *
+ * Usage: pass the result as modelHint when calling runCronJob().
+ */
+export function inferModelFromTask(task: {
+  priority?: number;
+  tags?: string | null;
+  title?: string;
+  model_hint?: string | null;
+}): string {
+  // Explicit hint takes precedence
+  if (task.model_hint) return task.model_hint;
+
+  const priority = task.priority ?? 5;
+  const tags = task.tags ? (JSON.parse(task.tags) as string[]) : [];
+  const titleLower = (task.title ?? "").toLowerCase();
+
+  // Priority 1 or "complex" tag → opus
+  if (priority <= 1 || tags.includes("complex")) {
+    return "opus";
+  }
+
+  // Heartbeat / monitoring / extraction keywords → haiku
+  const haikuPatterns = ["heartbeat", "monitor", "extract", "ping", "health", "check", "poll"];
+  if (
+    tags.some((t) => haikuPatterns.some((p) => t.toLowerCase().includes(p))) ||
+    haikuPatterns.some((p) => titleLower.includes(p))
+  ) {
+    return "haiku";
+  }
+
+  // Default: sonnet
+  return "sonnet";
 }
 
 /** Run a cron job by spawning an isolated `claude -p` process. */
@@ -44,7 +109,7 @@ export async function runCronJob(
   options?: RunCronJobOptions,
 ): Promise<CronRunResult> {
   const startedAt = new Date();
-  const model = job.model ?? defaultConfig.model;
+  const model = resolveModel(job, defaultConfig, options?.modelHint);
   const workDir = job.workingDirectory ?? defaultConfig.workingDirectory;
   const maxTurns = job.maxTurns ?? defaultConfig.maxTurns ?? 25;
 
