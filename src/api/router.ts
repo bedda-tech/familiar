@@ -245,6 +245,20 @@ export class ApiRouter {
         this.handleListActivity(queryString ?? "", res);
         return true;
       }
+
+      // ── Cost Summary ──
+      if (path === "/api/cost/summary") {
+        const params = new URLSearchParams(queryString ?? "");
+        this.handleCostSummary(params.get("period") ?? "7d", res);
+        return true;
+      }
+      const agentCostMatch = path.match(/^\/api\/agents\/([^/]+)\/cost$/);
+      if (agentCostMatch) {
+        const params = new URLSearchParams(queryString ?? "");
+        const limit = parseInt(params.get("limit") ?? "30", 10);
+        this.handleAgentCostHistory(decodeURIComponent(agentCostMatch[1]), Math.min(Math.max(limit, 1), 100), res);
+        return true;
+      }
     }
 
     if (method === "POST") {
@@ -975,6 +989,115 @@ export class ApiRouter {
       sendJson(res, 200, { activity });
     } catch {
       sendJson(res, 200, { activity: [] });
+    }
+  }
+
+  // ── Cost Handlers ────────────────────────────────────────────────────
+
+  /**
+   * GET /api/cost/summary?period=7d
+   * Returns per-agent cost totals over the given period (1d, 7d, 30d).
+   */
+  private handleCostSummary(period: string, res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const days = period === "1d" ? 1 : period === "30d" ? 30 : 7;
+    const db = (this.cronScheduler as any).db as import("better-sqlite3").Database | undefined;
+    if (!db) {
+      sendJson(res, 200, { period, agents: [] });
+      return;
+    }
+
+    try {
+      const rows = db
+        .prepare(
+          `SELECT job_id as agentId,
+                  COALESCE(SUM(cost_usd), 0) as totalCostUsd,
+                  COUNT(*) as runCount,
+                  COALESCE(SUM(CASE WHEN is_error = 1 THEN 1 ELSE 0 END), 0) as errorCount,
+                  MAX(started_at) as lastRunAt
+           FROM cron_runs
+           WHERE started_at >= datetime('now', ? || ' days')
+           GROUP BY job_id
+           ORDER BY totalCostUsd DESC`,
+        )
+        .all(`-${days}`) as Array<{
+        agentId: string;
+        totalCostUsd: number;
+        runCount: number;
+        errorCount: number;
+        lastRunAt: string;
+      }>;
+
+      // Attach budget info from agents table if available
+      const withBudget = rows.map((r) => {
+        let budgetUsd: number | null = null;
+        if (this.agentCrudStore) {
+          const agent = this.agentCrudStore.get(r.agentId);
+          budgetUsd = agent?.daily_budget_usd ?? null;
+        }
+        return { ...r, dailyBudgetUsd: budgetUsd };
+      });
+
+      sendJson(res, 200, { period, agents: withBudget });
+    } catch (e: any) {
+      log.error({ err: e }, "cost summary query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  /**
+   * GET /api/agents/:id/cost?limit=30
+   * Returns recent run cost history for a specific agent.
+   */
+  private handleAgentCostHistory(agentId: string, limit: number, res: ServerResponse): void {
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const db = (this.cronScheduler as any).db as import("better-sqlite3").Database | undefined;
+    if (!db) {
+      sendJson(res, 200, { agentId, runs: [] });
+      return;
+    }
+
+    try {
+      const rows = db
+        .prepare(
+          `SELECT started_at as startedAt, cost_usd as costUsd, duration_ms as durationMs,
+                  num_turns as numTurns, is_error as isError
+           FROM cron_runs
+           WHERE job_id = ?
+           ORDER BY id DESC
+           LIMIT ?`,
+        )
+        .all(agentId, limit) as Array<{
+        startedAt: string;
+        costUsd: number;
+        durationMs: number;
+        numTurns: number;
+        isError: number;
+      }>;
+
+      const dailyCostUsd = this.cronScheduler.getDailyAgentCost(agentId);
+      let dailyBudgetUsd: number | null = null;
+      if (this.agentCrudStore) {
+        dailyBudgetUsd = this.agentCrudStore.get(agentId)?.daily_budget_usd ?? null;
+      }
+
+      sendJson(res, 200, {
+        agentId,
+        dailyCostUsd,
+        dailyBudgetUsd,
+        runs: rows.map((r) => ({ ...r, isError: r.isError === 1 })),
+      });
+    } catch (e: any) {
+      log.error({ err: e, agentId }, "agent cost history query failed");
+      sendJson(res, 500, { error: "Query failed" });
     }
   }
 

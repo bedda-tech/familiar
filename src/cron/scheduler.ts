@@ -581,6 +581,31 @@ export class CronScheduler {
       };
     }
 
+    // Budget check
+    const budgetCheck = this.checkBudget(config.id);
+    if (!budgetCheck.allowed) {
+      const msg = `Budget exceeded: agent ${config.id} spent $${budgetCheck.dailyCostUsd.toFixed(4)} today (limit $${budgetCheck.budgetUsd.toFixed(4)})`;
+      log.warn({ agentId: config.id, scheduleId, dailyCostUsd: budgetCheck.dailyCostUsd, budgetUsd: budgetCheck.budgetUsd }, msg);
+      this.wsServer?.broadcast({
+        type: "schedule:budget_exceeded",
+        scheduleId,
+        agentId: config.id,
+        dailyCostUsd: budgetCheck.dailyCostUsd,
+        budgetUsd: budgetCheck.budgetUsd,
+      });
+      this.logActivity("budget_exceeded", msg, { agentId: config.id, scheduleId });
+      return {
+        jobId: scheduleId,
+        text: msg,
+        costUsd: 0,
+        durationMs: 0,
+        numTurns: 0,
+        isError: false,
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      };
+    }
+
     this.running.set(scheduleId, true);
     await this.acquireSlot(scheduleId);
 
@@ -660,6 +685,31 @@ export class CronScheduler {
       return {
         jobId: config.id,
         text: "Skipped: previous run still in progress",
+        costUsd: 0,
+        durationMs: 0,
+        numTurns: 0,
+        isError: false,
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      };
+    }
+
+    // Budget check
+    const budgetCheck = this.checkBudget(config.id);
+    if (!budgetCheck.allowed) {
+      const msg = `Budget exceeded: agent ${config.id} spent $${budgetCheck.dailyCostUsd.toFixed(4)} today (limit $${budgetCheck.budgetUsd.toFixed(4)})`;
+      log.warn({ agentId: config.id, dailyCostUsd: budgetCheck.dailyCostUsd, budgetUsd: budgetCheck.budgetUsd }, msg);
+      this.wsServer?.broadcast({
+        type: "schedule:budget_exceeded",
+        scheduleId: config.id,
+        agentId: config.id,
+        dailyCostUsd: budgetCheck.dailyCostUsd,
+        budgetUsd: budgetCheck.budgetUsd,
+      });
+      this.logActivity("budget_exceeded", msg, { agentId: config.id, scheduleId: config.id });
+      return {
+        jobId: config.id,
+        text: msg,
         costUsd: 0,
         durationMs: 0,
         numTurns: 0,
@@ -799,5 +849,40 @@ export class CronScheduler {
       .get(jobId) as
       | { last_run_at: string | null; next_run_at: string | null; run_count: number }
       | undefined;
+  }
+
+  /** Sum cost_usd for a given agent across all job IDs in the last 24 hours. */
+  getDailyAgentCost(agentId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total
+         FROM cron_runs
+         WHERE job_id = ? AND started_at >= datetime('now', '-1 day')`,
+      )
+      .get(agentId) as { total: number } | undefined;
+    return row?.total ?? 0;
+  }
+
+  /**
+   * Check whether agentId is over its daily budget.
+   * Returns { allowed: true } if under budget or no budget set,
+   * or { allowed: false, dailyCostUsd, budgetUsd } if over budget.
+   */
+  private checkBudget(
+    agentId: string,
+  ): { allowed: true } | { allowed: false; dailyCostUsd: number; budgetUsd: number } {
+    if (!this.sharedDb) return { allowed: true };
+
+    const agent = this.sharedDb
+      .prepare("SELECT daily_budget_usd FROM agents WHERE id = ?")
+      .get(agentId) as { daily_budget_usd: number | null } | undefined;
+
+    if (!agent || agent.daily_budget_usd === null) return { allowed: true };
+
+    const dailyCostUsd = this.getDailyAgentCost(agentId);
+    if (dailyCostUsd >= agent.daily_budget_usd) {
+      return { allowed: false, dailyCostUsd, budgetUsd: agent.daily_budget_usd };
+    }
+    return { allowed: true };
   }
 }

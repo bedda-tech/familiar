@@ -930,12 +930,19 @@
               <input class="form-control" id="agentFormDeliverTo" placeholder="Optional override" />
             </div>
           </div>
-          <div class="form-group">
-            <label>Enabled</label>
-            <label class="toggle" style="margin-top: 4px;">
-              <input type="checkbox" id="agentFormEnabled" checked />
-              <span class="toggle-slider"></span>
-            </label>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Daily Budget (USD)</label>
+              <input class="form-control" id="agentFormBudget" type="number" min="0" step="0.01" placeholder="Unlimited" />
+              <div class="form-hint">Leave blank for unlimited. Runs skip when exceeded.</div>
+            </div>
+            <div class="form-group">
+              <label>Enabled</label>
+              <label class="toggle" style="margin-top: 4px;">
+                <input type="checkbox" id="agentFormEnabled" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -1497,9 +1504,10 @@
       async function loadAgents() {
         if (!token) return;
         try {
-          const [agentData, scheduleData] = await Promise.all([
+          const [agentData, scheduleData, costData] = await Promise.all([
             api('GET', '/api/agents'),
             api('GET', '/api/schedules').catch(() => ({ schedules: [] })),
+            api('GET', '/api/cost/summary?period=1d').catch(() => ({ agents: [] })),
           ]);
           agents = agentData.agents || [];
           // Count schedules per agent
@@ -1507,7 +1515,15 @@
           for (const s of (scheduleData.schedules || [])) {
             schedCounts[s.agent_id] = (schedCounts[s.agent_id] || 0) + 1;
           }
-          agents.forEach(a => { a._scheduleCount = schedCounts[a.id] || 0; });
+          // Attach daily cost per agent
+          const dailyCosts = {};
+          for (const c of (costData.agents || [])) {
+            dailyCosts[c.agentId] = c.totalCostUsd;
+          }
+          agents.forEach(a => {
+            a._scheduleCount = schedCounts[a.id] || 0;
+            a._dailyCostUsd = dailyCosts[a.id] || 0;
+          });
           document.getElementById('agentCount').textContent = agents.length;
           renderAgents();
           populateAgentDropdowns();
@@ -1537,6 +1553,12 @@
           const enabledBadge = a.enabled
             ? `<span class="badge badge-green">on</span>`
             : `<span class="badge badge-gray">off</span>`;
+          let costBadge = '';
+          if (a._dailyCostUsd > 0) {
+            const overBudget = a.daily_budget_usd !== null && a._dailyCostUsd >= a.daily_budget_usd;
+            const budgetLabel = a.daily_budget_usd !== null ? ` / $${a.daily_budget_usd.toFixed(2)}` : '';
+            costBadge = `<span class="badge ${overBudget ? 'badge-red' : 'badge-gray'}" title="Cost today${budgetLabel}">$${a._dailyCostUsd.toFixed(3)}${budgetLabel}</span>`;
+          }
           return `
             <div class="card" onclick="openAgentModal('${esc(a.id)}')">
               <div class="card-title">
@@ -1547,6 +1569,7 @@
               <div class="card-meta">
                 ${modelBadge}
                 ${a._scheduleCount > 0 ? `<span class="badge badge-gray">${a._scheduleCount} schedule${a._scheduleCount !== 1 ? 's' : ''}</span>` : ''}
+                ${costBadge}
                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteAgent('${esc(a.id)}', '${esc(a.name)}')">Delete</button>
               </div>
             </div>`;
@@ -1594,6 +1617,7 @@
           document.getElementById('agentFormTools').value = a.tools ? JSON.parse(a.tools || '[]').join(', ') : '';
           document.getElementById('agentFormSuppressPattern').value = a.suppress_pattern || '';
           document.getElementById('agentFormDeliverTo').value = a.deliver_to || '';
+          document.getElementById('agentFormBudget').value = a.daily_budget_usd !== null && a.daily_budget_usd !== undefined ? a.daily_budget_usd : '';
           document.getElementById('agentFormEnabled').checked = !!a.enabled;
         } else {
           document.getElementById('agentFormIdInput').value = '';
@@ -1607,6 +1631,7 @@
           document.getElementById('agentFormTools').value = 'Bash,Read,Write,Edit,Glob,Grep';
           document.getElementById('agentFormSuppressPattern').value = '';
           document.getElementById('agentFormDeliverTo').value = '';
+          document.getElementById('agentFormBudget').value = '';
           document.getElementById('agentFormEnabled').checked = true;
         }
 
@@ -1625,6 +1650,9 @@
         const toolsRaw = document.getElementById('agentFormTools').value.trim();
         const tools = toolsRaw ? toolsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
 
+        const budgetRaw = document.getElementById('agentFormBudget').value.trim();
+        const daily_budget_usd = budgetRaw !== '' ? parseFloat(budgetRaw) : null;
+
         const payload = {
           ...(isEdit ? {} : { id: newId }),
           name,
@@ -1636,6 +1664,7 @@
           tools: tools.length ? JSON.stringify(tools) : null,
           suppress_pattern: document.getElementById('agentFormSuppressPattern').value.trim() || null,
           deliver_to: document.getElementById('agentFormDeliverTo').value.trim() || null,
+          daily_budget_usd,
           enabled: document.getElementById('agentFormEnabled').checked ? 1 : 0,
         };
 

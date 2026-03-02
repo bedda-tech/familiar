@@ -13,6 +13,7 @@ export interface Agent {
   deliver_to: string | null;
   mcp_config: string | null; // JSON or file path
   enabled: number; // 0 or 1
+  daily_budget_usd: number | null; // null = unlimited
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ export interface CreateAgentInput {
   deliver_to?: string;
   mcp_config?: string;
   enabled?: boolean;
+  daily_budget_usd?: number | null;
 }
 
 export interface UpdateAgentInput {
@@ -46,4 +48,5 @@ export interface UpdateAgentInput {
   deliver_to?: string | null;
   mcp_config?: string | null;
   enabled?: boolean;
+  daily_budget_usd?: number | null;
 }

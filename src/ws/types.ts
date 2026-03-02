@@ -5,6 +5,7 @@
 export type WsEvent =
   | { type: "schedule:started"; scheduleId: string; agentId: string }
   | { type: "schedule:completed"; scheduleId: string; agentId: string; durationMs: number; costUsd: number; isError: boolean }
+  | { type: "schedule:budget_exceeded"; scheduleId: string; agentId: string; dailyCostUsd: number; budgetUsd: number }
   | { type: "task:updated"; task: Record<string, unknown> }
   | { type: "task:claimed"; taskId: number; agent: string }
   | { type: "task:completed"; taskId: number; result: string }

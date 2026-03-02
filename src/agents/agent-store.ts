@@ -33,10 +33,19 @@ export class AgentCrudStore {
         deliver_to TEXT,
         mcp_config TEXT,
         enabled INTEGER DEFAULT 1,
+        daily_budget_usd REAL DEFAULT NULL,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Additive migration: add daily_budget_usd if missing (existing DBs)
+    const cols = (
+      this.db.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    if (!cols.includes("daily_budget_usd")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN daily_budget_usd REAL DEFAULT NULL");
+    }
   }
 
   list(filters?: { enabled?: boolean }): Agent[] {
@@ -59,8 +68,8 @@ export class AgentCrudStore {
   create(input: CreateAgentInput): Agent {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -76,6 +85,7 @@ export class AgentCrudStore {
         input.deliver_to ?? null,
         input.mcp_config ?? null,
         input.enabled !== false ? 1 : 0,
+        input.daily_budget_usd ?? null,
       );
     log.info({ id: input.id, name: input.name }, "agent created");
     return this.get(input.id)!;
@@ -135,6 +145,10 @@ export class AgentCrudStore {
     if (input.enabled !== undefined) {
       fields.push("enabled = ?");
       values.push(input.enabled ? 1 : 0);
+    }
+    if ("daily_budget_usd" in input) {
+      fields.push("daily_budget_usd = ?");
+      values.push(input.daily_budget_usd ?? null);
     }
 
     if (fields.length === 0) return existing;
