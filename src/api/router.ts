@@ -17,6 +17,8 @@
  *   PUT  /api/cron/jobs/:id             — update a cron job config
  *   DELETE /api/cron/jobs/:id           — delete a cron job
  *   GET  /api/config                    — get sanitized config
+ *   GET  /api/activity                  — list activity log entries
+ *   POST /api/activity                  — insert an activity log entry
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -262,6 +264,41 @@ export class ApiRouter {
     }
 
     if (method === "POST") {
+      // ── Activity Log ──
+      if (path === "/api/activity" && body) {
+        if (!this.db) {
+          sendJson(res, 503, { error: "Database not available" });
+        } else {
+          const { type, agent_id, schedule_id, task_id, summary, details } = body as any;
+          if (!type || !summary) {
+            sendJson(res, 400, { error: "Missing required fields: type, summary" });
+          } else {
+            try {
+              const result = this.db
+                .prepare(
+                  `INSERT INTO activity_log (type, agent_id, schedule_id, task_id, summary, details)
+                   VALUES (?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                  type,
+                  agent_id ?? null,
+                  schedule_id ?? null,
+                  task_id ?? null,
+                  summary,
+                  details ? (typeof details === "string" ? details : JSON.stringify(details)) : null,
+                );
+              const entry = this.db
+                .prepare("SELECT * FROM activity_log WHERE id = ?")
+                .get(result.lastInsertRowid);
+              sendJson(res, 201, { activity: entry });
+            } catch (e: any) {
+              sendJson(res, 500, { error: e.message ?? "Failed to insert activity" });
+            }
+          }
+        }
+        return true;
+      }
+
       // ── Agent CRUD ──
       if (path === "/api/agents" && body) {
         if (!this.agentCrudStore) {
