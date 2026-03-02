@@ -34,6 +34,8 @@ export class CronScheduler {
   private sharedDb: Database.Database | null = null;
   /** Recurring task ticker -- resets completed recurring tasks on schedule. */
   private recurringTicker: Cron | null = null;
+  /** Stale task ticker -- rescues abandoned in_progress tasks. */
+  private staleTaskTicker: Cron | null = null;
   /** WebSocket server for broadcasting events. */
   private wsServer: WsServer | null = null;
 
@@ -135,6 +137,9 @@ export class CronScheduler {
 
     // Start recurring task ticker (every minute)
     this.startRecurringTicker();
+
+    // Start stale task rescue ticker (every 5 minutes)
+    this.startStaleTaskTicker();
 
     // Legacy config-based jobs (skip any already scheduled from DB)
     for (const [id, config] of this.configs) {
@@ -252,6 +257,10 @@ export class CronScheduler {
     if (this.recurringTicker) {
       this.recurringTicker.stop();
       this.recurringTicker = null;
+    }
+    if (this.staleTaskTicker) {
+      this.staleTaskTicker.stop();
+      this.staleTaskTicker = null;
     }
     for (const [id, cron] of this.jobs) {
       cron.stop();
@@ -523,6 +532,125 @@ export class CronScheduler {
       }
     } catch (e) {
       log.error({ err: e }, "recurring task ticker failed");
+    }
+  }
+
+  /** Start the stale task rescue ticker -- runs every 5 minutes. */
+  private startStaleTaskTicker(): void {
+    if (this.staleTaskTicker) {
+      this.staleTaskTicker.stop();
+    }
+
+    this.staleTaskTicker = new Cron("*/5 * * * *", { protect: true }, () => {
+      this.tickStaleTasks();
+    });
+
+    log.info("stale task rescue ticker started (every 5 minutes)");
+  }
+
+  /** Rescue abandoned in_progress tasks: reset to ready or fail after max retries. */
+  private tickStaleTasks(): void {
+    if (!this.sharedDb) return;
+
+    const maxRetries = 3;
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+    try {
+      const staleTasks = this.sharedDb
+        .prepare(
+          `SELECT id, title, COALESCE(retry_count, 0) as retry_count, assigned_agent
+           FROM tasks
+           WHERE status = 'in_progress'
+             AND (claimed_at IS NULL OR claimed_at < ?)`,
+        )
+        .all(twoHoursAgo) as Array<{
+        id: number;
+        title: string;
+        retry_count: number;
+        assigned_agent: string | null;
+      }>;
+
+      if (staleTasks.length === 0) return;
+
+      let rescuedCount = 0;
+      let failedCount = 0;
+
+      for (const task of staleTasks) {
+        const newRetryCount = task.retry_count + 1;
+
+        if (newRetryCount > maxRetries) {
+          // Too many rescues -- move to failed
+          this.sharedDb
+            .prepare(
+              `UPDATE tasks SET status = 'failed', retry_count = ?,
+               claimed_by = NULL, claimed_at = NULL, updated_at = datetime('now')
+               WHERE id = ?`,
+            )
+            .run(newRetryCount, task.id);
+
+          failedCount++;
+          log.warn(
+            { taskId: task.id, title: task.title, retryCount: newRetryCount, maxRetries },
+            "stale task moved to failed after max retries",
+          );
+
+          this.logActivity(
+            "task_failed_stale",
+            `Task "${task.title}" failed after ${maxRetries} rescue attempts`,
+            {
+              taskId: task.id,
+              details: JSON.stringify({ retryCount: newRetryCount, maxRetries }),
+            },
+          );
+
+          this.wsServer?.broadcast({
+            type: "task:failed_stale",
+            taskId: task.id,
+            title: task.title,
+            retryCount: newRetryCount,
+          });
+        } else {
+          // Reset to ready for another attempt
+          this.sharedDb
+            .prepare(
+              `UPDATE tasks SET status = 'ready', retry_count = ?,
+               claimed_by = NULL, claimed_at = NULL, updated_at = datetime('now')
+               WHERE id = ?`,
+            )
+            .run(newRetryCount, task.id);
+
+          rescuedCount++;
+          log.info(
+            { taskId: task.id, title: task.title, retryCount: newRetryCount, maxRetries },
+            "stale task rescued, reset to ready",
+          );
+
+          this.logActivity(
+            "task_rescued",
+            `Task "${task.title}" rescued (attempt ${newRetryCount}/${maxRetries})`,
+            {
+              taskId: task.id,
+              details: JSON.stringify({ retryCount: newRetryCount }),
+            },
+          );
+
+          this.wsServer?.broadcast({
+            type: "task:rescued",
+            taskId: task.id,
+            title: task.title,
+            retryCount: newRetryCount,
+          });
+        }
+      }
+
+      if (rescuedCount > 0 || failedCount > 0) {
+        log.info(
+          { rescuedCount, failedCount, checked: staleTasks.length },
+          "stale task rescue tick complete",
+        );
+      }
+    } catch (e) {
+      log.error({ err: e }, "stale task rescue ticker failed");
     }
   }
 

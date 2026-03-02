@@ -9,6 +9,8 @@ export type WsEvent =
   | { type: "task:updated"; task: Record<string, unknown> }
   | { type: "task:claimed"; taskId: number; agent: string }
   | { type: "task:completed"; taskId: number; result: string }
+  | { type: "task:rescued"; taskId: number; title: string; retryCount: number }
+  | { type: "task:failed_stale"; taskId: number; title: string; retryCount: number }
   | { type: "agent:status"; agentId: string; status: string }
   | { type: "activity"; entry: ActivityEntry }
   | { type: "chat:message"; role: string; text: string }

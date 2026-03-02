@@ -27,6 +27,7 @@ export interface Task {
   updated_at: string;
   claimed_by: string | null;
   claimed_at: string | null;
+  retry_count: number;
 }
 
 export interface CreateTaskInput {

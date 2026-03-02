@@ -86,6 +86,11 @@ export class SessionStore {
     } catch {
       // Column already exists
     }
+    try {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN retry_count INTEGER DEFAULT 0");
+    } catch {
+      // Column already exists
+    }
   }
 
   /** Get the session ID for a chat, or null if expired/nonexistent */
