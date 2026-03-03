@@ -39,12 +39,15 @@ export class AgentCrudStore {
       );
     `);
 
-    // Additive migration: add daily_budget_usd if missing (existing DBs)
+    // Additive migrations: add columns if missing (existing DBs)
     const cols = (
       this.db.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>
     ).map((c) => c.name);
     if (!cols.includes("daily_budget_usd")) {
       this.db.exec("ALTER TABLE agents ADD COLUMN daily_budget_usd REAL DEFAULT NULL");
+    }
+    if (!cols.includes("validation_command")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN validation_command TEXT DEFAULT NULL");
     }
   }
 
@@ -68,8 +71,8 @@ export class AgentCrudStore {
   create(input: CreateAgentInput): Agent {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -86,6 +89,7 @@ export class AgentCrudStore {
         input.mcp_config ?? null,
         input.enabled !== false ? 1 : 0,
         input.daily_budget_usd ?? null,
+        input.validation_command ?? null,
       );
     log.info({ id: input.id, name: input.name }, "agent created");
     return this.get(input.id)!;
@@ -149,6 +153,10 @@ export class AgentCrudStore {
     if ("daily_budget_usd" in input) {
       fields.push("daily_budget_usd = ?");
       values.push(input.daily_budget_usd ?? null);
+    }
+    if ("validation_command" in input) {
+      fields.push("validation_command = ?");
+      values.push(input.validation_command ?? null);
     }
 
     if (fields.length === 0) return existing;

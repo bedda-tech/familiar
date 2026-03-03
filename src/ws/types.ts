@@ -12,6 +12,7 @@ export type WsEvent =
   | { type: "task:rescued"; taskId: number; title: string; retryCount: number }
   | { type: "task:failed_stale"; taskId: number; title: string; retryCount: number }
   | { type: "agent:status"; agentId: string; status: string }
+  | { type: "validation:failed"; agentId: string; commits: string; validationCommand: string; taskId?: number }
   | { type: "activity"; entry: ActivityEntry }
   | { type: "chat:message"; role: string; text: string }
   | { type: "chat:draft"; text: string; done: boolean }

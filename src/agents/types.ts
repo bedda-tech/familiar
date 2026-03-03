@@ -14,6 +14,8 @@ export interface Agent {
   mcp_config: string | null; // JSON or file path
   enabled: number; // 0 or 1
   daily_budget_usd: number | null; // null = unlimited
+  /** Shell command to run after the agent makes git commits. e.g. "npm run build && npm test" */
+  validation_command: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +35,7 @@ export interface CreateAgentInput {
   mcp_config?: string;
   enabled?: boolean;
   daily_budget_usd?: number | null;
+  validation_command?: string | null;
 }
 
 export interface UpdateAgentInput {
@@ -49,4 +52,5 @@ export interface UpdateAgentInput {
   mcp_config?: string | null;
   enabled?: boolean;
   daily_budget_usd?: number | null;
+  validation_command?: string | null;
 }

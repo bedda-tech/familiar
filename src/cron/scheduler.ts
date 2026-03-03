@@ -2,6 +2,7 @@ import { Cron } from "croner";
 import Database from "better-sqlite3";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import type { CronJobConfig, CronRunResult } from "./types.js";
 import type { ClaudeConfig } from "../config.js";
 import { runCronJob } from "./runner.js";
@@ -12,8 +13,12 @@ import type { Agent } from "../agents/types.js";
 import type { Schedule } from "../schedules/types.js";
 import type { WsServer } from "../ws/server.js";
 import type { WsEvent } from "../ws/types.js";
+import type { TaskStore } from "../tasks/store.js";
 
 const log = getLogger("cron-scheduler");
+
+/** Agents that skip task-awareness injection (infrastructure agents). */
+const SKIP_TASK_PREFIX_AGENTS = new Set(["heartbeat", "cron-doctor", "pipeline-monitor"]);
 
 export interface CronDeliveryHandler {
   (jobId: string, result: CronRunResult, config: CronJobConfig): Promise<void>;
@@ -38,6 +43,8 @@ export class CronScheduler {
   private staleTaskTicker: Cron | null = null;
   /** WebSocket server for broadcasting events. */
   private wsServer: WsServer | null = null;
+  /** Task store for creating follow-up tasks on validation failure. */
+  private taskStore: TaskStore | null = null;
 
   constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
     this.claudeConfig = claudeConfig;
@@ -65,6 +72,11 @@ export class CronScheduler {
     this.wsServer = ws;
   }
 
+  /** Set the task store for creating follow-up tasks on validation failure. */
+  setTaskStore(store: TaskStore): void {
+    this.taskStore = store;
+  }
+
   /** Log an entry to the activity_log table (via sharedDb). */
   private logActivity(
     type: string,
@@ -89,6 +101,126 @@ export class CronScheduler {
     } catch (e) {
       log.warn({ err: e }, "failed to log activity");
     }
+  }
+
+  /**
+   * Run post-validation after an agent completes a run.
+   *
+   * Flow:
+   *   1. Look up agent's validation_command from DB (skip if none set)
+   *   2. Detect new git commits since the run started
+   *   3. If commits found, run the validation command in the agent's working dir
+   *   4. On success: log activity
+   *   5. On failure: create follow-up task, revert the commit, broadcast event
+   */
+  private runPostValidation(agentId: string, workDir: string | undefined, startedAt: Date): void {
+    if (!this.sharedDb || !workDir) return;
+
+    // Look up validation command for this agent
+    const agentRow = this.sharedDb
+      .prepare("SELECT validation_command FROM agents WHERE id = ?")
+      .get(agentId) as { validation_command: string | null } | undefined;
+
+    const validationCmd = agentRow?.validation_command;
+    if (!validationCmd) return;
+
+    // Detect new commits since this run started (ISO 8601 format git understands)
+    const sinceArg = `--since=${startedAt.toISOString()}`;
+    const gitCheck = spawnSync("git", ["log", sinceArg, "--oneline"], {
+      cwd: workDir,
+      encoding: "utf-8",
+    });
+
+    if (gitCheck.status !== 0 || !gitCheck.stdout.trim()) {
+      log.debug({ agentId }, "no new commits since run start, skipping validation");
+      return;
+    }
+
+    const commits = gitCheck.stdout.trim();
+    const firstCommit = commits.split("\n")[0];
+    log.info({ agentId, commits }, "new commits detected — running post-run validation");
+
+    // Run the validation command (shell: true so && chains work)
+    const validation = spawnSync(validationCmd, {
+      shell: true,
+      cwd: workDir,
+      encoding: "utf-8",
+      timeout: 5 * 60 * 1000, // 5 minute cap
+    });
+
+    if (validation.status === 0) {
+      log.info({ agentId, commits }, "post-run validation passed");
+      this.logActivity("validation_passed", `Validation passed for agent ${agentId}`, {
+        agentId,
+        details: JSON.stringify({ command: validationCmd, commits }),
+      });
+      return;
+    }
+
+    // Validation failed
+    const errOutput = ((validation.stdout ?? "") + "\n" + (validation.stderr ?? ""))
+      .trim()
+      .slice(0, 2000);
+    log.error(
+      { agentId, exitCode: validation.status, commits, errOutput },
+      "post-run validation FAILED — reverting commit",
+    );
+
+    this.logActivity(
+      "validation_failed",
+      `Validation FAILED for agent ${agentId} — commit reverted`,
+      {
+        agentId,
+        details: JSON.stringify({ command: validationCmd, commits, error: errOutput }),
+      },
+    );
+
+    // Create a follow-up fix task
+    let followUpTaskId: number | undefined;
+    if (this.taskStore) {
+      try {
+        const task = this.taskStore.create({
+          title: `Fix build broken by ${agentId}: ${firstCommit.slice(0, 50)}`,
+          description:
+            `Post-run validation failed after ${agentId} committed changes.\n\n` +
+            `**Commits:**\n\`\`\`\n${commits}\n\`\`\`\n\n` +
+            `**Validation command:** \`${validationCmd}\`\n\n` +
+            `**Output:**\n\`\`\`\n${errOutput}\n\`\`\`\n\n` +
+            `The offending commit was automatically reverted. Fix the underlying issue and re-commit.`,
+          assigned_agent: agentId,
+          priority: 1,
+          tags: ["build-broken", "validation-failed", "auto-created"],
+        });
+        followUpTaskId = task.id;
+        log.info({ agentId, taskId: task.id }, "follow-up fix task created");
+      } catch (e) {
+        log.warn({ agentId, err: e }, "failed to create follow-up task");
+      }
+    }
+
+    // Revert the bad commit
+    const revert = spawnSync("git", ["revert", "HEAD", "--no-edit"], {
+      cwd: workDir,
+      encoding: "utf-8",
+    });
+
+    if (revert.status === 0) {
+      log.info({ agentId }, "bad commit reverted successfully");
+    } else {
+      log.error(
+        { agentId, stderr: revert.stderr?.slice(0, 500) },
+        "failed to auto-revert bad commit — manual intervention required",
+      );
+    }
+
+    // Broadcast failure event
+    this.wsServer?.broadcast({
+      type: "validation:failed",
+      agentId,
+      commits,
+      validationCommand: validationCmd,
+      taskId: followUpTaskId,
+    });
   }
 
   private migrate(): void {
@@ -181,7 +313,8 @@ export class CronScheduler {
                   s.schedule, s.timezone, s.prompt, s.enabled as schedule_enabled,
                   a.name as agent_name, a.model, a.system_prompt, a.max_turns,
                   a.working_directory, a.tools as agent_tools, a.announce,
-                  a.suppress_pattern, a.deliver_to, a.mcp_config, a.enabled as agent_enabled
+                  a.suppress_pattern, a.deliver_to, a.mcp_config, a.enabled as agent_enabled,
+                  a.chrome, a.max_run_budget_usd
            FROM schedules s
            JOIN agents a ON s.agent_id = a.id
            WHERE s.enabled = 1 AND a.enabled = 1`,
@@ -208,6 +341,8 @@ export class CronScheduler {
             deliverTo: (row.deliver_to as string) ?? undefined,
             enabled: true,
             systemPrompt: (row.system_prompt as string) ?? undefined,
+            chrome: (row.chrome as number) !== 0,
+            maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
           };
 
           const cron = new Cron(
@@ -303,6 +438,8 @@ export class CronScheduler {
             deliverTo: (agent.deliver_to as string) ?? undefined,
             enabled: true,
             systemPrompt: (agent.system_prompt as string) ?? undefined,
+            chrome: (agent.chrome as number) !== 0,
+            maxRunBudgetUsd: (agent.max_run_budget_usd as number) ?? undefined,
           };
           return this.executeJobWithScheduleId(jobConfig, schedule.id as string);
         }
@@ -336,7 +473,7 @@ export class CronScheduler {
                     s.schedule, s.timezone, s.prompt, s.enabled as schedule_enabled,
                     a.name as agent_name, a.model, a.system_prompt, a.max_turns,
                     a.working_directory, a.announce, a.suppress_pattern, a.deliver_to,
-                    a.enabled as agent_enabled
+                    a.enabled as agent_enabled, a.chrome, a.max_run_budget_usd
              FROM schedules s
              JOIN agents a ON s.agent_id = a.id`,
           )
@@ -377,6 +514,8 @@ export class CronScheduler {
             deliverTo: (row.deliver_to as string) ?? undefined,
             enabled: isEnabled,
             systemPrompt: (row.system_prompt as string) ?? undefined,
+            chrome: (row.chrome as number) !== 0,
+            maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
             nextRun: next?.toISOString() ?? state?.next_run_at ?? null,
             lastRun: state?.last_run_at ?? null,
             runCount: state?.run_count ?? 0,
@@ -458,11 +597,46 @@ export class CronScheduler {
     }));
   }
 
+  /** Prune old cron_runs (older than 30 days) and stale ready tasks (older than 14 days). */
+  private pruneOldData(): void {
+    try {
+      const runsDeleted = this.db
+        .prepare(`DELETE FROM cron_runs WHERE started_at < datetime('now', '-30 days')`)
+        .run().changes;
+      if (runsDeleted > 0) {
+        log.info({ runsDeleted }, "pruned old cron_runs");
+      }
+    } catch (e) {
+      log.warn({ err: e }, "failed to prune cron_runs");
+    }
+
+    if (this.sharedDb) {
+      try {
+        const tasksDeleted = this.sharedDb
+          .prepare(
+            `DELETE FROM tasks
+             WHERE status = 'ready'
+               AND claimed_by IS NULL
+               AND updated_at < datetime('now', '-14 days')`,
+          )
+          .run().changes;
+        if (tasksDeleted > 0) {
+          log.info({ tasksDeleted }, "pruned stale ready tasks");
+        }
+      } catch (e) {
+        log.warn({ err: e }, "failed to prune stale tasks");
+      }
+    }
+  }
+
   /** Start the recurring task ticker -- runs every minute to reset due recurring tasks. */
   private startRecurringTicker(): void {
     if (this.recurringTicker) {
       this.recurringTicker.stop();
     }
+
+    // Run data pruning once at startup
+    this.pruneOldData();
 
     this.recurringTicker = new Cron("* * * * *", { protect: true }, () => {
       this.tickRecurringTasks();
@@ -654,6 +828,32 @@ export class CronScheduler {
     }
   }
 
+  /** Build the task-awareness prefix that gets injected into agent prompts at runtime.
+   *  This standardizes task claim/complete behavior across all non-infrastructure agents. */
+  private buildTaskPrefix(agentId: string): string {
+    const token = "80655efdf7d81d113e20cff1d3d98c432c035c48b1046441b65b95c541e2d8e5";
+    const base = "http://127.0.0.1:3002";
+    return `## Task Queue Check (auto-injected)
+Before starting your default work, check for assigned tasks:
+curl -s -H 'x-familiar-token: ${token}' '${base}/api/tasks/next?agent=${agentId}'
+If a task is returned (task is not null):
+1. Claim IMMEDIATELY: curl -s -X POST -H 'x-familiar-token: ${token}' -H 'Content-Type: application/json' '${base}/api/tasks/TASK_ID/claim' -d '{"agent":"${agentId}"}'
+2. Do the work described in the task
+3. Complete as your LAST action: curl -s -X POST -H 'x-familiar-token: ${token}' -H 'Content-Type: application/json' '${base}/api/tasks/TASK_ID/complete' -d '{"result":"Summary of what you did"}'
+IMPORTANT: If you are running low on turns and cannot finish, complete with: '{"result":"PARTIAL: <describe progress and what remains>"}'
+If no task is assigned, proceed with your default work below.
+
+`;
+  }
+
+  /** Inject task prefix into prompt if the agent is not infrastructure. */
+  private injectTaskPrefix(config: CronJobConfig): CronJobConfig {
+    if (SKIP_TASK_PREFIX_AGENTS.has(config.id)) return config;
+    // Don't double-inject if prompt already has task queue check
+    if (config.prompt.includes("Task Queue Check")) return config;
+    return { ...config, prompt: this.buildTaskPrefix(config.id) + config.prompt };
+  }
+
   private async acquireSlot(jobId: string): Promise<void> {
     if (this.concurrentCount < this.maxConcurrent) {
       this.concurrentCount++;
@@ -746,11 +946,17 @@ export class CronScheduler {
 
     try {
       log.info({ scheduleId, agentId: config.id, concurrent: this.concurrentCount }, "executing DB job");
-      const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
+      const effectiveConfig = this.injectTaskPrefix(config);
+      const result = await runCronJob(effectiveConfig, this.claudeConfig, { workspace: this.workspace });
 
       // Record with schedule ID
       const resultForRecording = { ...result, jobId: scheduleId };
       this.recordRun(resultForRecording);
+
+      // Post-run validation (only if run succeeded or made commits despite errors)
+      if (!result.isError) {
+        this.runPostValidation(config.id, config.workingDirectory, result.startedAt);
+      }
 
       // Update next run time
       const cron = this.jobs.get(scheduleId);
@@ -856,8 +1062,14 @@ export class CronScheduler {
 
     try {
       log.info({ jobId: config.id, concurrent: this.concurrentCount }, "executing job");
-      const result = await runCronJob(config, this.claudeConfig, { workspace: this.workspace });
+      const effectiveConfig = this.injectTaskPrefix(config);
+      const result = await runCronJob(effectiveConfig, this.claudeConfig, { workspace: this.workspace });
       this.recordRun(result);
+
+      // Post-run validation (only if run succeeded or made commits despite errors)
+      if (!result.isError) {
+        this.runPostValidation(config.id, config.workingDirectory, result.startedAt);
+      }
 
       // Update next run time
       const cron = this.jobs.get(config.id);
@@ -979,15 +1191,18 @@ export class CronScheduler {
       | undefined;
   }
 
-  /** Sum cost_usd for a given agent across all job IDs in the last 24 hours. */
+  /** Sum cost_usd for a given agent across all job IDs in the last 24 hours.
+   *  Costs are recorded under schedule_id (e.g. "heartbeat-default"), so we
+   *  match both the exact agent_id and any schedule_id prefixed with it. */
   getDailyAgentCost(agentId: string): number {
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(cost_usd), 0) as total
          FROM cron_runs
-         WHERE job_id = ? AND started_at >= datetime('now', '-1 day')`,
+         WHERE (job_id = ? OR job_id LIKE ? || '-%')
+           AND started_at >= datetime('now', '-1 day')`,
       )
-      .get(agentId) as { total: number } | undefined;
+      .get(agentId, agentId) as { total: number } | undefined;
     return row?.total ?? 0;
   }
 

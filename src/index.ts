@@ -337,7 +337,7 @@ async function cmdStart(configPath?: string): Promise<void> {
     const status = agent.status === "completed" ? "done" : agent.status;
     const meta = `_${(durationMs / 1000).toFixed(1)}s | $${costUsd.toFixed(4)}_`;
     const preview = resultText.length > 3000 ? resultText.slice(0, 3000) + "..." : resultText;
-    const text = `*Sub-agent ${status} — ${label}*\n${meta}\n\n${preview}`;
+    const text = `**Sub-agent ${status} -- ${label}**\n${meta}\n\n${preview}`;
     await deliveryQueue.deliver(agent.chatId, text);
   });
 
@@ -377,7 +377,7 @@ async function cmdStart(configPath?: string): Promise<void> {
     cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig) => {
       const chatId = jobConfig.deliverTo ?? defaultChatId;
       const label = jobConfig.label ?? jobConfig.id;
-      const prefix = result.isError ? `*Cron Error -- ${label}*` : `*Cron -- ${label}*`;
+      const prefix = result.isError ? `**Cron Error -- ${label}**` : `**Cron -- ${label}**`;
       const meta = `_${result.durationMs}ms | $${result.costUsd.toFixed(4)} | ${result.numTurns} turns_`;
       const text = `${prefix}\n${meta}\n\n${result.text}`;
       await deliveryQueue.deliver(chatId, text);
@@ -425,6 +425,11 @@ async function cmdStart(configPath?: string): Promise<void> {
     // Wire up task store for REST API (named so we can add onUpdate callback)
     const taskStore = new TaskStore(db);
     webhooks.setTaskStore(taskStore);
+
+    // Wire task store into scheduler so validation failures can create follow-up tasks
+    if (cron) {
+      cron.setTaskStore(taskStore);
+    }
 
     // Set config path for legacy cron CRUD operations
     webhooks.setConfigPath(join(configDir, "config.json"));
