@@ -28,6 +28,12 @@ export interface CronJobConfig {
    *  do NOT inherit the global systemPrompt by default — they are task-focused
    *  executors that don't need personality context. */
   systemPrompt?: string;
+  /** Whether to spawn with --chrome. Defaults to true for backwards compat. */
+  chrome?: boolean;
+  /** Per-run budget cap passed as --max-budget-usd to the claude CLI. */
+  maxRunBudgetUsd?: number;
+  /** Whether to run this job in an isolated git worktree. */
+  worktreeIsolation?: boolean;
 }
 
 /** Runtime state for a cron job, persisted in SQLite */

@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
@@ -102,16 +102,113 @@ export function inferModelFromTask(task: {
   return "sonnet";
 }
 
+/** Detect OAuth token expiry errors from stderr or result text. */
+function isAuthError(stderr: string, text: string): boolean {
+  const combined = (stderr + " " + text).toLowerCase();
+  return (
+    combined.includes("oauth token has expired") ||
+    combined.includes("401 unauthorized") ||
+    (combined.includes("401") && combined.includes("authentication")) ||
+    combined.includes("invalid api key") ||
+    combined.includes("unauthenticated")
+  );
+}
+
+/** Delay helper for retry backoff. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface WorktreeInfo {
+  path: string;
+  branch: string;
+}
+
+/** Create a git worktree for isolated agent execution. Returns null on failure. */
+function createWorktree(workDir: string, jobId: string): WorktreeInfo | null {
+  const timestamp = Date.now();
+  const safeId = jobId.replace(/[^a-zA-Z0-9-]/g, "-");
+  const branch = `agent/${safeId}/${timestamp}`;
+  const worktreeDir = join(workDir, ".worktrees", `${safeId}-${timestamp}`);
+
+  mkdirSync(join(workDir, ".worktrees"), { recursive: true });
+
+  const result = spawnSync("git", ["worktree", "add", worktreeDir, "-b", branch], {
+    cwd: workDir,
+    encoding: "utf-8",
+  });
+
+  if (result.status !== 0) {
+    log.warn({ jobId, stderr: result.stderr?.slice(0, 300) }, "failed to create git worktree");
+    return null;
+  }
+
+  log.info({ jobId, worktreePath: worktreeDir, branch }, "created git worktree");
+  return { path: worktreeDir, branch };
+}
+
+/** Merge and remove a worktree on success, or preserve it on failure. */
+function cleanupWorktree(
+  workDir: string,
+  info: WorktreeInfo,
+  success: boolean,
+  jobId: string,
+): void {
+  if (!success) {
+    log.info(
+      { jobId, worktreePath: info.path, branch: info.branch },
+      "preserving failed worktree for inspection",
+    );
+    return;
+  }
+
+  const merge = spawnSync(
+    "git",
+    ["merge", info.branch, "--no-ff", "-m", `Merge agent run: ${jobId}`],
+    { cwd: workDir, encoding: "utf-8" },
+  );
+
+  if (merge.status !== 0) {
+    log.error(
+      { jobId, stderr: merge.stderr?.slice(0, 500), branch: info.branch },
+      "failed to merge worktree branch — preserving for inspection",
+    );
+    return;
+  }
+
+  spawnSync("git", ["worktree", "remove", info.path, "--force"], { cwd: workDir });
+  spawnSync("git", ["branch", "-d", info.branch], { cwd: workDir });
+  log.info({ jobId, branch: info.branch }, "worktree merged and removed");
+}
+
+/** Force-remove a worktree without merging (e.g. auth errors with no useful content). */
+function forceRemoveWorktree(workDir: string, info: WorktreeInfo, jobId: string): void {
+  spawnSync("git", ["worktree", "remove", info.path, "--force"], { cwd: workDir });
+  spawnSync("git", ["branch", "-D", info.branch], { cwd: workDir });
+  log.debug({ jobId, branch: info.branch }, "force-removed empty worktree");
+}
+
 /** Run a cron job by spawning an isolated `claude -p` process. */
 export async function runCronJob(
   job: CronJobConfig,
   defaultConfig: ClaudeConfig,
   options?: RunCronJobOptions,
+  _isRetry = false,
 ): Promise<CronRunResult> {
   const startedAt = new Date();
   const model = resolveModel(job, defaultConfig, options?.modelHint);
   const workDir = job.workingDirectory ?? defaultConfig.workingDirectory;
   const maxTurns = job.maxTurns ?? defaultConfig.maxTurns ?? 25;
+
+  // Worktree isolation: create a fresh branch for this run
+  let worktreeInfo: WorktreeInfo | null = null;
+  let effectiveWorkDir = workDir;
+  if (job.worktreeIsolation && workDir) {
+    worktreeInfo = createWorktree(workDir, job.id);
+    if (worktreeInfo) {
+      effectiveWorkDir = worktreeInfo.path;
+    }
+  }
 
   // Set up agent workspace if provided
   const workspace = options?.workspace;
@@ -126,7 +223,7 @@ export async function runCronJob(
     "-p",
     "--output-format",
     "stream-json",
-    "--verbose",
+    "--verbose", // Required: stream-json with -p requires --verbose
     // Each cron run MUST be a fresh session. Without this flag, Claude resumes
     // a prior session and hallucinates "Already reported above" without doing
     // any work — this caused 12 wasted greenhouse-pipeline runs on 2026-02-22.
@@ -164,16 +261,26 @@ export async function runCronJob(
     args.push("--mcp-config", defaultConfig.mcpConfig);
   }
 
-  // Give cron agents access to Chrome for cookie extraction, web interaction, etc.
-  args.push("--chrome");
+  // Only spawn with --chrome when the job needs browser access (default: true)
+  if (job.chrome !== false) {
+    args.push("--chrome");
+  }
 
-  log.info({ jobId: job.id, model, workDir }, "running cron job");
+  // Per-run budget cap
+  if (job.maxRunBudgetUsd) {
+    args.push("--max-budget-usd", String(job.maxRunBudgetUsd));
+  }
+
+  log.info(
+    { jobId: job.id, model, workDir: effectiveWorkDir, chrome: job.chrome !== false },
+    "running cron job",
+  );
 
   const env = { ...process.env };
   delete env.CLAUDECODE;
 
   const proc = spawn("claude", args, {
-    cwd: workDir,
+    cwd: effectiveWorkDir,
     stdio: ["pipe", "pipe", "pipe"],
     env,
   });
@@ -196,10 +303,8 @@ export async function runCronJob(
   const rl = createInterface({ input: proc.stdout });
   let result: BackendResult | null = null;
   let accumulatedText = "";
-  // Track streaming text captured since the last assistant event. Used to
-  // decide whether to fall back to the assistant message's text blocks when
-  // no streaming deltas arrived for a given turn (e.g. piped/non-TTY mode).
-  let deltasSinceLastAssistant = "";
+  // Track tool names used during the session for fallback summary
+  const toolsUsed = new Set<string>();
 
   for await (const line of rl) {
     if (!line.trim()) continue;
@@ -212,26 +317,31 @@ export async function runCronJob(
     }
 
     switch (event.type) {
+      case "content_block_start":
+        if (event.content_block?.type === "tool_use" && event.content_block.name) {
+          toolsUsed.add(event.content_block.name);
+        }
+        break;
+
       case "content_block_delta":
         if (event.delta?.type === "text_delta" && event.delta.text) {
           accumulatedText += event.delta.text;
-          deltasSinceLastAssistant += event.delta.text;
         }
         break;
 
       case "assistant":
-        // If no streaming deltas arrived for this turn, extract text from the
-        // full assistant message. This handles both non-streaming modes and
-        // turns where Claude produced text that wasn't captured via deltas.
-        if (!deltasSinceLastAssistant && event.message?.content) {
+        // In stream-json piped mode, text comes via assistant message content
+        // blocks (content_block_delta events are never emitted). Always extract.
+        if (event.message?.content) {
           for (const block of event.message.content) {
             if (block.type === "text" && block.text) {
               accumulatedText += block.text;
             }
+            if (block.type === "tool_use" && block.name) {
+              toolsUsed.add(block.name);
+            }
           }
         }
-        // Reset per-turn tracker for the next turn.
-        deltasSinceLastAssistant = "";
         break;
 
       case "result":
@@ -318,12 +428,41 @@ export async function runCronJob(
     "cron job complete",
   );
 
+  // Build final text. When both accumulatedText and result.text are empty
+  // (common in tool-heavy sessions), generate a fallback summary so the
+  // delivery message isn't blank.
+  let finalText = accumulatedText || result.text;
+  if (!finalText && (result.numTurns > 0 || toolsUsed.size > 0)) {
+    const parts = [`Session completed (${result.numTurns} turns)`];
+    if (toolsUsed.size > 0) {
+      parts.push(`tools: ${[...toolsUsed].join(", ")}`);
+    }
+    finalText = parts.join(" -- ");
+  }
+
+  // Retry once on auth errors (OAuth token expired). The Claude CLI should auto-refresh,
+  // but if the refresh was slow or the token just refreshed, a 30s delay + retry often works.
+  if (result.isError && !_isRetry && isAuthError(stderr, finalText)) {
+    log.warn({ jobId: job.id }, "auth error detected — waiting 30s then retrying once");
+    // Auth error: agent did no real work, force-remove worktree before retry
+    if (worktreeInfo && workDir) {
+      forceRemoveWorktree(workDir, worktreeInfo, job.id);
+    }
+    await sleep(30_000);
+    return runCronJob(job, defaultConfig, options, true);
+  }
+
+  // Merge or preserve worktree
+  if (worktreeInfo && workDir) {
+    cleanupWorktree(workDir, worktreeInfo, !result.isError, job.id);
+  }
+
   return {
     jobId: job.id,
     // Prefer accumulatedText (captures all turns) over result.text (final turn only).
     // For multi-turn sessions, result.text from the result event only contains the
     // last assistant message. accumulatedText has text from every turn.
-    text: accumulatedText || result.text,
+    text: finalText,
     costUsd: result.costUsd,
     durationMs: result.durationMs,
     numTurns: result.numTurns,

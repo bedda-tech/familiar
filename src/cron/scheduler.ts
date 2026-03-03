@@ -314,7 +314,7 @@ export class CronScheduler {
                   a.name as agent_name, a.model, a.system_prompt, a.max_turns,
                   a.working_directory, a.tools as agent_tools, a.announce,
                   a.suppress_pattern, a.deliver_to, a.mcp_config, a.enabled as agent_enabled,
-                  a.chrome, a.max_run_budget_usd
+                  a.chrome, a.max_run_budget_usd, a.worktree_isolation
            FROM schedules s
            JOIN agents a ON s.agent_id = a.id
            WHERE s.enabled = 1 AND a.enabled = 1`,
@@ -343,6 +343,7 @@ export class CronScheduler {
             systemPrompt: (row.system_prompt as string) ?? undefined,
             chrome: (row.chrome as number) !== 0,
             maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
+            worktreeIsolation: (row.worktree_isolation as number) === 1,
           };
 
           const cron = new Cron(
@@ -440,6 +441,7 @@ export class CronScheduler {
             systemPrompt: (agent.system_prompt as string) ?? undefined,
             chrome: (agent.chrome as number) !== 0,
             maxRunBudgetUsd: (agent.max_run_budget_usd as number) ?? undefined,
+            worktreeIsolation: (agent.worktree_isolation as number) === 1,
           };
           return this.executeJobWithScheduleId(jobConfig, schedule.id as string);
         }
@@ -473,7 +475,7 @@ export class CronScheduler {
                     s.schedule, s.timezone, s.prompt, s.enabled as schedule_enabled,
                     a.name as agent_name, a.model, a.system_prompt, a.max_turns,
                     a.working_directory, a.announce, a.suppress_pattern, a.deliver_to,
-                    a.enabled as agent_enabled, a.chrome, a.max_run_budget_usd
+                    a.enabled as agent_enabled, a.chrome, a.max_run_budget_usd, a.worktree_isolation
              FROM schedules s
              JOIN agents a ON s.agent_id = a.id`,
           )
@@ -516,6 +518,7 @@ export class CronScheduler {
             systemPrompt: (row.system_prompt as string) ?? undefined,
             chrome: (row.chrome as number) !== 0,
             maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
+            worktreeIsolation: (row.worktree_isolation as number) === 1,
             nextRun: next?.toISOString() ?? state?.next_run_at ?? null,
             lastRun: state?.last_run_at ?? null,
             runCount: state?.run_count ?? 0,

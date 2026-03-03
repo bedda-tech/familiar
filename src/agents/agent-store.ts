@@ -34,6 +34,7 @@ export class AgentCrudStore {
         mcp_config TEXT,
         enabled INTEGER DEFAULT 1,
         daily_budget_usd REAL DEFAULT NULL,
+        worktree_isolation INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -48,6 +49,9 @@ export class AgentCrudStore {
     }
     if (!cols.includes("validation_command")) {
       this.db.exec("ALTER TABLE agents ADD COLUMN validation_command TEXT DEFAULT NULL");
+    }
+    if (!cols.includes("worktree_isolation")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN worktree_isolation INTEGER DEFAULT 0");
     }
   }
 
@@ -71,8 +75,8 @@ export class AgentCrudStore {
   create(input: CreateAgentInput): Agent {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command, worktree_isolation)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -90,6 +94,7 @@ export class AgentCrudStore {
         input.enabled !== false ? 1 : 0,
         input.daily_budget_usd ?? null,
         input.validation_command ?? null,
+        input.worktree_isolation ? 1 : 0,
       );
     log.info({ id: input.id, name: input.name }, "agent created");
     return this.get(input.id)!;
@@ -157,6 +162,10 @@ export class AgentCrudStore {
     if ("validation_command" in input) {
       fields.push("validation_command = ?");
       values.push(input.validation_command ?? null);
+    }
+    if (input.worktree_isolation !== undefined) {
+      fields.push("worktree_isolation = ?");
+      values.push(input.worktree_isolation ? 1 : 0);
     }
 
     if (fields.length === 0) return existing;
