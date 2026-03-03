@@ -28,6 +28,7 @@ export interface Task {
   claimed_by: string | null;
   claimed_at: string | null;
   retry_count: number;
+  depends_on: string | null; // JSON array of task IDs this task depends on
 }
 
 export interface CreateTaskInput {
@@ -39,6 +40,7 @@ export interface CreateTaskInput {
   recurrence_schedule?: string;
   tags?: string[];
   model_hint?: string;
+  depends_on?: number[]; // task IDs that must complete before this task becomes ready
 }
 
 export interface UpdateTaskInput {
@@ -93,21 +95,27 @@ export class TaskStore {
   }
 
   create(input: CreateTaskInput): Task {
+    const dependsOnJson =
+      input.depends_on && input.depends_on.length > 0 ? JSON.stringify(input.depends_on) : null;
+    const initialStatus = dependsOnJson ? "blocked" : "ready";
+
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (title, description, assigned_agent, priority, recurring, recurrence_schedule, tags, model_hint)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (title, description, assigned_agent, status, priority, recurring, recurrence_schedule, tags, model_hint, depends_on)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.title,
       input.description ?? null,
       input.assigned_agent ?? null,
+      initialStatus,
       input.priority ?? 5,
       input.recurring ? 1 : 0,
       input.recurrence_schedule ?? null,
       input.tags ? JSON.stringify(input.tags) : null,
       input.model_hint ?? null,
+      dependsOnJson,
     );
-    log.info({ id: result.lastInsertRowid, title: input.title }, "task created");
+    log.info({ id: result.lastInsertRowid, title: input.title, status: initialStatus }, "task created");
     const created = this.get(Number(result.lastInsertRowid))!;
     this.notifyUpdate(created);
     return created;
@@ -178,8 +186,22 @@ export class TaskStore {
     return false;
   }
 
-  /** Agent claims the next available task assigned to it (or unassigned). */
+  /** Agent claims the next available task assigned to it (or unassigned).
+   *  Returns any in_progress task already claimed by this agent first (continuity). */
   claim(agentId: string): Task | undefined {
+    // Continuity: if this agent already has an in_progress task, return it
+    const existing = this.db
+      .prepare(
+        `SELECT * FROM tasks
+         WHERE status = 'in_progress' AND claimed_by = ?
+         ORDER BY priority ASC LIMIT 1`,
+      )
+      .get(agentId) as Task | undefined;
+    if (existing) {
+      log.info({ taskId: existing.id, agent: agentId }, "returning existing in_progress task");
+      return existing;
+    }
+
     const task = this.db
       .prepare(
         `SELECT * FROM tasks
@@ -238,7 +260,93 @@ export class TaskStore {
 
     const completed = this.get(id);
     if (completed) this.notifyUpdate(completed);
+    // Unblock any tasks that were waiting on this one
+    this.unblockDependents(id);
     return completed;
+  }
+
+  /** After a task completes, check if any blocked tasks now have all their deps satisfied.
+   *  Returns the list of tasks that were unblocked. */
+  unblockDependents(completedTaskId: number): Task[] {
+    const blockedTasks = this.db
+      .prepare(`SELECT * FROM tasks WHERE status = 'blocked' AND depends_on IS NOT NULL`)
+      .all() as Task[];
+
+    const unblocked: Task[] = [];
+    for (const task of blockedTasks) {
+      let deps: number[];
+      try {
+        deps = JSON.parse(task.depends_on!) as number[];
+      } catch {
+        continue;
+      }
+      if (deps.length === 0 || !deps.includes(completedTaskId)) continue;
+
+      // Check if ALL deps are now completed
+      const placeholders = deps.map(() => "?").join(", ");
+      const completedCount = (
+        this.db
+          .prepare(
+            `SELECT COUNT(*) as c FROM tasks WHERE id IN (${placeholders}) AND status = 'completed'`,
+          )
+          .get(...deps) as { c: number }
+      ).c;
+
+      if (completedCount === deps.length) {
+        this.db
+          .prepare(`UPDATE tasks SET status = 'ready', updated_at = datetime('now') WHERE id = ?`)
+          .run(task.id);
+        log.info({ taskId: task.id, completedTaskId }, "task unblocked");
+        const updated = this.get(task.id);
+        if (updated) {
+          unblocked.push(updated);
+          this.notifyUpdate(updated);
+        }
+      }
+    }
+    return unblocked;
+  }
+
+  /** Enrich tasks with a computed dependency_status field showing how many deps are satisfied. */
+  enrichWithDependencyStatus(
+    tasks: Task[],
+  ): Array<Task & { dependency_status: { total: number; completed: number } | null }> {
+    // Collect all dep IDs across all tasks
+    const allDepIds = new Set<number>();
+    for (const task of tasks) {
+      if (!task.depends_on) continue;
+      try {
+        const ids = JSON.parse(task.depends_on) as number[];
+        for (const id of ids) allDepIds.add(id);
+      } catch {
+        // ignore malformed
+      }
+    }
+
+    // Batch-fetch which dep IDs are completed
+    const completedIds = new Set<number>();
+    if (allDepIds.size > 0) {
+      const depIdArr = Array.from(allDepIds);
+      const placeholders = depIdArr.map(() => "?").join(", ");
+      const completedTasks = this.db
+        .prepare(
+          `SELECT id FROM tasks WHERE id IN (${placeholders}) AND status = 'completed'`,
+        )
+        .all(...depIdArr) as { id: number }[];
+      for (const t of completedTasks) completedIds.add(t.id);
+    }
+
+    return tasks.map((task) => {
+      if (!task.depends_on) return { ...task, dependency_status: null };
+      try {
+        const ids = JSON.parse(task.depends_on) as number[];
+        if (ids.length === 0) return { ...task, dependency_status: null };
+        const completed = ids.filter((id) => completedIds.has(id)).length;
+        return { ...task, dependency_status: { total: ids.length, completed } };
+      } catch {
+        return { ...task, dependency_status: null };
+      }
+    });
   }
 
   /** List recurring tasks that are completed and due for reset based on their recurrence_schedule. */
@@ -254,8 +362,20 @@ export class TaskStore {
       .all() as Task[];
   }
 
-  /** Get the next task for a specific agent without claiming it. */
+  /** Get the next task for a specific agent without claiming it.
+   *  Returns any in_progress task already claimed by this agent first (continuity),
+   *  then falls back to the next ready task. */
   next(agentId: string): Task | undefined {
+    // Continuity: if this agent already has an in_progress task, return it first
+    const inProgress = this.db
+      .prepare(
+        `SELECT * FROM tasks
+         WHERE status = 'in_progress' AND claimed_by = ?
+         ORDER BY priority ASC LIMIT 1`,
+      )
+      .get(agentId) as Task | undefined;
+    if (inProgress) return inProgress;
+
     return this.db
       .prepare(
         `SELECT * FROM tasks

@@ -868,7 +868,7 @@ export class ApiRouter {
       assigned_agent: params.get("assigned_agent") ?? undefined,
       tag: params.get("tag") ?? undefined,
     });
-    sendJson(res, 200, { tasks });
+    sendJson(res, 200, { tasks: this.taskStore.enrichWithDependencyStatus(tasks) });
   }
 
   private handleGetTask(id: number, res: ServerResponse): void {
@@ -881,7 +881,8 @@ export class ApiRouter {
       sendJson(res, 404, { error: `Task ${id} not found` });
       return;
     }
-    sendJson(res, 200, { task });
+    const [enriched] = this.taskStore.enrichWithDependencyStatus([task]);
+    sendJson(res, 200, { task: enriched });
   }
 
   private handleCreateTask(body: Record<string, unknown>, res: ServerResponse): void {
@@ -903,6 +904,7 @@ export class ApiRouter {
       recurrence_schedule: body.recurrence_schedule as string | undefined,
       tags: body.tags as string[] | undefined,
       model_hint: body.model_hint as string | undefined,
+      depends_on: Array.isArray(body.depends_on) ? (body.depends_on as number[]) : undefined,
     });
     sendJson(res, 201, { task });
   }
@@ -969,13 +971,25 @@ export class ApiRouter {
       sendJson(res, 400, { error: "Missing required field: agent" });
       return;
     }
-    // Claim by updating status directly
+    // Claim task: set status to in_progress with claimed_by
     const task = this.taskStore.get(id);
     if (!task) {
       sendJson(res, 404, { error: `Task ${id} not found` });
       return;
     }
-    const updated = this.taskStore.update(id, { status: "in_progress" });
+    // If already in_progress and claimed by this agent, just return it (continuity)
+    if (task.status === "in_progress" && task.claimed_by === agent) {
+      sendJson(res, 200, { task });
+      return;
+    }
+    // Use direct SQL to set both status and claimed_by atomically
+    this.taskStore["db"]
+      .prepare(
+        `UPDATE tasks SET status = 'in_progress', claimed_by = ?, claimed_at = datetime('now'), updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(agent, id);
+    const updated = this.taskStore.get(id);
     sendJson(res, 200, { task: updated });
   }
 
