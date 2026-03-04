@@ -344,6 +344,8 @@ export class CronScheduler {
             chrome: (row.chrome as number) !== 0,
             maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
             worktreeIsolation: (row.worktree_isolation as number) === 1,
+            preHook: (row.pre_hook as string) ?? undefined,
+            postHook: (row.post_hook as string) ?? undefined,
           };
 
           const cron = new Cron(
@@ -442,6 +444,8 @@ export class CronScheduler {
             chrome: (agent.chrome as number) !== 0,
             maxRunBudgetUsd: (agent.max_run_budget_usd as number) ?? undefined,
             worktreeIsolation: (agent.worktree_isolation as number) === 1,
+            preHook: (agent.pre_hook as string) ?? undefined,
+            postHook: (agent.post_hook as string) ?? undefined,
           };
           return this.executeJobWithScheduleId(jobConfig, schedule.id as string);
         }
@@ -519,6 +523,8 @@ export class CronScheduler {
             chrome: (row.chrome as number) !== 0,
             maxRunBudgetUsd: (row.max_run_budget_usd as number) ?? undefined,
             worktreeIsolation: (row.worktree_isolation as number) === 1,
+            preHook: (row.pre_hook as string) ?? undefined,
+            postHook: (row.post_hook as string) ?? undefined,
             nextRun: next?.toISOString() ?? state?.next_run_at ?? null,
             lastRun: state?.last_run_at ?? null,
             runCount: state?.run_count ?? 0,

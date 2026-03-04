@@ -18,6 +18,10 @@ export interface Agent {
   validation_command: string | null;
   /** Whether to run each job in an isolated git worktree (0 or 1). */
   worktree_isolation: number;
+  /** Shell command to run before spawning claude (e.g. "git pull", "npm install"). */
+  pre_hook: string | null;
+  /** Shell command to run after completion (e.g. "git push", "npm run deploy"). */
+  post_hook: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +43,8 @@ export interface CreateAgentInput {
   daily_budget_usd?: number | null;
   validation_command?: string | null;
   worktree_isolation?: boolean;
+  pre_hook?: string | null;
+  post_hook?: string | null;
 }
 
 export interface UpdateAgentInput {
@@ -57,4 +63,6 @@ export interface UpdateAgentInput {
   daily_budget_usd?: number | null;
   validation_command?: string | null;
   worktree_isolation?: boolean;
+  pre_hook?: string | null;
+  post_hook?: string | null;
 }

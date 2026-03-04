@@ -181,6 +181,35 @@ function cleanupWorktree(
   log.info({ jobId, branch: info.branch }, "worktree merged and removed");
 }
 
+/**
+ * Run a pre/post hook shell command in the given working directory.
+ * Failures are logged as warnings and do not throw — hooks never block the main job.
+ */
+function runHook(cmd: string, workDir: string | undefined, jobId: string, phase: "pre" | "post"): void {
+  log.info({ jobId, phase, cmd }, `running ${phase}_hook`);
+  const result = spawnSync(cmd, {
+    cwd: workDir,
+    shell: true,
+    encoding: "utf-8",
+    timeout: 30_000,
+  });
+  if (result.status !== 0 || result.error) {
+    log.warn(
+      {
+        jobId,
+        phase,
+        cmd,
+        status: result.status,
+        stderr: result.stderr?.slice(0, 300),
+        error: result.error?.message,
+      },
+      `${phase}_hook failed — continuing`,
+    );
+  } else {
+    log.debug({ jobId, phase, stdout: result.stdout?.slice(0, 200) }, `${phase}_hook succeeded`);
+  }
+}
+
 /** Force-remove a worktree without merging (e.g. auth errors with no useful content). */
 function forceRemoveWorktree(workDir: string, info: WorktreeInfo, jobId: string): void {
   spawnSync("git", ["worktree", "remove", info.path, "--force"], { cwd: workDir });
@@ -208,6 +237,11 @@ export async function runCronJob(
     if (worktreeInfo) {
       effectiveWorkDir = worktreeInfo.path;
     }
+  }
+
+  // Execute pre_hook before anything else (runs in the original workDir, not the worktree)
+  if (job.preHook) {
+    runHook(job.preHook, workDir, job.id, "pre");
   }
 
   // Set up agent workspace if provided
@@ -427,6 +461,11 @@ export async function runCronJob(
     },
     "cron job complete",
   );
+
+  // Execute post_hook after main job finishes (runs in the original workDir)
+  if (job.postHook) {
+    runHook(job.postHook, workDir, job.id, "post");
+  }
 
   // Build final text. When both accumulatedText and result.text are empty
   // (common in tool-heavy sessions), generate a fallback summary so the

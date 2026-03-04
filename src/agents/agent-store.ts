@@ -53,6 +53,12 @@ export class AgentCrudStore {
     if (!cols.includes("worktree_isolation")) {
       this.db.exec("ALTER TABLE agents ADD COLUMN worktree_isolation INTEGER DEFAULT 0");
     }
+    if (!cols.includes("pre_hook")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN pre_hook TEXT DEFAULT NULL");
+    }
+    if (!cols.includes("post_hook")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN post_hook TEXT DEFAULT NULL");
+    }
   }
 
   list(filters?: { enabled?: boolean }): Agent[] {
@@ -75,8 +81,8 @@ export class AgentCrudStore {
   create(input: CreateAgentInput): Agent {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command, worktree_isolation)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command, worktree_isolation, pre_hook, post_hook)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -95,6 +101,8 @@ export class AgentCrudStore {
         input.daily_budget_usd ?? null,
         input.validation_command ?? null,
         input.worktree_isolation ? 1 : 0,
+        input.pre_hook ?? null,
+        input.post_hook ?? null,
       );
     log.info({ id: input.id, name: input.name }, "agent created");
     return this.get(input.id)!;
@@ -166,6 +174,14 @@ export class AgentCrudStore {
     if (input.worktree_isolation !== undefined) {
       fields.push("worktree_isolation = ?");
       values.push(input.worktree_isolation ? 1 : 0);
+    }
+    if ("pre_hook" in input) {
+      fields.push("pre_hook = ?");
+      values.push(input.pre_hook ?? null);
+    }
+    if ("post_hook" in input) {
+      fields.push("post_hook = ?");
+      values.push(input.post_hook ?? null);
     }
 
     if (fields.length === 0) return existing;

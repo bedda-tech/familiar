@@ -34,6 +34,10 @@ export interface CronJobConfig {
   maxRunBudgetUsd?: number;
   /** Whether to run this job in an isolated git worktree. */
   worktreeIsolation?: boolean;
+  /** Shell command to run before spawning claude (e.g. "git pull", "npm install"). */
+  preHook?: string | null;
+  /** Shell command to run after completion (e.g. "git push", "npm run deploy"). */
+  postHook?: string | null;
 }
 
 /** Runtime state for a cron job, persisted in SQLite */
