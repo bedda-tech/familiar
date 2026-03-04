@@ -248,4 +248,46 @@ describe("AgentWorkspace", () => {
     const state = workspace.getState("job-1");
     expect(state!.data).toEqual({ a: 1, b: 2, c: 3 });
   });
+
+  // 23. ensureWorkspace creates AGENTS.md
+  it("ensureWorkspace creates AGENTS.md with header", () => {
+    const root = workspace.ensureWorkspace("job-1");
+    expect(existsSync(join(root, "AGENTS.md"))).toBe(true);
+    const content = readFileSync(join(root, "AGENTS.md"), "utf-8");
+    expect(content).toContain("Institutional Knowledge: job-1");
+  });
+
+  // 24. readAgentsMd returns initial template when nothing appended
+  it("readAgentsMd returns initial template content", () => {
+    workspace.ensureWorkspace("job-1");
+    const content = workspace.readAgentsMd("job-1");
+    expect(content).toContain("Institutional Knowledge: job-1");
+  });
+
+  // 25. readAgentsMd returns empty string for unknown agent
+  it("readAgentsMd returns empty string for unknown agent", () => {
+    const content = workspace.readAgentsMd("nonexistent");
+    expect(content).toBe("");
+  });
+
+  // 26. appendAgentsMd appends a dated line to AGENTS.md
+  it("appendAgentsMd appends a dated entry to AGENTS.md", () => {
+    workspace.ensureWorkspace("job-1");
+    workspace.appendAgentsMd("job-1", "API returns 429 when rate limit exceeded");
+
+    const content = readFileSync(join(tmpDir, "job-1", "AGENTS.md"), "utf-8");
+    expect(content).toContain("API returns 429 when rate limit exceeded");
+    expect(content).toMatch(/\[\d{4}-\d{2}-\d{2}\]/);
+  });
+
+  // 27. buildSystemPromptFragment includes AGENTS.md and read/write instructions
+  it("buildSystemPromptFragment includes AGENTS.md path and institutional memory instructions", () => {
+    workspace.ensureWorkspace("job-1");
+    const fragment = workspace.buildSystemPromptFragment("job-1");
+
+    expect(fragment).toContain("AGENTS.md");
+    expect(fragment).toContain("Institutional Memory");
+    expect(fragment).toContain("BEFORE starting work");
+    expect(fragment).toContain("AFTER finishing work");
+  });
 });

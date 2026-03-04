@@ -78,6 +78,15 @@ export class AgentWorkspace {
       writeFileSync(memoryPath, `# Agent Memory: ${agentId}\n\n`, "utf-8");
     }
 
+    const agentsMdPath = join(root, "AGENTS.md");
+    if (!existsSync(agentsMdPath)) {
+      writeFileSync(
+        agentsMdPath,
+        `# Institutional Knowledge: ${agentId}\n\nAccumulated gotchas, patterns, and learnings from previous runs.\n\n`,
+        "utf-8",
+      );
+    }
+
     return root;
   }
 
@@ -158,6 +167,25 @@ export class AgentWorkspace {
     }
   }
 
+  /** Read the agent's AGENTS.md institutional knowledge file. Returns empty string if not found. */
+  readAgentsMd(agentId: string): string {
+    const agentsMdPath = join(this.getWorkspacePath(agentId), "AGENTS.md");
+    if (!existsSync(agentsMdPath)) return "";
+    try {
+      return readFileSync(agentsMdPath, "utf-8");
+    } catch {
+      return "";
+    }
+  }
+
+  /** Append a learning entry to the agent's AGENTS.md file. */
+  appendAgentsMd(agentId: string, entry: string): void {
+    const root = this.ensureWorkspace(agentId);
+    const agentsMdPath = join(root, "AGENTS.md");
+    const timestamp = new Date().toISOString().slice(0, 10);
+    appendFileSync(agentsMdPath, `- [${timestamp}] ${entry}\n`, "utf-8");
+  }
+
   /** List output files for an agent. */
   listOutputs(agentId: string): string[] {
     const outputDir = join(this.getWorkspacePath(agentId), "output");
@@ -197,6 +225,7 @@ export class AgentWorkspace {
       `  ${root}/memory.md    — your memory file (append notes here)`,
       `  ${root}/output/      — place output files here (${outputs.length} existing)`,
       `  ${root}/workspace/   — scratch space for intermediate work`,
+      `  ${root}/AGENTS.md    — institutional knowledge: gotchas, patterns, API quirks, build tricks`,
     ];
 
     if (state) {
@@ -206,6 +235,12 @@ export class AgentWorkspace {
         lines.push(`Persisted data keys: ${Object.keys(state.data).join(", ")}`);
       }
     }
+
+    lines.push(``);
+    lines.push(`## Institutional Memory`);
+    lines.push(`BEFORE starting work: read ${root}/AGENTS.md for accumulated context from previous runs.`);
+    lines.push(`AFTER finishing work: append any new learnings (gotchas, patterns, errors and fixes, API quirks, build tricks) to ${root}/AGENTS.md.`);
+    lines.push(`Keep entries concise — one line per learning, prefixed with the date if relevant.`);
 
     return lines.join("\n");
   }
