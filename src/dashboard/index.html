@@ -366,6 +366,123 @@
         margin-right: auto;
       }
 
+      /* ── Fleet Metrics ── */
+      .metrics-section {
+        margin-bottom: 24px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-card);
+        overflow: hidden;
+      }
+
+      .metrics-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .metrics-header h3 {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-bright);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .metrics-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .metrics-summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .metric-stat {
+        padding: 14px 16px;
+        border-right: 1px solid var(--border);
+      }
+
+      .metric-stat:last-child { border-right: none; }
+
+      .metric-stat-label {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 4px;
+      }
+
+      .metric-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-bright);
+      }
+
+      .metric-stat-value.warn { color: var(--yellow); }
+      .metric-stat-value.ok { color: var(--green); }
+
+      .metrics-table-wrap {
+        overflow-x: auto;
+      }
+
+      .metrics-agent-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+
+      .metrics-agent-table th {
+        text-align: left;
+        padding: 8px 12px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        white-space: nowrap;
+      }
+
+      .metrics-agent-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        white-space: nowrap;
+      }
+
+      .metrics-agent-table tr:last-child td { border-bottom: none; }
+      .metrics-agent-table tr:hover td { background: var(--bg-hover); }
+
+      .sr-ok { color: var(--green); }
+      .sr-warn { color: var(--yellow); }
+      .sr-bad { color: var(--red); font-weight: 600; }
+
+      .alert-chip {
+        display: inline-block;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 4px;
+        background: rgba(248,81,73,0.15);
+        color: var(--red);
+        border: 1px solid rgba(248,81,73,0.3);
+        vertical-align: middle;
+      }
+
+      .metrics-empty {
+        padding: 24px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 11px;
+      }
+
       /* ── Activity feed ── */
       .activity-filters {
         display: flex;
@@ -764,6 +881,23 @@
             <button class="btn btn-sm" onclick="loadActivity()">Refresh</button>
           </div>
         </div>
+        <!-- Fleet Health Metrics -->
+        <div class="metrics-section">
+          <div class="metrics-header">
+            <h3>Fleet Health</h3>
+            <div class="metrics-controls">
+              <select class="filter-select" id="metricsPeriod" onchange="loadMetrics()">
+                <option value="1d">1 day</option>
+                <option value="7d" selected>7 days</option>
+                <option value="30d">30 days</option>
+              </select>
+              <button class="btn btn-sm" onclick="loadMetrics()">Refresh</button>
+            </div>
+          </div>
+          <div id="metricsSummary" class="metrics-summary"></div>
+          <div id="metricsTable" class="metrics-table-wrap"></div>
+        </div>
+
         <div class="activity-filters">
           <select class="filter-select" id="activityTypeFilter" onchange="renderActivity()">
             <option value="">All types</option>
@@ -832,6 +966,29 @@
           <select class="filter-select" id="taskAgentFilter" onchange="renderTasks()">
             <option value="">All agents</option>
           </select>
+          <select class="filter-select" id="taskProjectFilter" onchange="renderTasks()">
+            <option value="">All projects</option>
+          </select>
+          <select class="filter-select" id="taskTagFilter" onchange="toggleTagFromSelect()">
+            <option value="">Filter by tag...</option>
+          </select>
+          <input class="filter-input" id="taskSearchFilter" oninput="renderTasks()" placeholder="Search tasks..." style="min-width:160px" />
+        </div>
+        <div id="taskActiveTagChips" style="display:none;gap:4px;flex-wrap:wrap;margin-bottom:8px"></div>
+        <div id="taskBulkBar" style="display:none;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
+          <span id="taskBulkCount" style="font-size:11px;font-weight:600;color:var(--text-bright)">0 selected</span>
+          <select class="filter-select" id="taskBulkStatus" style="font-size:10px">
+            <option value="">Set status...</option>
+            <option value="ready">Ready</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button class="btn btn-sm" onclick="bulkSetStatus()">Apply</button>
+          <select class="filter-select" id="taskBulkAgent" style="font-size:10px">
+            <option value="">Set agent...</option>
+          </select>
+          <button class="btn btn-sm" onclick="bulkSetAgent()">Apply</button>
+          <button class="btn btn-sm btn-danger" onclick="bulkDelete()">Delete</button>
         </div>
         <div id="tasksContainer">
           <div class="loading">Loading tasks...</div>
@@ -1024,6 +1181,12 @@
           <div class="form-group">
             <label>Description</label>
             <textarea class="form-control" id="taskFormDescription" rows="4" placeholder="Full context for the agent..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Project</label>
+            <select class="form-control" id="taskFormProject">
+              <option value="">No project</option>
+            </select>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -1310,6 +1473,7 @@
       // ── Load all data ─────────────────────────────────────────────────
       function loadAll() {
         if (!token) return;
+        loadMetrics();
         loadActivity();
         loadAgents();
         loadSchedules();
@@ -1400,6 +1564,87 @@
 
       function closeModal(id) {
         document.getElementById(id).classList.remove('visible');
+      }
+
+      // ── Fleet Metrics ─────────────────────────────────────────────────
+      async function loadMetrics() {
+        if (!token) return;
+        const period = document.getElementById('metricsPeriod')?.value || '7d';
+        try {
+          const data = await api('GET', `/api/metrics?period=${period}`);
+          renderMetricsSummary(data.summary || {});
+          renderMetricsTable(data.agents || []);
+        } catch (e) {
+          document.getElementById('metricsSummary').innerHTML = '';
+          document.getElementById('metricsTable').innerHTML = `<div class="metrics-empty">Failed to load metrics: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderMetricsSummary(s) {
+        const srPct = Math.round((s.successRate || 0) * 100);
+        const srClass = srPct >= 90 ? 'ok' : srPct >= 70 ? '' : 'warn';
+        document.getElementById('metricsSummary').innerHTML = `
+          <div class="metric-stat">
+            <div class="metric-stat-label">Total Runs</div>
+            <div class="metric-stat-value">${s.totalRuns || 0}</div>
+          </div>
+          <div class="metric-stat">
+            <div class="metric-stat-label">Success Rate</div>
+            <div class="metric-stat-value ${srClass}">${srPct}%</div>
+          </div>
+          <div class="metric-stat">
+            <div class="metric-stat-label">Total Cost</div>
+            <div class="metric-stat-value">$${(s.totalCostUsd || 0).toFixed(4)}</div>
+          </div>
+          <div class="metric-stat">
+            <div class="metric-stat-label">Active Agents</div>
+            <div class="metric-stat-value">${s.activeAgents || 0}</div>
+          </div>
+        `;
+      }
+
+      function renderMetricsTable(agents) {
+        const wrap = document.getElementById('metricsTable');
+        if (!agents.length) {
+          wrap.innerHTML = '<div class="metrics-empty">No agent runs in this period.</div>';
+          return;
+        }
+        const rows = agents.map(a => {
+          const srPct = Math.round((a.successRate || 0) * 100);
+          const srClass = srPct >= 90 ? 'sr-ok' : srPct >= 70 ? 'sr-warn' : 'sr-bad';
+          const alertChips = (a.alerts || []).map(al => {
+            const label = al === 'low_success_rate' ? 'low SR' : al === 'high_cost_per_run' ? 'hi cost' : al;
+            return `<span class="alert-chip">${esc(label)}</span>`;
+          }).join('');
+          const dur = a.avgDurationMs >= 60000
+            ? `${(a.avgDurationMs / 60000).toFixed(1)}m`
+            : `${(a.avgDurationMs / 1000).toFixed(1)}s`;
+          return `<tr>
+            <td><strong>${esc(a.agentId)}</strong>${alertChips}</td>
+            <td>${a.totalRuns}</td>
+            <td class="${srClass}">${srPct}%</td>
+            <td>$${(a.avgCostPerRun || 0).toFixed(4)}</td>
+            <td>$${(a.totalCostUsd || 0).toFixed(4)}</td>
+            <td>${dur}</td>
+            <td>${a.tasksCompleted}</td>
+          </tr>`;
+        }).join('');
+        wrap.innerHTML = `
+          <table class="metrics-agent-table">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Runs</th>
+                <th>Success Rate</th>
+                <th>Avg Cost/Run</th>
+                <th>Total Cost</th>
+                <th>Avg Duration</th>
+                <th>Tasks Done</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
       }
 
       // ── Activity tab ──────────────────────────────────────────────────
@@ -1587,14 +1832,15 @@
           sel.value = current;
         });
 
-        // Task agent filter
-        const taskAgentFilter = document.getElementById('taskAgentFilter');
-        if (taskAgentFilter) {
-          const current = taskAgentFilter.value;
-          taskAgentFilter.innerHTML = '<option value="">All agents</option>' +
-            agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
-          taskAgentFilter.value = current;
-        }
+        // Task agent filter + bulk agent dropdown
+        ['taskAgentFilter', 'taskBulkAgent'].forEach(selId => {
+          const el = document.getElementById(selId);
+          if (!el) return;
+          const current = el.value;
+          const prefix = selId === 'taskBulkAgent' ? '<option value="">Set agent...</option>' : '<option value="">All agents</option>';
+          el.innerHTML = prefix + agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+          el.value = current;
+        });
       }
 
       function openAgentModal(agentId) {
@@ -1913,16 +2159,212 @@
         }
       }
 
+      // ── Task UI state ──
+      let taskSortKey = 'priority';
+      let taskSortDir = 'asc';
+      let taskTagFilters = new Set();
+      let taskChecked = new Set();
+      let dragSrcId = null;
+
+      function populateProjectFilter() {
+        const sel = document.getElementById('taskProjectFilter');
+        if (!sel) return;
+        const current = sel.value;
+        const projectIds = [...new Set(tasks.map(t => t.project_id).filter(Boolean))].sort();
+        const projectMap = {};
+        projects.forEach(p => { projectMap[p.id] = p.name || p.id; });
+        sel.innerHTML = '<option value="">All projects</option>' +
+          projectIds.map(pid => `<option value="${esc(pid)}">${esc(projectMap[pid] || pid)}</option>`).join('');
+        sel.value = current;
+      }
+
+      function populateTagDropdown() {
+        const sel = document.getElementById('taskTagFilter');
+        if (!sel) return;
+        const allTags = new Set();
+        tasks.forEach(t => {
+          try { let tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); tags.forEach(tag => allTags.add(tag)); } catch {}
+        });
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Filter by tag...</option>' +
+          [...allTags].sort().map(tag => `<option value="${esc(tag)}">${esc(tag)}</option>`).join('');
+        sel.value = current;
+      }
+
+      function toggleTagFromSelect() {
+        const sel = document.getElementById('taskTagFilter');
+        const tag = sel.value;
+        if (!tag) return;
+        taskTagFilters.add(tag);
+        sel.value = '';
+        renderActiveTagChips();
+        renderTasks();
+      }
+
+      function removeTagFilter(tag) {
+        taskTagFilters.delete(tag);
+        renderActiveTagChips();
+        renderTasks();
+      }
+
+      function renderActiveTagChips() {
+        const container = document.getElementById('taskActiveTagChips');
+        if (taskTagFilters.size === 0) { container.style.display = 'none'; return; }
+        container.style.display = 'flex';
+        container.innerHTML = [...taskTagFilters].map(tag =>
+          `<span style="font-size:10px;padding:2px 6px;border-radius:12px;border:1px solid var(--blue);background:rgba(56,139,253,0.2);color:var(--blue);display:flex;align-items:center;gap:3px">${esc(tag)}<button onclick="removeTagFilter('${esc(tag)}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;padding:0;line-height:1">&times;</button></span>`
+        ).join('');
+      }
+
+      function toggleTaskCheck(id, ev) {
+        ev.stopPropagation();
+        if (taskChecked.has(id)) taskChecked.delete(id); else taskChecked.add(id);
+        updateBulkBar();
+      }
+
+      function toggleAllTasks(checked) {
+        const visible = document.querySelectorAll('[data-task-id]');
+        taskChecked.clear();
+        if (checked) visible.forEach(el => taskChecked.add(parseInt(el.dataset.taskId)));
+        updateBulkBar();
+        visible.forEach(el => {
+          const cb = el.querySelector('input[type=checkbox]');
+          if (cb) cb.checked = checked;
+        });
+      }
+
+      function updateBulkBar() {
+        const bar = document.getElementById('taskBulkBar');
+        if (taskChecked.size > 0) {
+          bar.style.display = 'flex';
+          document.getElementById('taskBulkCount').textContent = `${taskChecked.size} selected`;
+        } else {
+          bar.style.display = 'none';
+        }
+      }
+
+      async function bulkSetStatus() {
+        const status = document.getElementById('taskBulkStatus').value;
+        if (!status || taskChecked.size === 0) return;
+        for (const id of taskChecked) {
+          try { await api('PUT', `/api/tasks/${id}`, { status }); } catch {}
+        }
+        taskChecked.clear();
+        updateBulkBar();
+        toast(`Updated ${taskChecked.size || 'tasks'}`, 'success');
+        await loadTasks();
+      }
+
+      async function bulkSetAgent() {
+        const agent = document.getElementById('taskBulkAgent').value;
+        if (!agent || taskChecked.size === 0) return;
+        for (const id of taskChecked) {
+          try { await api('PUT', `/api/tasks/${id}`, { assigned_agent: agent }); } catch {}
+        }
+        const count = taskChecked.size;
+        taskChecked.clear();
+        updateBulkBar();
+        toast(`Assigned ${count} tasks`, 'success');
+        await loadTasks();
+      }
+
+      async function bulkDelete() {
+        const count = taskChecked.size;
+        if (count === 0) return;
+        confirm(`Delete ${count} tasks? This cannot be undone.`, 'Delete', async () => {
+          for (const id of taskChecked) {
+            try { await api('DELETE', `/api/tasks/${id}`); } catch {}
+          }
+          taskChecked.clear();
+          updateBulkBar();
+          toast(`Deleted ${count} tasks`, 'success');
+          await loadTasks();
+        });
+      }
+
+      function setTaskSort(key) {
+        if (taskSortKey === key) {
+          taskSortDir = taskSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          taskSortKey = key;
+          taskSortDir = 'asc';
+        }
+        renderTasks();
+      }
+
+      function sortArrow(key) {
+        if (taskSortKey !== key) return '';
+        return taskSortDir === 'asc' ? ' ▲' : ' ▼';
+      }
+
+      // Drag-to-reorder handlers
+      function taskDragStart(ev, id) {
+        dragSrcId = id;
+        ev.currentTarget.style.opacity = '0.4';
+        ev.dataTransfer.effectAllowed = 'move';
+      }
+      function taskDragOver(ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        ev.currentTarget.style.borderTop = '2px solid var(--blue)';
+      }
+      function taskDragLeave(ev) {
+        ev.currentTarget.style.borderTop = '';
+      }
+      async function taskDrop(ev, targetId) {
+        ev.preventDefault();
+        ev.currentTarget.style.borderTop = '';
+        if (dragSrcId == null || dragSrcId === targetId) return;
+        const target = tasks.find(t => t.id === targetId);
+        if (!target) return;
+        try {
+          await api('PUT', `/api/tasks/${dragSrcId}`, { priority: target.priority ?? 5 });
+          await loadTasks();
+        } catch {}
+      }
+      function taskDragEnd(ev) {
+        ev.currentTarget.style.opacity = '1';
+        dragSrcId = null;
+      }
+
       function renderTasks() {
         const statusFilter = document.getElementById('taskStatusFilter').value;
         const agentFilter = document.getElementById('taskAgentFilter').value;
+        const projectFilter = document.getElementById('taskProjectFilter').value;
+        const searchFilter = (document.getElementById('taskSearchFilter').value || '').toLowerCase();
         const container = document.getElementById('tasksContainer');
 
-        const filtered = tasks.filter(t => {
+        populateProjectFilter();
+
+        let filtered = tasks.filter(t => {
           if (statusFilter && t.status !== statusFilter) return false;
           if (agentFilter && t.assigned_agent !== agentFilter) return false;
+          if (projectFilter && t.project_id !== projectFilter) return false;
+          if (searchFilter) {
+            const haystack = [t.title, t.description, t.assigned_agent, t.tags].filter(Boolean).join(' ').toLowerCase();
+            if (!haystack.includes(searchFilter)) return false;
+          }
+          if (taskTagFilters.size > 0) {
+            let tags = [];
+            try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
+            for (const tf of taskTagFilters) { if (!tags.includes(tf)) return false; }
+          }
           return true;
         });
+
+        // Sort
+        filtered.sort((a, b) => {
+          let va = a[taskSortKey], vb = b[taskSortKey];
+          if (va == null && vb == null) return 0;
+          if (va == null) return 1;
+          if (vb == null) return -1;
+          if (typeof va === 'string') va = va.toLowerCase();
+          if (typeof vb === 'string') vb = vb.toLowerCase();
+          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+          return taskSortDir === 'asc' ? cmp : -cmp;
+        });
+
+        populateTagDropdown();
 
         document.getElementById('taskCount').textContent = filtered.length;
 
@@ -1944,16 +2386,18 @@
           failed: 'badge-red',
         };
 
+        const thStyle = 'cursor:pointer;user-select:none';
         let html = `
           <table class="data-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Agent</th>
-                <th class="hide-mobile">Priority</th>
-                <th class="hide-mobile">Updated</th>
+                <th style="width:28px"><input type="checkbox" onchange="toggleAllTasks(this.checked)" style="cursor:pointer" /></th>
+                <th style="${thStyle}" onclick="setTaskSort('id')">#${sortArrow('id')}</th>
+                <th style="${thStyle}" onclick="setTaskSort('title')">Title${sortArrow('title')}</th>
+                <th style="${thStyle}" onclick="setTaskSort('status')">Status${sortArrow('status')}</th>
+                <th style="${thStyle}" onclick="setTaskSort('assigned_agent')">Agent${sortArrow('assigned_agent')}</th>
+                <th class="hide-mobile" style="${thStyle}" onclick="setTaskSort('priority')">Priority${sortArrow('priority')}</th>
+                <th class="hide-mobile" style="${thStyle}" onclick="setTaskSort('updated_at')">Updated${sortArrow('updated_at')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1961,7 +2405,7 @@
 
         for (const t of filtered) {
           let tags = [];
-          try { tags = t.tags ? JSON.parse(t.tags) : []; } catch {}
+          try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
 
           const tagsHtml = tags.length
             ? tags.map(tag => `<span style="font-size:9px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 3px;margin-right:2px">${esc(tag)}</span>`).join('')
@@ -1971,8 +2415,14 @@
             ? `<span class="badge badge-purple" style="font-size:9px;margin-right:4px">↺${t.recurrence_schedule ? ' ' + esc(t.recurrence_schedule) : ''}</span>`
             : '';
 
+          const checked = taskChecked.has(t.id) ? 'checked' : '';
+
           html += `
-            <tr class="clickable" onclick="openTaskModal(${t.id})">
+            <tr class="clickable" data-task-id="${t.id}" draggable="true"
+                ondragstart="taskDragStart(event, ${t.id})" ondragover="taskDragOver(event)"
+                ondragleave="taskDragLeave(event)" ondrop="taskDrop(event, ${t.id})"
+                ondragend="taskDragEnd(event)" onclick="openTaskModal(${t.id})">
+              <td onclick="event.stopPropagation()"><input type="checkbox" ${checked} onchange="toggleTaskCheck(${t.id}, event)" style="cursor:pointer" /></td>
               <td style="color:var(--text-muted);font-size:11px">#${t.id}</td>
               <td>
                 <div style="font-weight:600;color:var(--text-bright)">${esc(t.title)}</div>
@@ -2025,24 +2475,31 @@
         sel.innerHTML = '<option value="">Unassigned</option>' +
           agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
 
+        // Populate project dropdown
+        const projSel = document.getElementById('taskFormProject');
+        projSel.innerHTML = '<option value="">No project</option>' +
+          projects.map(p => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join('');
+
         if (isEdit) {
           const t = tasks.find(x => x.id === taskId);
           if (!t) return;
           document.getElementById('taskFormTitle').value = t.title || '';
           document.getElementById('taskFormDescription').value = t.description || '';
           sel.value = t.assigned_agent || '';
+          projSel.value = t.project_id || '';
           document.getElementById('taskFormPriority').value = t.priority ?? 5;
           document.getElementById('taskFormStatus').value = t.status || 'ready';
           document.getElementById('taskFormRecurring').checked = !!t.recurring;
           document.getElementById('taskFormRecurrenceSchedule').value = t.recurrence_schedule || '';
           let tags = [];
-          try { tags = t.tags ? JSON.parse(t.tags) : []; } catch {}
+          try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
           document.getElementById('taskFormTags').value = tags.join(', ');
           toggleRecurrenceField();
         } else {
           document.getElementById('taskFormTitle').value = '';
           document.getElementById('taskFormDescription').value = '';
           sel.value = '';
+          projSel.value = '';
           document.getElementById('taskFormPriority').value = 5;
           document.getElementById('taskFormStatus').value = 'ready';
           document.getElementById('taskFormRecurring').checked = false;
@@ -2067,6 +2524,7 @@
           title,
           description: document.getElementById('taskFormDescription').value.trim() || undefined,
           assigned_agent: document.getElementById('taskFormAgent').value || undefined,
+          project_id: document.getElementById('taskFormProject').value || undefined,
           priority: parseInt(document.getElementById('taskFormPriority').value) || 5,
           recurring: document.getElementById('taskFormRecurring').checked,
           recurrence_schedule: document.getElementById('taskFormRecurrenceSchedule').value.trim() || undefined,

@@ -248,6 +248,13 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Metrics ──
+      if (path === "/api/metrics") {
+        const params = new URLSearchParams(queryString ?? "");
+        this.handleMetrics(params.get("period") ?? "7d", res);
+        return true;
+      }
+
       // ── Cost Summary ──
       if (path === "/api/cost/summary") {
         const params = new URLSearchParams(queryString ?? "");
@@ -867,6 +874,7 @@ export class ApiRouter {
       status: params.get("status") ?? undefined,
       assigned_agent: params.get("assigned_agent") ?? undefined,
       tag: params.get("tag") ?? undefined,
+      project_id: params.get("project_id") ?? undefined,
     });
     sendJson(res, 200, { tasks: this.taskStore.enrichWithDependencyStatus(tasks) });
   }
@@ -1148,6 +1156,100 @@ export class ApiRouter {
       });
     } catch (e: any) {
       log.error({ err: e, agentId }, "agent cost history query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  // ── Metrics Handler ─────────────────────────────────────────────────
+
+  /**
+   * GET /api/metrics?period=7d
+   * Returns per-agent performance metrics aggregated from cron_runs + tasks.
+   */
+  private handleMetrics(period: string, res: ServerResponse): void {
+    const days = period === "1d" ? 1 : period === "30d" ? 30 : 7;
+    const db = this.cronScheduler
+      ? ((this.cronScheduler as any).db as import("better-sqlite3").Database | undefined)
+      : this.db ?? undefined;
+
+    if (!db) {
+      sendJson(res, 200, { period, agents: [], summary: { totalRuns: 0, successRate: 0, totalCostUsd: 0, activeAgents: 0 } });
+      return;
+    }
+
+    try {
+      // Per-agent run metrics from cron_runs
+      const runRows = db
+        .prepare(
+          `SELECT job_id AS agent_id,
+                  COUNT(*) AS total_runs,
+                  SUM(CASE WHEN is_error = 0 THEN 1 ELSE 0 END) AS success_count,
+                  SUM(CASE WHEN is_error = 1 THEN 1 ELSE 0 END) AS failure_count,
+                  ROUND(CAST(SUM(CASE WHEN is_error = 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*), 3) AS success_rate,
+                  COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+                  COALESCE(AVG(cost_usd), 0) AS avg_cost_per_run,
+                  COALESCE(AVG(duration_ms), 0) AS avg_duration_ms
+           FROM cron_runs
+           WHERE started_at >= datetime('now', ? || ' days')
+           GROUP BY job_id
+           ORDER BY total_runs DESC`,
+        )
+        .all(`-${days}`) as Array<{
+        agent_id: string;
+        total_runs: number;
+        success_count: number;
+        failure_count: number;
+        success_rate: number;
+        total_cost_usd: number;
+        avg_cost_per_run: number;
+        avg_duration_ms: number;
+      }>;
+
+      // Per-agent completed tasks count
+      const taskRows = db
+        .prepare(
+          `SELECT assigned_agent AS agent_id, COUNT(*) AS tasks_completed
+           FROM tasks
+           WHERE status = 'completed' AND last_completed_at >= datetime('now', ? || ' days')
+             AND assigned_agent IS NOT NULL
+           GROUP BY assigned_agent`,
+        )
+        .all(`-${days}`) as Array<{ agent_id: string; tasks_completed: number }>;
+
+      const taskMap = new Map(taskRows.map((r) => [r.agent_id, r.tasks_completed]));
+
+      const agents = runRows.map((r) => {
+        const alerts: string[] = [];
+        if (r.success_rate < 0.7) alerts.push("low_success_rate");
+        if (r.avg_cost_per_run > 2.0) alerts.push("high_cost_per_run");
+        return {
+          agentId: r.agent_id,
+          totalRuns: r.total_runs,
+          successCount: r.success_count,
+          failureCount: r.failure_count,
+          successRate: r.success_rate,
+          totalCostUsd: r.total_cost_usd,
+          avgCostPerRun: r.avg_cost_per_run,
+          avgDurationMs: Math.round(r.avg_duration_ms),
+          tasksCompleted: taskMap.get(r.agent_id) ?? 0,
+          alerts,
+        };
+      });
+
+      // Fleet-level summary
+      const totalRuns = agents.reduce((s, a) => s + a.totalRuns, 0);
+      const totalSuccess = agents.reduce((s, a) => s + a.successCount, 0);
+      const totalCostUsd = agents.reduce((s, a) => s + a.totalCostUsd, 0);
+      const summary = {
+        totalRuns,
+        successRate: totalRuns > 0 ? Math.round((totalSuccess / totalRuns) * 1000) / 1000 : 0,
+        totalCostUsd: Math.round(totalCostUsd * 10000) / 10000,
+        activeAgents: agents.length,
+      };
+
+      sendJson(res, 200, { period, summary, agents });
+    } catch (e: any) {
+      log.error({ err: e }, "metrics query failed");
       sendJson(res, 500, { error: "Query failed" });
     }
   }
