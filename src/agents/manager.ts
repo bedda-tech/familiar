@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
+import { join } from "node:path";
+import { delimiter } from "node:path";
+import { homedir } from "node:os";
 import type { ClaudeConfig } from "../config.js";
 import type { ResultEvent, StreamEvent } from "../claude/types.js";
 import { AgentRegistry, type SubagentRecord } from "./registry.js";
+import { resolveClaudeBin } from "../cron/runner.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("agent-manager");
@@ -121,7 +125,8 @@ export class AgentManager {
       "-p",
       "--output-format",
       "stream-json",
-      "--verbose",
+      "--verbose", // Required: stream-json with -p requires --verbose
+      "--no-session-persistence",
       "--model",
       model,
       "--max-turns",
@@ -142,12 +147,22 @@ export class AgentManager {
 
     args.push("--chrome");
 
-    const env = { ...process.env };
+    const claudeBin = resolveClaudeBin(this.claudeConfig.claudeBin);
+
+    // Augment PATH so claude can find its own dependencies in service environments
+    const home = homedir();
+    const extraDirs = [join(home, ".local", "bin"), join(home, ".npm-global", "bin"), "/usr/local/bin"];
+    const currentPath = process.env.PATH ?? "";
+    const augmentedPath = [...new Set([...extraDirs, ...currentPath.split(delimiter)])]
+      .filter(Boolean)
+      .join(delimiter);
+
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: augmentedPath };
     delete env.CLAUDECODE;
 
-    log.info({ id, model, cwd, task: options.task.slice(0, 100) }, "spawning sub-agent");
+    log.info({ id, model, cwd, claudeBin, task: options.task.slice(0, 100) }, "spawning sub-agent");
 
-    const proc = spawn("claude", args, {
+    const proc = spawn(claudeBin, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env,
@@ -165,26 +180,49 @@ export class AgentManager {
       stderr += chunk.toString();
     });
 
-    // Parse NDJSON output
+    // Parse NDJSON output — mirrors cron runner's text capture logic
     const rl = createInterface({ input: proc.stdout });
     let resultText = "";
     let costUsd = 0;
     let durationMs = 0;
+    let numTurns = 0;
+    const toolsUsed = new Set<string>();
 
     for await (const line of rl) {
       if (!line.trim()) continue;
       try {
         const event = JSON.parse(line) as StreamEvent;
         switch (event.type) {
+          case "content_block_start":
+            if (event.content_block?.type === "tool_use" && event.content_block.name) {
+              toolsUsed.add(event.content_block.name);
+            }
+            break;
           case "content_block_delta":
             if (event.delta?.type === "text_delta" && event.delta.text) {
               resultText += event.delta.text;
             }
             break;
+          case "assistant":
+            // In stream-json piped mode, text comes via assistant message content
+            // blocks (content_block_delta events are never emitted). Always extract.
+            if (event.message?.content) {
+              for (const block of event.message.content) {
+                if (block.type === "text" && block.text) {
+                  resultText += block.text;
+                }
+                if (block.type === "tool_use" && block.name) {
+                  toolsUsed.add(block.name);
+                }
+              }
+            }
+            break;
           case "result": {
             const r = event as ResultEvent;
-            costUsd = r.cost_usd ?? 0;
+            // Claude CLI emits total_cost_usd (not cost_usd) in stream-json
+            costUsd = r.total_cost_usd ?? r.cost_usd ?? 0;
             durationMs = r.duration_ms ?? 0;
+            numTurns = r.num_turns ?? 0;
             if (r.result && !resultText) {
               resultText = r.result;
             }
@@ -194,6 +232,15 @@ export class AgentManager {
       } catch {
         // skip unparseable lines
       }
+    }
+
+    // Fallback summary for tool-heavy sessions with no text output
+    if (!resultText && (numTurns > 0 || toolsUsed.size > 0)) {
+      const parts = [`Session completed (${numTurns} turns)`];
+      if (toolsUsed.size > 0) {
+        parts.push(`tools: ${[...toolsUsed].join(", ")}`);
+      }
+      resultText = parts.join(" -- ");
     }
 
     // Wait for process exit
@@ -221,6 +268,6 @@ export class AgentManager {
       }
     }
 
-    log.info({ id, status: record?.status, costUsd, durationMs }, "sub-agent finished");
+    log.info({ id, status: record?.status, costUsd, durationMs, responseLen: resultText.length }, "sub-agent finished");
   }
 }
