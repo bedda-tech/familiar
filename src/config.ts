@@ -21,6 +21,12 @@ export interface ClaudeConfig {
   failoverChain?: string[];
   /** Path to MCP server config file, passed as --mcp-config to Claude CLI */
   mcpConfig?: string;
+  /**
+   * Explicit path to the claude CLI binary.
+   * Useful when running as a system service where PATH may not include ~/.local/bin.
+   * Defaults to resolving "claude" from PATH (augmented with common install locations).
+   */
+  claudeBin?: string;
 }
 
 export interface SessionConfig {

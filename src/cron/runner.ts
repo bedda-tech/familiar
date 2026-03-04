@@ -1,7 +1,8 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { delimiter } from "node:path";
 import { createInterface } from "node:readline";
 import type { CronJobConfig, CronRunResult } from "./types.js";
 import type { ClaudeConfig } from "../config.js";
@@ -210,6 +211,53 @@ function runHook(cmd: string, workDir: string | undefined, jobId: string, phase:
   }
 }
 
+/**
+ * Resolve the absolute path to the claude CLI binary.
+ *
+ * When familiar runs as a system service (e.g. systemd), PATH is often minimal
+ * and doesn't include ~/.local/bin where npm global installs live. We augment
+ * PATH with common install locations and try to find the binary via `which`.
+ *
+ * Priority:
+ *   1. Explicit claudeBin from config
+ *   2. which claude (with augmented PATH)
+ *   3. Fall back to "claude" and let the OS error naturally
+ */
+export function resolveClaudeBin(configured?: string): string {
+  if (configured) return configured;
+
+  // Build an augmented PATH with common install locations
+  const home = homedir();
+  const extraDirs = [
+    join(home, ".local", "bin"),
+    join(home, ".npm-global", "bin"),
+    "/usr/local/bin",
+    "/usr/bin",
+  ];
+
+  // Also include any nvm-managed node bin dirs currently in PATH
+  const currentPath = process.env.PATH ?? "";
+  const nvmBinDirs = currentPath
+    .split(delimiter)
+    .filter((d) => d.includes(".nvm") || d.includes(".nodenv") || d.includes(".volta"));
+
+  const augmentedPath = [...new Set([...extraDirs, ...nvmBinDirs, ...currentPath.split(delimiter)])]
+    .filter(Boolean)
+    .join(delimiter);
+
+  const result = spawnSync("which", ["claude"], {
+    env: { ...process.env, PATH: augmentedPath },
+    encoding: "utf-8",
+  });
+
+  const resolved = result.stdout?.trim();
+  if (resolved && existsSync(resolved)) {
+    return resolved;
+  }
+
+  return "claude";
+}
+
 /** Force-remove a worktree without merging (e.g. auth errors with no useful content). */
 function forceRemoveWorktree(workDir: string, info: WorktreeInfo, jobId: string): void {
   spawnSync("git", ["worktree", "remove", info.path, "--force"], { cwd: workDir });
@@ -228,6 +276,23 @@ export async function runCronJob(
   const model = resolveModel(job, defaultConfig, options?.modelHint);
   const workDir = job.workingDirectory ?? defaultConfig.workingDirectory;
   const maxTurns = job.maxTurns ?? defaultConfig.maxTurns ?? 25;
+
+  // Validate workDir exists before attempting to spawn (non-existent cwd causes
+  // Node.js to report ENOENT on the executable rather than the directory).
+  if (workDir && (!existsSync(workDir) || !statSync(workDir).isDirectory())) {
+    const errMsg = `working directory does not exist: ${workDir}`;
+    log.error({ jobId: job.id, workDir }, errMsg);
+    return {
+      jobId: job.id,
+      text: `Job failed: ${errMsg}`,
+      costUsd: 0,
+      durationMs: 0,
+      numTurns: 0,
+      isError: true,
+      startedAt,
+      finishedAt: new Date(),
+    };
+  }
 
   // Worktree isolation: create a fresh branch for this run
   let worktreeInfo: WorktreeInfo | null = null;
@@ -310,10 +375,22 @@ export async function runCronJob(
     "running cron job",
   );
 
-  const env = { ...process.env };
+  const claudeBin = resolveClaudeBin(defaultConfig.claudeBin);
+
+  // Augment PATH so claude can find its own dependencies (node, etc.)
+  const home = homedir();
+  const extraDirs = [join(home, ".local", "bin"), "/usr/local/bin"];
+  const currentPath = process.env.PATH ?? "";
+  const augmentedPath = [...new Set([...extraDirs, ...currentPath.split(delimiter)])]
+    .filter(Boolean)
+    .join(delimiter);
+
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: augmentedPath };
   delete env.CLAUDECODE;
 
-  const proc = spawn("claude", args, {
+  log.debug({ jobId: job.id, claudeBin }, "spawning claude");
+
+  const proc = spawn(claudeBin, args, {
     cwd: effectiveWorkDir,
     stdio: ["pipe", "pipe", "pipe"],
     env,
@@ -388,10 +465,10 @@ export async function runCronJob(
   if (spawnError !== null) {
     const err = spawnError as Error;
     const finishedAt = new Date();
-    log.error({ jobId: job.id, err }, "failed to spawn claude process");
+    log.error({ jobId: job.id, claudeBin, err }, "failed to spawn claude process");
     return {
       jobId: job.id,
-      text: `Failed to spawn claude: ${err.message}`,
+      text: `Failed to spawn claude (${claudeBin}): ${err.message}`,
       costUsd: 0,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       numTurns: 0,
