@@ -45,6 +45,14 @@ export class CronScheduler {
   private wsServer: WsServer | null = null;
   /** Task store for creating follow-up tasks on validation failure. */
   private taskStore: TaskStore | null = null;
+  /**
+   * Tracks when each scheduled job last finished.
+   * Used to prevent chained fires: when croner's protect=true causes it to
+   * fire immediately after a long run ends (because a "missed" trigger time
+   * has already passed), we skip the fire and wait for the next legitimate
+   * scheduled time.
+   */
+  private lastFinishedAt = new Map<string, number>();
 
   constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
     this.claudeConfig = claudeConfig;
@@ -355,6 +363,24 @@ export class CronScheduler {
               protect: true,
             },
             async () => {
+              // Guard against chained fires: croner's protect=true fires immediately
+              // after a long run ends (because the previous trigger time has passed).
+              // If the current time is before the next legitimate scheduled time
+              // (computed from when the last run finished), skip this fire.
+              const lastFinished = this.lastFinishedAt.get(scheduleId);
+              if (lastFinished !== undefined) {
+                const cronJob = this.jobs.get(scheduleId);
+                if (cronJob) {
+                  const nextLegitimate = cronJob.nextRun(new Date(lastFinished));
+                  if (nextLegitimate && Date.now() < nextLegitimate.getTime()) {
+                    log.info(
+                      { scheduleId, nextLegitimate: nextLegitimate.toISOString() },
+                      "skipping chained fire — next scheduled time not yet reached",
+                    );
+                    return;
+                  }
+                }
+              }
               await this.executeJobWithScheduleId(jobConfig, scheduleId);
             },
           );
@@ -1018,6 +1044,8 @@ If no task is assigned, proceed with your default work below.
     } finally {
       this.releaseSlot();
       this.running.set(scheduleId, false);
+      // Record finish time so the chained-fire guard can detect immediate re-fires.
+      this.lastFinishedAt.set(scheduleId, Date.now());
     }
   }
 
