@@ -29,6 +29,7 @@ export interface Task {
   claimed_at: string | null;
   retry_count: number;
   depends_on: string | null; // JSON array of task IDs this task depends on
+  stale_timeout_hours: number | null; // Override default 2h stale window (null = use default)
 }
 
 export interface CreateTaskInput {
@@ -41,6 +42,7 @@ export interface CreateTaskInput {
   tags?: string[];
   model_hint?: string;
   depends_on?: number[]; // task IDs that must complete before this task becomes ready
+  stale_timeout_hours?: number; // Override default 2h stale window
 }
 
 export interface UpdateTaskInput {
@@ -54,6 +56,7 @@ export interface UpdateTaskInput {
   tags?: string[];
   model_hint?: string | null;
   retry_count?: number;
+  stale_timeout_hours?: number | null;
 }
 
 export class TaskStore {
@@ -105,8 +108,8 @@ export class TaskStore {
     const initialStatus = dependsOnJson ? "blocked" : "ready";
 
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (title, description, assigned_agent, status, priority, recurring, recurrence_schedule, tags, model_hint, depends_on)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (title, description, assigned_agent, status, priority, recurring, recurrence_schedule, tags, model_hint, depends_on, stale_timeout_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.title,
@@ -119,6 +122,7 @@ export class TaskStore {
       input.tags ? JSON.stringify(input.tags) : null,
       input.model_hint ?? null,
       dependsOnJson,
+      input.stale_timeout_hours ?? null,
     );
     log.info({ id: result.lastInsertRowid, title: input.title, status: initialStatus }, "task created");
     const created = this.get(Number(result.lastInsertRowid))!;
@@ -172,6 +176,10 @@ export class TaskStore {
     if (input.retry_count !== undefined) {
       fields.push("retry_count = ?");
       values.push(input.retry_count);
+    }
+    if (input.stale_timeout_hours !== undefined) {
+      fields.push("stale_timeout_hours = ?");
+      values.push(input.stale_timeout_hours ?? null);
     }
 
     if (fields.length === 0) return existing;

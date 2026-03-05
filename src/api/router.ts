@@ -913,6 +913,8 @@ export class ApiRouter {
       tags: body.tags as string[] | undefined,
       model_hint: body.model_hint as string | undefined,
       depends_on: Array.isArray(body.depends_on) ? (body.depends_on as number[]) : undefined,
+      stale_timeout_hours:
+        typeof body.stale_timeout_hours === "number" ? body.stale_timeout_hours : undefined,
     });
     sendJson(res, 201, { task });
   }
@@ -932,6 +934,12 @@ export class ApiRouter {
       recurrence_schedule: body.recurrence_schedule as string | undefined,
       tags: body.tags as string[] | undefined,
       model_hint: "model_hint" in body ? (body.model_hint as string | null) : undefined,
+      stale_timeout_hours:
+        "stale_timeout_hours" in body
+          ? typeof body.stale_timeout_hours === "number"
+            ? body.stale_timeout_hours
+            : null
+          : undefined,
     });
     if (!task) {
       sendJson(res, 404, { error: `Task ${id} not found` });

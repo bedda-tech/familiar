@@ -767,23 +767,38 @@ export class CronScheduler {
   private tickStaleTasks(): void {
     if (!this.sharedDb) return;
 
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const defaultCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
     try {
-      const staleTasks = this.sharedDb
-        .prepare(
-          `SELECT id, title, COALESCE(retry_count, 0) as retry_count, assigned_agent, recurring
-           FROM tasks
-           WHERE status = 'in_progress'
-             AND (claimed_at IS NULL OR claimed_at < ?)`,
-        )
-        .all(twoHoursAgo) as Array<{
-        id: number;
-        title: string;
-        retry_count: number;
-        assigned_agent: string | null;
-        recurring: number;
-      }>;
+      // Fetch all in_progress tasks; filter per-task below based on stale_timeout_hours
+      const staleTasks = (
+        this.sharedDb
+          .prepare(
+            `SELECT id, title, COALESCE(retry_count, 0) as retry_count, assigned_agent, recurring,
+                    stale_timeout_hours, claimed_at
+             FROM tasks
+             WHERE status = 'in_progress'
+               AND (claimed_at IS NULL OR claimed_at < ?)`,
+          )
+          .all(defaultCutoff) as Array<{
+          id: number;
+          title: string;
+          retry_count: number;
+          assigned_agent: string | null;
+          recurring: number;
+          stale_timeout_hours: number | null;
+          claimed_at: string | null;
+        }>
+      ).filter((task) => {
+        // If the task has a custom timeout, check it independently
+        if (task.stale_timeout_hours != null && task.claimed_at != null) {
+          const customCutoff = new Date(
+            Date.now() - task.stale_timeout_hours * 60 * 60 * 1000,
+          ).toISOString();
+          return task.claimed_at < customCutoff;
+        }
+        return true; // Already filtered by defaultCutoff above
+      });
 
       if (staleTasks.length === 0) return;
 

@@ -33,7 +33,8 @@ function makeDb(): Database.Database {
       claimed_at TEXT,
       model_hint TEXT,
       retry_count INTEGER DEFAULT 0,
-      depends_on TEXT
+      depends_on TEXT,
+      stale_timeout_hours REAL DEFAULT NULL
     );
   `);
   return db;
