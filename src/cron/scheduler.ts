@@ -680,24 +680,26 @@ export class CronScheduler {
     log.info("recurring task ticker started (every minute)");
   }
 
-  /** Check completed recurring tasks and reset those that are due. */
+  /** Check completed/failed recurring tasks and reset those that are due. */
   private tickRecurringTasks(): void {
     if (!this.sharedDb) return;
 
     try {
       const tasks = this.sharedDb
         .prepare(
-          `SELECT * FROM tasks
+          `SELECT id, title, recurrence_schedule, last_completed_at, status, updated_at
+           FROM tasks
            WHERE recurring = 1
              AND recurrence_schedule IS NOT NULL
-             AND status = 'completed'
-             AND last_completed_at IS NOT NULL`,
+             AND status IN ('completed', 'failed')`,
         )
         .all() as Array<{
         id: number;
         title: string;
         recurrence_schedule: string;
-        last_completed_at: string;
+        last_completed_at: string | null;
+        status: string;
+        updated_at: string;
       }>;
 
       if (tasks.length === 0) return;
@@ -707,18 +709,22 @@ export class CronScheduler {
 
       for (const task of tasks) {
         try {
-          // Use croner to find the next occurrence after the last completion
-          const lastCompleted = new Date(task.last_completed_at);
+          // For completed tasks use last_completed_at; for failed tasks use updated_at
+          // (the time they were moved to failed) as the reference for scheduling.
+          const referenceTime = task.last_completed_at ?? task.updated_at;
+          const lastRun = new Date(referenceTime);
           const cron = new Cron(task.recurrence_schedule);
-          const nextDue = cron.nextRun(lastCompleted);
+          const nextDue = cron.nextRun(lastRun);
           cron.stop();
 
           if (nextDue && nextDue <= now) {
-            // Task is due -- reset to ready
+            // Task is due -- reset to ready. Also reset retry_count so each new
+            // cycle starts fresh and doesn't inherit stale-rescue counts from
+            // previous cycles (prevents premature permanent failure).
             this.sharedDb!
               .prepare(
                 `UPDATE tasks SET status = 'ready', claimed_by = NULL, claimed_at = NULL,
-                 result = NULL, updated_at = datetime('now')
+                 result = NULL, retry_count = 0, updated_at = datetime('now')
                  WHERE id = ?`,
               )
               .run(task.id);
@@ -761,13 +767,12 @@ export class CronScheduler {
   private tickStaleTasks(): void {
     if (!this.sharedDb) return;
 
-    const maxRetries = 3;
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
     try {
       const staleTasks = this.sharedDb
         .prepare(
-          `SELECT id, title, COALESCE(retry_count, 0) as retry_count, assigned_agent
+          `SELECT id, title, COALESCE(retry_count, 0) as retry_count, assigned_agent, recurring
            FROM tasks
            WHERE status = 'in_progress'
              AND (claimed_at IS NULL OR claimed_at < ?)`,
@@ -777,6 +782,7 @@ export class CronScheduler {
         title: string;
         retry_count: number;
         assigned_agent: string | null;
+        recurring: number;
       }>;
 
       if (staleTasks.length === 0) return;
@@ -786,6 +792,9 @@ export class CronScheduler {
 
       for (const task of staleTasks) {
         const newRetryCount = task.retry_count + 1;
+        // Recurring tasks get more retries since their schedule will reset retry_count
+        // after each cycle; non-recurring tasks have a tighter cap.
+        const maxRetries = task.recurring ? 5 : 3;
 
         if (newRetryCount > maxRetries) {
           // Too many rescues -- move to failed

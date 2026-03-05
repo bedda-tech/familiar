@@ -53,6 +53,7 @@ export interface UpdateTaskInput {
   recurrence_schedule?: string;
   tags?: string[];
   model_hint?: string | null;
+  retry_count?: number;
 }
 
 export class TaskStore {
@@ -69,7 +70,7 @@ export class TaskStore {
     if (this.updateHandler) this.updateHandler(task);
   }
 
-  list(filters?: { status?: string; assigned_agent?: string; tag?: string }): Task[] {
+  list(filters?: { status?: string; assigned_agent?: string; tag?: string; project_id?: string }): Task[] {
     let sql = "SELECT * FROM tasks WHERE 1=1";
     const params: unknown[] = [];
 
@@ -84,6 +85,10 @@ export class TaskStore {
     if (filters?.tag) {
       sql += " AND tags LIKE ?";
       params.push(`%"${filters.tag}"%`);
+    }
+    if (filters?.project_id) {
+      sql += " AND project_id = ?";
+      params.push(filters.project_id);
     }
 
     sql += " ORDER BY priority ASC, created_at ASC";
@@ -164,6 +169,10 @@ export class TaskStore {
       fields.push("model_hint = ?");
       values.push(input.model_hint ?? null);
     }
+    if (input.retry_count !== undefined) {
+      fields.push("retry_count = ?");
+      values.push(input.retry_count);
+    }
 
     if (fields.length === 0) return existing;
 
@@ -237,21 +246,23 @@ export class TaskStore {
 
     if (task.recurring && !task.recurrence_schedule) {
       // No schedule -- reset to ready immediately (legacy behavior)
+      // Reset retry_count so each new cycle starts fresh.
       this.db
         .prepare(
           `UPDATE tasks SET status = 'ready', result = ?, last_completed_at = datetime('now'),
-           claimed_by = NULL, claimed_at = NULL, updated_at = datetime('now')
+           claimed_by = NULL, claimed_at = NULL, retry_count = 0, updated_at = datetime('now')
            WHERE id = ?`,
         )
         .run(result, id);
       log.info({ id }, "recurring task completed, reset to ready (no schedule)");
     } else {
       // Non-recurring or has recurrence_schedule -- mark completed
-      // The recurring ticker will reset scheduled tasks when due
+      // The recurring ticker will reset scheduled tasks when due.
+      // Reset retry_count so the next cycle starts fresh.
       this.db
         .prepare(
           `UPDATE tasks SET status = 'completed', result = ?, last_completed_at = datetime('now'),
-           claimed_by = NULL, claimed_at = NULL, updated_at = datetime('now')
+           claimed_by = NULL, claimed_at = NULL, retry_count = 0, updated_at = datetime('now')
            WHERE id = ?`,
         )
         .run(result, id);
