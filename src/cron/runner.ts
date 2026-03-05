@@ -111,7 +111,9 @@ function isAuthError(stderr: string, text: string): boolean {
     combined.includes("401 unauthorized") ||
     (combined.includes("401") && combined.includes("authentication")) ||
     combined.includes("invalid api key") ||
-    combined.includes("unauthenticated")
+    combined.includes("unauthenticated") ||
+    combined.includes("does not have access to claude") ||
+    combined.includes("please login again")
   );
 }
 
@@ -580,7 +582,11 @@ export async function runCronJob(
     // last assistant message. accumulatedText has text from every turn.
     text: finalText,
     costUsd: result.costUsd,
-    durationMs: result.durationMs,
+    // Use wall-clock time rather than Claude's internal timer. Claude's duration_ms
+    // only covers API latency and excludes subprocess wait time (e.g. when an agent
+    // runs `npm run agents:extract` and waits 20 min for the script to finish, Claude
+    // reports ~5s while the actual job took 20 minutes).
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
     numTurns: result.numTurns,
     isError: result.isError,
     startedAt,
