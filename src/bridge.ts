@@ -76,7 +76,7 @@ export class Bridge {
         return;
       }
       const status = [
-        `*Session Info*`,
+        `**Session Info**`,
         `ID: \`${info.sessionId.slice(0, 8)}...\``,
         `Messages: ${info.messageCount}`,
         `Started: ${info.createdAt}`,
@@ -94,14 +94,14 @@ export class Bridge {
           this.claude.setModel(requested);
           await this.channel.sendText(
             msg.chatId,
-            `Model switched to *${requested}*. Use \`/model\` to check, or \`/model reset\` to revert to config default.`,
+            `Model switched to **${requested}**. Use \`/model\` to check, or \`/model reset\` to revert to config default.`,
             msg.replyContext,
           );
         } else if (requested === "reset") {
           this.claude.setModel(null);
           await this.channel.sendText(
             msg.chatId,
-            `Model reverted to config default: *${this.claude.getModel()}*`,
+            `Model reverted to config default: **${this.claude.getModel()}**`,
             msg.replyContext,
           );
         } else {
@@ -114,7 +114,7 @@ export class Bridge {
       } else {
         await this.channel.sendText(
           msg.chatId,
-          `Current model: *${this.claude.getModel()}*\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model reset\``,
+          `Current model: **${this.claude.getModel()}**\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model reset\``,
           msg.replyContext,
         );
       }
@@ -125,7 +125,7 @@ export class Bridge {
       const summary = this.sessions.getCostSummary(msg.chatId);
       const fmt = (n: number) => `$${n.toFixed(4)}`;
       const text = [
-        `*Usage Costs*`,
+        `**Usage Costs**`,
         ``,
         `Session: ${fmt(summary.session.cost)} (${summary.session.messages} msgs)`,
         `Today: ${fmt(summary.today.cost)} (${summary.today.messages} msgs)`,
@@ -142,17 +142,17 @@ export class Bridge {
         this.showThinking = true;
         await this.channel.sendText(
           msg.chatId,
-          "Thinking blocks *enabled*. You'll see reasoning before responses.",
+          "Thinking blocks **enabled**. You'll see reasoning before responses.",
           msg.replyContext,
         );
       } else if (arg === "off") {
         this.showThinking = false;
-        await this.channel.sendText(msg.chatId, "Thinking blocks *disabled*.", msg.replyContext);
+        await this.channel.sendText(msg.chatId, "Thinking blocks **disabled**.", msg.replyContext);
       } else {
         const state = this.showThinking ? "ON" : "OFF";
         await this.channel.sendText(
           msg.chatId,
-          `Thinking display: *${state}*\nUsage: \`/thinking on\`, \`/thinking off\``,
+          `Thinking display: **${state}**\nUsage: \`/thinking on\`, \`/thinking off\``,
           msg.replyContext,
         );
       }
@@ -211,7 +211,7 @@ export class Bridge {
       if ("error" in result) {
         await this.channel.sendText(msg.chatId, result.error, msg.replyContext);
       } else {
-        const display = label ? `*${label}* (\`${result.id}\`)` : `\`${result.id}\``;
+        const display = label ? `**${label}** (\`${result.id}\`)` : `\`${result.id}\``;
         await this.channel.sendText(
           msg.chatId,
           `Sub-agent spawned: ${display}\nModel: ${model ?? "sonnet"}\nTask: ${task.slice(0, 200)}`,
@@ -235,11 +235,11 @@ export class Bridge {
         const lines: string[] = [];
 
         if (active.length > 0) {
-          lines.push(`*Active (${active.length}):*`);
+          lines.push(`**Active (${active.length}):**`);
           for (const a of active) {
             const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
             lines.push(
-              `  \`${a.id}\` ${a.label ?? ""} (${a.model}, ${elapsed}s) — ${a.task.slice(0, 60)}`,
+              `  \`${a.id}\` ${a.label ?? ""} (${a.model}, ${elapsed}s) -- ${a.task.slice(0, 60)}`,
             );
           }
         } else {
@@ -249,10 +249,10 @@ export class Bridge {
         const completed = recent.filter((r) => r.status !== "running");
         if (completed.length > 0) {
           lines.push("");
-          lines.push(`*Recent:*`);
+          lines.push(`**Recent:**`);
           for (const r of completed) {
             const cost = r.costUsd ? ` $${r.costUsd.toFixed(4)}` : "";
-            lines.push(`  \`${r.id}\` ${r.status} (${r.model}${cost}) — ${r.task.slice(0, 50)}`);
+            lines.push(`  \`${r.id}\` ${r.status} (${r.model}${cost}) -- ${r.task.slice(0, 50)}`);
           }
         }
 
@@ -300,7 +300,7 @@ export class Bridge {
           return;
         }
         const lines = [
-          `*Sub-Agent \`${agent.id}\`*`,
+          `**Sub-Agent** \`${agent.id}\``,
           `Status: ${agent.status}`,
           `Model: ${agent.model}`,
           `Task: ${agent.task.slice(0, 500)}`,
@@ -352,7 +352,7 @@ export class Bridge {
           .all(msg.chatId, query) as Array<{ content: string; role: string; created_at: string }>;
 
         if (rows.length > 0) {
-          results += "*Message History:*\n";
+          results += "**Message History:**\n";
           for (const row of rows) {
             const snippet = row.content.slice(0, 100).replace(/\n/g, " ");
             results += `\u2022 _${row.role}_ (${row.created_at}): ${snippet}...\n`;
@@ -367,7 +367,7 @@ export class Bridge {
         try {
           const memResults = await this.memoryStore.search(query, 5);
           if (memResults.length > 0) {
-            results += "\n*Memory:*\n";
+            results += "\n**Memory:**\n";
             for (const r of memResults) {
               const snippet = r.text.slice(0, 100).replace(/\n/g, " ");
               results += `\u2022 _${r.path}:${r.startLine}_ (${r.score.toFixed(2)}): ${snippet}...\n`;
@@ -395,14 +395,14 @@ export class Bridge {
       const minutes = Math.floor((uptimeSec % 3600) / 60);
       const uptimeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 
-      lines.push("*System Status*");
+      lines.push("**System Status**");
       lines.push(`Uptime: ${uptimeStr}`);
 
       // Active Claude requests
       if (this.processTracker) {
         const active = this.processTracker.list();
         lines.push("");
-        lines.push(`*Active Requests:* ${active.length} in-flight`);
+        lines.push(`**Active Requests:** ${active.length} in-flight`);
         for (const req of active) {
           const elapsed = Math.round((Date.now() - req.startedAt.getTime()) / 1000);
           const elapsedStr =
@@ -415,7 +415,7 @@ export class Bridge {
       if (this.agents) {
         const active = this.agents.listActive();
         lines.push("");
-        lines.push(`*Sub-agents:* ${active.length} running`);
+        lines.push(`**Sub-agents:** ${active.length} running`);
         for (const a of active) {
           const elapsed = Math.round((Date.now() - new Date(a.createdAt + "Z").getTime()) / 1000);
           const elapsedStr =
@@ -425,17 +425,17 @@ export class Bridge {
         }
       } else {
         lines.push("");
-        lines.push("*Sub-agents:* not configured");
+        lines.push("**Sub-agents:** not configured");
       }
 
       // Delivery queue
       if (this.deliveryQueue) {
         const pending = this.deliveryQueue.pendingCount();
         lines.push("");
-        lines.push(`*Delivery Queue:* ${pending} pending`);
+        lines.push(`**Delivery Queue:** ${pending} pending`);
       } else {
         lines.push("");
-        lines.push("*Delivery Queue:* not available");
+        lines.push("**Delivery Queue:** not available");
       }
 
       // Cron jobs
@@ -443,7 +443,7 @@ export class Bridge {
         const jobs = this.cronScheduler.listJobs();
         const enabledJobs = jobs.filter((j) => j.enabled !== false);
         lines.push("");
-        lines.push(`*Cron Jobs:* ${enabledJobs.length} active`);
+        lines.push(`**Cron Jobs:** ${enabledJobs.length} active`);
         for (const job of enabledJobs) {
           let nextStr = "unknown";
           if (job.nextRun) {
@@ -459,7 +459,7 @@ export class Bridge {
         }
       } else {
         lines.push("");
-        lines.push("*Cron Jobs:* not configured");
+        lines.push("**Cron Jobs:** not configured");
       }
 
       await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
@@ -590,13 +590,11 @@ export class Bridge {
             break;
 
           case "thinking":
-            // Send thinking as a separate message in italics
+            // Send thinking as a separate message in a code block
             if (this.showThinking && event.text.length > 0) {
               const preview =
                 event.text.length > 3000 ? event.text.slice(0, 3000) + "..." : event.text;
-              // Escape for Telegram Markdown v1: only _ * ` [ need escaping
-              const escaped = preview.replace(/[_*`[]/g, "\\$&");
-              await this.channel.sendDirectMessage(msg.chatId, `_${escaped}_`);
+              await this.channel.sendDirectMessage(msg.chatId, "```\n" + preview + "\n```");
             }
             break;
 

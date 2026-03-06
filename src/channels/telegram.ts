@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import PQueue from "p-queue";
 import { getConfigPath, type TelegramConfig } from "../config.js";
 import type { Channel, IncomingMessage, DraftHandle } from "./types.js";
+import { markdownToTelegramHtml, stripHtml } from "../streaming/markdown-to-html.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("telegram");
@@ -35,16 +36,22 @@ export class TelegramChannel implements Channel {
     this.commandHandlers.set(command, handler);
   }
 
+  /** Convert markdown to Telegram HTML for sending */
+  private fmt(text: string): string {
+    return markdownToTelegramHtml(text);
+  }
+
   async sendDraft(chatId: string, text: string, replyContext: unknown): Promise<DraftHandle> {
     const ctx = replyContext as Context;
+    const html = this.fmt(text);
     return this.rateLimitedSend(chatId, async () => {
       try {
-        const msg = await ctx.reply(text, { parse_mode: "Markdown" });
+        const msg = await ctx.reply(html, { parse_mode: "HTML" });
         return { messageId: msg.message_id, chatId };
       } catch {
-        // Retry without markdown if parse fails
+        // Retry as plain text if HTML parse fails
         try {
-          const msg = await ctx.reply(text);
+          const msg = await ctx.reply(stripHtml(html));
           return { messageId: msg.message_id, chatId };
         } catch (e) {
           log.error({ err: e, chatId }, "failed to send draft");
@@ -56,17 +63,18 @@ export class TelegramChannel implements Channel {
 
   async updateDraft(handle: DraftHandle, text: string): Promise<void> {
     if (!handle.messageId) return;
+    const html = this.fmt(text);
     await this.rateLimitedSend(handle.chatId, async () => {
       try {
-        await this.bot.api.editMessageText(handle.chatId, handle.messageId!, text, {
-          parse_mode: "Markdown",
+        await this.bot.api.editMessageText(handle.chatId, handle.messageId!, html, {
+          parse_mode: "HTML",
         });
       } catch {
-        // Retry without markdown
+        // Retry as plain text
         try {
-          await this.bot.api.editMessageText(handle.chatId, handle.messageId!, text);
+          await this.bot.api.editMessageText(handle.chatId, handle.messageId!, stripHtml(html));
         } catch (e) {
-          // Telegram returns error if text hasn't changed — ignore
+          // Telegram returns error if text hasn't changed -- ignore
           const msg = e instanceof Error ? e.message : "";
           if (!msg.includes("message is not modified")) {
             log.debug({ err: e }, "edit failed");
@@ -79,12 +87,13 @@ export class TelegramChannel implements Channel {
   async sendChunks(chatId: string, chunks: string[], replyContext: unknown): Promise<void> {
     const ctx = replyContext as Context;
     for (const chunk of chunks) {
+      const html = this.fmt(chunk);
       await this.rateLimitedSend(chatId, async () => {
         try {
-          await ctx.reply(chunk, { parse_mode: "Markdown" });
+          await ctx.reply(html, { parse_mode: "HTML" });
         } catch {
           try {
-            await ctx.reply(chunk);
+            await ctx.reply(stripHtml(html));
           } catch (e) {
             log.error({ err: e }, "failed to send chunk");
           }
@@ -95,12 +104,13 @@ export class TelegramChannel implements Channel {
 
   async sendText(chatId: string, text: string, replyContext: unknown): Promise<void> {
     const ctx = replyContext as Context;
+    const html = this.fmt(text);
     await this.rateLimitedSend(chatId, async () => {
       try {
-        await ctx.reply(text, { parse_mode: "Markdown" });
+        await ctx.reply(html, { parse_mode: "HTML" });
       } catch {
         try {
-          await ctx.reply(text);
+          await ctx.reply(stripHtml(html));
         } catch (e) {
           log.error({ err: e }, "failed to send text");
         }
@@ -150,14 +160,15 @@ export class TelegramChannel implements Channel {
   }
 
   async sendDirectMessage(chatId: string, text: string): Promise<void> {
-    const chunks = this.splitForTelegram(text);
+    const html = this.fmt(text);
+    const chunks = this.splitForTelegram(html);
     for (const chunk of chunks) {
       await this.rateLimitedSend(chatId, async () => {
         try {
-          await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "Markdown" });
+          await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "HTML" });
         } catch {
-          // Retry without markdown formatting; propagate failure so delivery queue can retry
-          await this.bot.api.sendMessage(Number(chatId), chunk);
+          // Retry as plain text; propagate failure so delivery queue can retry
+          await this.bot.api.sendMessage(Number(chatId), stripHtml(chunk));
         }
       });
     }
@@ -252,7 +263,7 @@ export class TelegramChannel implements Channel {
       } catch (e) {
         if (e instanceof GrammyError && e.error_code === 429) {
           const retryAfter = e.parameters?.retry_after ?? 1;
-          log.warn({ chatId, retryAfter }, "rate limited by Telegram — backing off");
+          log.warn({ chatId, retryAfter }, "rate limited by Telegram -- backing off");
           await new Promise<void>((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
           return await fn();
         }
@@ -289,12 +300,12 @@ export class TelegramChannel implements Channel {
   }
 
   private setupHandlers(): void {
-    // /pair command — runs BEFORE auth middleware so unpaired users can reach it
+    // /pair command -- runs BEFORE auth middleware so unpaired users can reach it
     this.bot.command("pair", async (ctx) => {
       const userId = ctx.from?.id;
       if (!userId) return;
 
-      // Already allowed — no need to pair
+      // Already allowed -- no need to pair
       if (this.isAllowed(userId)) {
         await ctx.reply("You are already connected.");
         return;
@@ -433,16 +444,16 @@ export class TelegramChannel implements Channel {
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
           "Just send me a message and I'll respond.\n\n" +
           "Commands:\n" +
-          "/new — Start a fresh conversation\n" +
-          "/status — Session info\n" +
-          "/model — Switch model\n" +
-          "/cost — Usage costs\n" +
-          "/thinking — Toggle thinking display\n" +
-          "/voice — Toggle voice replies (TTS)\n" +
-          "/spawn — Spawn a sub-agent for a task\n" +
-          "/agents — List/kill/info sub-agents\n" +
-          "/search — Search message history and memory\n" +
-          "/processes — System status (alias: /ps)",
+          "/new -- Start a fresh conversation\n" +
+          "/status -- Session info\n" +
+          "/model -- Switch model\n" +
+          "/cost -- Usage costs\n" +
+          "/thinking -- Toggle thinking display\n" +
+          "/voice -- Toggle voice replies (TTS)\n" +
+          "/spawn -- Spawn a sub-agent for a task\n" +
+          "/agents -- List/kill/info sub-agents\n" +
+          "/search -- Search message history and memory\n" +
+          "/processes -- System status (alias: /ps)",
       );
     });
 

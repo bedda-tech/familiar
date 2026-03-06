@@ -40,6 +40,9 @@ export class DeliveryQueue {
         created_at TEXT DEFAULT (datetime('now')),
         last_error TEXT
       );
+
+      CREATE INDEX IF NOT EXISTS idx_delivery_queue_next_attempt
+        ON delivery_queue(next_attempt_at);
     `);
   }
 
@@ -78,11 +81,28 @@ export class DeliveryQueue {
 
   /** Start the retry loop (checks every 10s) */
   start(): void {
+    // Clean up old entries on startup
+    this.cleanup();
+
     // Flush any pending deliveries from previous runs
     this.processQueue();
 
     this.timer = setInterval(() => this.processQueue(), 10_000);
     log.info("delivery queue started");
+  }
+
+  /** Remove entries older than 7 days */
+  private cleanup(): void {
+    try {
+      const deleted = this.db
+        .prepare(`DELETE FROM delivery_queue WHERE created_at < datetime('now', '-7 days')`)
+        .run().changes;
+      if (deleted > 0) {
+        log.info({ deleted }, "cleaned up old delivery queue entries");
+      }
+    } catch (e) {
+      log.warn({ err: e }, "failed to clean up delivery queue");
+    }
   }
 
   /** Stop the retry loop */
