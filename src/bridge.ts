@@ -11,6 +11,8 @@ import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
 import { getLogger } from "./util/logger.js";
+import { mkdirSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
 
 const log = getLogger("bridge");
 
@@ -19,6 +21,7 @@ const MAX_MESSAGE_LENGTH = 64_000; // 64 KB — max regular message text
 const MAX_TASK_LENGTH = 50_000; // 50 KB — max /spawn task text
 const MAX_LABEL_LENGTH = 256; // max /spawn label length
 const MAX_SEARCH_QUERY_LENGTH = 1_000; // max /search query length;
+const RESPONSE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes -- kill hung interactive sessions
 
 export class Bridge {
   private showThinking = true;
@@ -29,6 +32,7 @@ export class Bridge {
   private cronScheduler: CronScheduler | undefined;
   private processTracker: ProcessTracker | undefined;
   private sessionConfig: SessionConfig;
+  private workingDirectory: string | undefined;
 
   constructor(
     private channel: Channel,
@@ -41,6 +45,7 @@ export class Bridge {
     deliveryQueue?: DeliveryQueue,
     cronScheduler?: CronScheduler,
     processTracker?: ProcessTracker,
+    workingDirectory?: string,
   ) {
     this.openai = openai;
     this.agents = agents;
@@ -49,6 +54,7 @@ export class Bridge {
     this.cronScheduler = cronScheduler;
     this.processTracker = processTracker;
     this.sessionConfig = sessionConfig ?? { inactivityTimeout: "24h" };
+    this.workingDirectory = workingDirectory;
   }
 
   /** Wire up the channel to the Claude backend */
@@ -545,10 +551,20 @@ export class Bridge {
       }
     }
 
+    // Kill any existing in-flight request for this chat before spawning a new one.
+    // This prevents session lock conflicts and queue blocking from hung processes.
+    if (this.processTracker?.isActive(msg.chatId)) {
+      log.warn({ chatId: msg.chatId }, "killing stale in-flight request before new message");
+      this.processTracker.kill(msg.chatId);
+      this.saveSessionContext(msg.chatId, "stale request killed before new message");
+      this.sessions.clearSession(msg.chatId);
+    }
+
     const request: ClaudeRequest = {
       prompt,
-      sessionId: sessionId ?? undefined,
+      sessionId: this.sessions.getSession(msg.chatId) ?? undefined,
       filePaths: msg.filePaths,
+      chatId: msg.chatId,
     };
 
     // Log the user message
@@ -577,8 +593,24 @@ export class Bridge {
     const toolsUsed: string[] = [];
     let typingStopped = false;
 
+    // Watchdog: kill hung interactive sessions after RESPONSE_TIMEOUT_MS of inactivity
+    let lastActivity = Date.now();
+    let timedOut = false;
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > RESPONSE_TIMEOUT_MS) {
+        timedOut = true;
+        log.error({ chatId: msg.chatId, elapsed: Date.now() - lastActivity }, "response timeout -- killing hung session");
+        clearInterval(watchdog);
+        this.processTracker?.kill(msg.chatId);
+        // Save context and clear session so next message starts fresh
+        this.saveSessionContext(msg.chatId, "response timeout (10 min)");
+        this.sessions.clearSession(msg.chatId);
+      }
+    }, 30_000);
+
     try {
       for await (const event of this.claude.send(request)) {
+        lastActivity = Date.now();
         switch (event.type) {
           case "text_delta":
             if (!typingStopped) {
@@ -615,6 +647,7 @@ export class Bridge {
             break;
 
           case "done": {
+            clearInterval(watchdog);
             const { result } = event;
             // Stop typing if still active
             if (!typingStopped) {
@@ -664,11 +697,54 @@ export class Bridge {
         }
       }
     } catch (e) {
+      clearInterval(watchdog);
       stopTyping();
       log.error({ err: e, chatId: msg.chatId }, "error processing message");
       const errorText = `Error: ${e instanceof Error ? e.message : "Unknown error"}\n\nTry /new to start a fresh session.`;
       const chunks = chunkMessage(errorText);
       await finalizeDraft(draft, draftCtx, chunks);
+    }
+  }
+
+  /**
+   * Save recent conversation context to daily memory file before clearing a session.
+   * This preserves continuity so the next session can pick up where we left off.
+   */
+  private saveSessionContext(chatId: string, reason: string): void {
+    if (!this.workingDirectory) return;
+
+    try {
+      const rows = this.sessions
+        .getDb()
+        .prepare(
+          `SELECT role, content, created_at FROM message_log
+           WHERE chat_id = ? ORDER BY created_at DESC LIMIT 20`,
+        )
+        .all(chatId) as Array<{ role: string; content: string; created_at: string }>;
+
+      if (rows.length === 0) return;
+
+      const memoryDir = join(this.workingDirectory, "memory");
+      mkdirSync(memoryDir, { recursive: true });
+
+      const today = new Date().toISOString().slice(0, 10);
+      const memoryFile = join(memoryDir, `${today}.md`);
+
+      const timestamp = new Date().toISOString().slice(11, 19);
+      const lines = [`\n## Session context saved (${timestamp}) -- ${reason}\n`];
+
+      // Reverse to chronological order, summarize recent exchange
+      for (const row of rows.reverse()) {
+        const prefix = row.role === "user" ? "**User**" : "**Oliver**";
+        const snippet = row.content.slice(0, 300).replace(/\n/g, " ");
+        lines.push(`- ${prefix}: ${snippet}`);
+      }
+      lines.push("");
+
+      appendFileSync(memoryFile, lines.join("\n"));
+      log.info({ chatId, reason, file: memoryFile }, "session context saved to memory");
+    } catch (e) {
+      log.error({ err: e, chatId }, "failed to save session context");
     }
   }
 }

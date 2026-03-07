@@ -21,6 +21,7 @@ import { AgentManager } from "./agents/manager.js";
 import { AgentStore } from "./agents/store.js";
 import { AgentCrudStore } from "./agents/agent-store.js";
 import { SpawnQueue } from "./agents/queue.js";
+import { ProcessTracker } from "./claude/process-tracker.js";
 import { TaskStore } from "./tasks/store.js";
 import { ScheduleStore } from "./schedules/store.js";
 import { ProjectStore } from "./projects/store.js";
@@ -320,6 +321,8 @@ async function cmdStart(configPath?: string): Promise<void> {
   const toolStore = new ToolStore(db);
 
   const claude = new ClaudeCLI(config.claude);
+  const processTracker = new ProcessTracker();
+  claude.setTracker(processTracker);
   const telegram = new TelegramChannel(config.telegram);
 
   // Initialize delivery queue — wraps sendDirectMessage with retry + persistence
@@ -397,6 +400,8 @@ async function cmdStart(configPath?: string): Promise<void> {
     memoryStore,
     deliveryQueue,
     cron ?? undefined,
+    processTracker,
+    config.claude.workingDirectory,
   );
 
   // Wire up and start
