@@ -26,6 +26,7 @@ import { TaskStore } from "./tasks/store.js";
 import { ScheduleStore } from "./schedules/store.js";
 import { ProjectStore } from "./projects/store.js";
 import { ToolStore } from "./tools/store.js";
+import { TemplateStore } from "./templates/store.js";
 import { runMigration } from "./migrations/001-entity-separation.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
@@ -427,6 +428,7 @@ async function cmdStart(configPath?: string): Promise<void> {
     webhooks.setScheduleStore(scheduleStore);
     webhooks.setProjectStore(projectStore);
     webhooks.setToolStore(toolStore);
+    webhooks.setTemplateStore(new TemplateStore(db));
 
     // Wire up task store for REST API (named so we can add onUpdate callback)
     const taskStore = new TaskStore(db);

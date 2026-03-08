@@ -31,6 +31,7 @@ import type { TaskStore } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
 import type { ToolStore } from "../tools/store.js";
+import type { TemplateStore } from "../templates/store.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("api-router");
@@ -43,6 +44,7 @@ export class ApiRouter {
   private scheduleStore: ScheduleStore | null = null;
   private projectStore: ProjectStore | null = null;
   private toolStore: ToolStore | null = null;
+  private templateStore: TemplateStore | null = null;
   private db: Database.Database | null = null;
   private configPath: string | null = null;
   private onConfigChange: (() => Promise<void>) | null = null;
@@ -77,6 +79,10 @@ export class ApiRouter {
 
   setToolStore(store: ToolStore): void {
     this.toolStore = store;
+  }
+
+  setTemplateStore(store: TemplateStore): void {
+    this.templateStore = store;
   }
 
   setDb(db: Database.Database): void {
@@ -187,6 +193,27 @@ export class ApiRouter {
           const t = this.toolStore.get(decodeURIComponent(toolMatch[1]));
           if (!t) sendJson(res, 404, { error: "Tool not found" });
           else sendJson(res, 200, { tool: t });
+        }
+        return true;
+      }
+
+      // ── Templates ──
+      if (path === "/api/templates") {
+        if (!this.templateStore) {
+          sendJson(res, 503, { error: "Template store not available" });
+        } else {
+          sendJson(res, 200, { templates: this.templateStore.list() });
+        }
+        return true;
+      }
+      const templateMatch = path.match(/^\/api\/templates\/(\d+)$/);
+      if (templateMatch) {
+        if (!this.templateStore) {
+          sendJson(res, 503, { error: "Template store not available" });
+        } else {
+          const t = this.templateStore.get(parseInt(templateMatch[1], 10));
+          if (!t) sendJson(res, 404, { error: "Template not found" });
+          else sendJson(res, 200, { template: t });
         }
         return true;
       }
@@ -393,6 +420,22 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Template create ──
+      if (path === "/api/templates" && body) {
+        if (!this.templateStore) {
+          sendJson(res, 503, { error: "Template store not available" });
+        } else {
+          const { name, category, content } = body as any;
+          if (!name || !content) {
+            sendJson(res, 400, { error: "Missing required fields: name, content" });
+          } else {
+            const t = this.templateStore.create(body as any);
+            sendJson(res, 201, { template: t });
+          }
+        }
+        return true;
+      }
+
       // ── Tasks ──
       if (path === "/api/tasks" && body) {
         this.handleCreateTask(body, res);
@@ -480,6 +523,19 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Template update ──
+      const templateUpdateMatch = path.match(/^\/api\/templates\/(\d+)$/);
+      if (templateUpdateMatch && body) {
+        if (!this.templateStore) {
+          sendJson(res, 503, { error: "Template store not available" });
+        } else {
+          const t = this.templateStore.update(parseInt(templateUpdateMatch[1], 10), body as any);
+          if (!t) sendJson(res, 404, { error: "Template not found" });
+          else sendJson(res, 200, { template: t });
+        }
+        return true;
+      }
+
       // ── Task update ──
       const taskUpdateMatch = path.match(/^\/api\/tasks\/(\d+)$/);
       if (taskUpdateMatch && body) {
@@ -558,6 +614,21 @@ export class ApiRouter {
         } else {
           if (!this.toolStore.delete(decodeURIComponent(toolDeleteMatch[1]))) {
             sendJson(res, 404, { error: "Tool not found" });
+          } else {
+            sendJson(res, 200, { status: "deleted" });
+          }
+        }
+        return true;
+      }
+
+      // ── Template delete ──
+      const templateDeleteMatch = path.match(/^\/api\/templates\/(\d+)$/);
+      if (templateDeleteMatch) {
+        if (!this.templateStore) {
+          sendJson(res, 503, { error: "Template store not available" });
+        } else {
+          if (!this.templateStore.delete(parseInt(templateDeleteMatch[1], 10))) {
+            sendJson(res, 404, { error: "Template not found" });
           } else {
             sendJson(res, 200, { status: "deleted" });
           }

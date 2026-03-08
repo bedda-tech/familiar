@@ -43,6 +43,7 @@ import type { TaskStore } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
 import type { ToolStore } from "../tools/store.js";
+import type { TemplateStore } from "../templates/store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -108,6 +109,11 @@ export class WebhookServer {
   /** Attach the tool store. */
   setToolStore(store: ToolStore): void {
     this.apiRouter.setToolStore(store);
+  }
+
+  /** Attach the template store. */
+  setTemplateStore(store: TemplateStore): void {
+    this.apiRouter.setTemplateStore(store);
   }
 
   /** Attach the database for activity log queries. */

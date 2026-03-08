@@ -970,6 +970,7 @@
       <button class="tab-btn" data-tab="tasks">Tasks</button>
       <button class="tab-btn" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="tools">Tools</button>
+      <button class="tab-btn" data-tab="templates">Templates</button>
       <button class="tab-btn" data-tab="chat">Chat</button>
     </nav>
 
@@ -1124,6 +1125,21 @@
         </div>
         <div id="toolsContainer">
           <div class="loading">Loading tools...</div>
+        </div>
+      </div>
+
+      <!-- ── Templates ── -->
+      <div id="tab-templates" class="tab-panel">
+        <div class="section-header">
+          <h2>Templates</h2>
+          <span id="templateCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm btn-primary" onclick="openTemplateModal(null)">+ New Template</button>
+            <button class="btn btn-sm" onclick="loadTemplates()">Refresh</button>
+          </div>
+        </div>
+        <div id="templatesContainer">
+          <div class="loading">Loading templates...</div>
         </div>
       </div>
 
@@ -1437,6 +1453,46 @@
       </div>
     </div>
 
+    <!-- ── Template Modal ── -->
+    <div id="templateModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="templateModalTitle">New Template</h3>
+          <button class="modal-close" onclick="closeModal('templateModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="templateFormId" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Name <span class="required">*</span></label>
+              <input class="form-control" id="templateFormName" placeholder="My Template" />
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select class="form-control" id="templateFormCategory">
+                <option value="agent-prompt">agent-prompt</option>
+                <option value="system-prompt">system-prompt</option>
+                <option value="task-description">task-description</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input class="form-control" id="templateFormDescription" placeholder="What is this template for?" />
+          </div>
+          <div class="form-group">
+            <label>Content <span class="required">*</span></label>
+            <textarea class="form-control" id="templateFormContent" rows="10" placeholder="Template text..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal('templateModal')">Cancel</button>
+          <button class="btn btn-primary" id="templateModalSave" onclick="saveTemplate()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Confirm dialog ── -->
     <div id="confirmOverlay" class="modal-overlay">
       <div class="confirm-dialog">
@@ -1465,6 +1521,7 @@
       let tasks = [];
       let projects = [];
       let tools = [];
+      let templates = [];
       let confirmCallback = null;
 
       // ── Init ──────────────────────────────────────────────────────────
@@ -1604,6 +1661,7 @@
         loadTasks();
         loadProjects();
         loadTools();
+        loadTemplates();
       }
 
       // ── API helpers ───────────────────────────────────────────────────
@@ -2979,6 +3037,132 @@
           toast(`Failed: ${e.message}`, 'error');
           await loadTools(); // revert
         }
+      }
+
+      // ── Templates ─────────────────────────────────────────────────────────
+
+      async function loadTemplates() {
+        if (!token) return;
+        try {
+          const data = await api('GET', '/api/templates');
+          templates = data.templates || [];
+          document.getElementById('templateCount').textContent = templates.length;
+          renderTemplates();
+        } catch (e) {
+          document.getElementById('templatesContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderTemplates() {
+        const container = document.getElementById('templatesContainer');
+
+        if (templates.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📄</div>
+              <div class="empty-title">No templates yet</div>
+              <div class="empty-desc">Templates are reusable text blocks for agent prompts, task descriptions, etc.</div>
+            </div>`;
+          return;
+        }
+
+        const catColors = { 'agent-prompt': 'badge-blue', 'system-prompt': 'badge-purple', 'task-description': 'badge-orange', 'other': 'badge-gray' };
+
+        let html = `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+        for (const t of templates) {
+          const catBadge = `<span class="badge ${catColors[t.category] || 'badge-gray'}">${esc(t.category)}</span>`;
+          const updatedAt = t.updated_at ? t.updated_at.slice(0, 16).replace('T', ' ') : '—';
+          html += `
+            <tr>
+              <td><strong>${esc(t.name)}</strong></td>
+              <td>${catBadge}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(t.description || '—')}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(updatedAt)}</td>
+              <td>
+                <button class="btn btn-sm" onclick="openTemplateModal(${t.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteTemplate(${t.id})">Delete</button>
+              </td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      }
+
+      function openTemplateModal(id) {
+        const t = id != null ? templates.find(x => x.id === id) : null;
+
+        document.getElementById('templateFormId').value = t ? t.id : '';
+        document.getElementById('templateModalTitle').textContent = t ? `Edit Template: ${t.name}` : 'New Template';
+        document.getElementById('templateFormName').value = t ? t.name : '';
+        document.getElementById('templateFormCategory').value = t ? t.category : 'agent-prompt';
+        document.getElementById('templateFormDescription').value = t ? (t.description || '') : '';
+        document.getElementById('templateFormContent').value = t ? t.content : '';
+
+        document.getElementById('templateModal').classList.add('visible');
+      }
+
+      async function saveTemplate() {
+        const id = document.getElementById('templateFormId').value;
+        const name = document.getElementById('templateFormName').value.trim();
+        const content = document.getElementById('templateFormContent').value.trim();
+
+        if (!name || !content) {
+          toast('Name and content are required', 'error');
+          return;
+        }
+
+        const payload = {
+          name,
+          category: document.getElementById('templateFormCategory').value,
+          description: document.getElementById('templateFormDescription').value.trim() || null,
+          content,
+        };
+
+        const btn = document.getElementById('templateModalSave');
+        btn.disabled = true; btn.textContent = 'Saving...';
+
+        try {
+          if (id) {
+            await api('PUT', `/api/templates/${id}`, payload);
+            toast('Template updated', 'success');
+          } else {
+            await api('POST', '/api/templates', payload);
+            toast('Template created', 'success');
+          }
+          closeModal('templateModal');
+          await loadTemplates();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false; btn.textContent = 'Save';
+        }
+      }
+
+      async function deleteTemplate(id) {
+        const t = templates.find(x => x.id === id);
+        if (!t) return;
+        confirm(`Delete template "${t.name}"?`, async () => {
+          try {
+            await api('DELETE', `/api/templates/${id}`);
+            toast('Template deleted', 'success');
+            await loadTemplates();
+          } catch (e) {
+            toast(`Failed: ${e.message}`, 'error');
+          }
+        });
       }
 
       // ── Chat ──────────────────────────────────────────────────────────────
