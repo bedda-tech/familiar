@@ -19,6 +19,9 @@
  *   GET  /api/config                    — get sanitized config
  *   GET  /api/activity                  — list activity log entries
  *   POST /api/activity                  — insert an activity log entry
+ *   GET  /api/runs                      — fleet-wide cron run history (agent_id, is_error, limit, offset)
+ *   GET  /api/cost/summary              — per-agent cost totals for period
+ *   GET  /api/cost/daily                — day-by-day fleet cost for period
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -282,12 +285,27 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Runs (fleet-wide cron_runs history) ──
+      if (path === "/api/runs") {
+        const params = new URLSearchParams(queryString ?? "");
+        this.handleListRuns(params, res);
+        return true;
+      }
+
       // ── Cost Summary ──
       if (path === "/api/cost/summary") {
         const params = new URLSearchParams(queryString ?? "");
         this.handleCostSummary(params.get("period") ?? "7d", res);
         return true;
       }
+
+      // ── Cost Daily (day-by-day spend for chart) ──
+      if (path === "/api/cost/daily") {
+        const params = new URLSearchParams(queryString ?? "");
+        this.handleCostDaily(params.get("period") ?? "7d", res);
+        return true;
+      }
+
       const agentCostMatch = path.match(/^\/api\/agents\/([^/]+)\/cost$/);
       if (agentCostMatch) {
         const params = new URLSearchParams(queryString ?? "");
@@ -1130,6 +1148,81 @@ export class ApiRouter {
     }
   }
 
+  // ── Runs Handler ────────────────────────────────────────────────────
+
+  /**
+   * GET /api/runs?agent_id=&is_error=&limit=50&offset=0
+   * Returns paginated fleet-wide cron run history.
+   */
+  private handleListRuns(params: URLSearchParams, res: ServerResponse): void {
+    const db = this.cronScheduler
+      ? ((this.cronScheduler as any).db as import("better-sqlite3").Database | undefined)
+      : this.db ?? undefined;
+    if (!db) {
+      sendJson(res, 200, { runs: [], total: 0 });
+      return;
+    }
+
+    const agentId = params.get("agent_id") ?? undefined;
+    const isErrorParam = params.get("is_error") ?? "";
+    const limit = Math.min(parseInt(params.get("limit") ?? "50", 10), 200);
+    const offset = Math.max(parseInt(params.get("offset") ?? "0", 10), 0);
+
+    const conditions: string[] = [];
+    const sqlParams: unknown[] = [];
+
+    if (agentId) {
+      conditions.push("job_id = ?");
+      sqlParams.push(agentId);
+    }
+    if (isErrorParam === "0") {
+      conditions.push("is_error = 0");
+    } else if (isErrorParam === "1") {
+      conditions.push("is_error = 1");
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    try {
+      const total = (db.prepare(`SELECT COUNT(*) as n FROM cron_runs ${where}`).get(...sqlParams) as any).n as number;
+      const rows = db
+        .prepare(
+          `SELECT id, job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text
+           FROM cron_runs ${where}
+           ORDER BY id DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(...sqlParams, limit, offset) as Array<{
+        id: number;
+        job_id: string;
+        started_at: string;
+        finished_at: string;
+        duration_ms: number;
+        cost_usd: number;
+        num_turns: number;
+        is_error: number;
+        result_text: string | null;
+      }>;
+
+      const runs = rows.map((r) => ({
+        id: r.id,
+        jobId: r.job_id,
+        startedAt: r.started_at,
+        finishedAt: r.finished_at,
+        durationMs: r.duration_ms,
+        costUsd: r.cost_usd,
+        numTurns: r.num_turns,
+        isError: r.is_error === 1,
+        resultPreview: r.result_text?.slice(0, 300) ?? "",
+      }));
+
+      sendJson(res, 200, { runs, total });
+    } catch (e: any) {
+      log.error({ err: e }, "runs query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
   // ── Cost Handlers ────────────────────────────────────────────────────
 
   /**
@@ -1183,6 +1276,43 @@ export class ApiRouter {
       sendJson(res, 200, { period, agents: withBudget });
     } catch (e: any) {
       log.error({ err: e }, "cost summary query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  /**
+   * GET /api/cost/daily?period=7d
+   * Returns day-by-day fleet cost totals for sparkline charts.
+   */
+  private handleCostDaily(period: string, res: ServerResponse): void {
+    const db = this.cronScheduler
+      ? ((this.cronScheduler as any).db as import("better-sqlite3").Database | undefined)
+      : this.db ?? undefined;
+    if (!db) {
+      sendJson(res, 200, { period, days: [] });
+      return;
+    }
+
+    const days = period === "1d" ? 1 : period === "30d" ? 30 : 7;
+
+    try {
+      const rows = db
+        .prepare(
+          `SELECT date(started_at) as day,
+                  COALESCE(SUM(cost_usd), 0) as totalCostUsd,
+                  COUNT(*) as runCount,
+                  SUM(CASE WHEN is_error = 1 THEN 1 ELSE 0 END) as errorCount
+           FROM cron_runs
+           WHERE started_at >= datetime('now', ? || ' days')
+           GROUP BY date(started_at)
+           ORDER BY day ASC`,
+        )
+        .all(`-${days}`) as Array<{ day: string; totalCostUsd: number; runCount: number; errorCount: number }>;
+
+      const totalCostUsd = rows.reduce((s, r) => s + r.totalCostUsd, 0);
+      sendJson(res, 200, { period, totalCostUsd: Math.round(totalCostUsd * 10000) / 10000, days: rows });
+    } catch (e: any) {
+      log.error({ err: e }, "cost daily query failed");
       sendJson(res, 500, { error: "Query failed" });
     }
   }

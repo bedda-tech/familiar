@@ -935,6 +935,63 @@
         text-align: center;
       }
 
+      /* ── Runs table ── */
+      .runs-preview {
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-muted);
+        font-size: 10px;
+      }
+
+      /* ── Costs chart ── */
+      .cost-bar-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 80px;
+        padding: 0 0 4px;
+      }
+      .cost-bar-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        gap: 2px;
+        min-width: 0;
+      }
+      .cost-bar {
+        width: 100%;
+        background: var(--accent);
+        border-radius: 2px 2px 0 0;
+        min-height: 2px;
+        transition: height .2s;
+      }
+      .cost-bar.error { background: var(--red); }
+      .cost-bar-label {
+        font-size: 8px;
+        color: var(--text-muted);
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+      }
+      .cost-stat-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        min-width: 120px;
+      }
+      .cost-stat-label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+      .cost-stat-value { font-size: 20px; font-weight: 700; color: var(--text-bright); }
+      .cost-stat-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+      .budget-bar-wrap { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; }
+      .budget-bar { height: 4px; border-radius: 2px; background: var(--green); }
+      .budget-bar.over { background: var(--red); }
+
       /* ── Responsive ── */
       @media (max-width: 600px) {
         main { padding: 12px; }
@@ -971,6 +1028,8 @@
       <button class="tab-btn" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="tools">Tools</button>
       <button class="tab-btn" data-tab="templates">Templates</button>
+      <button class="tab-btn" data-tab="runs">Runs</button>
+      <button class="tab-btn" data-tab="costs">Costs</button>
       <button class="tab-btn" data-tab="chat">Chat</button>
     </nav>
 
@@ -1140,6 +1199,60 @@
         </div>
         <div id="templatesContainer">
           <div class="loading">Loading templates...</div>
+        </div>
+      </div>
+
+      <!-- ── Runs ── -->
+      <div id="tab-runs" class="tab-panel">
+        <div class="section-header">
+          <h2>Runs</h2>
+          <span id="runsTotal" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadRuns()">Refresh</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <select class="filter-select" id="runsAgentFilter" onchange="loadRuns()">
+            <option value="">All agents</option>
+          </select>
+          <select class="filter-select" id="runsStatusFilter" onchange="loadRuns()">
+            <option value="">All statuses</option>
+            <option value="0">Success</option>
+            <option value="1">Error</option>
+          </select>
+          <select class="filter-select" id="runsLimitSelect" onchange="loadRuns()">
+            <option value="50">50 rows</option>
+            <option value="100">100 rows</option>
+            <option value="200">200 rows</option>
+          </select>
+        </div>
+        <div id="runsContainer">
+          <div class="loading">Select the Runs tab to load run history.</div>
+        </div>
+        <div id="runsPager" style="display:none;padding:12px 0;text-align:center;gap:8px;align-items:center">
+          <button class="btn btn-sm" id="runsPrev" onclick="runsPage(-1)">&#8592; Prev</button>
+          <span id="runsPageLabel" style="font-size:11px;color:var(--text-muted)"></span>
+          <button class="btn btn-sm" id="runsNext" onclick="runsPage(1)">Next &#8594;</button>
+        </div>
+      </div>
+
+      <!-- ── Costs ── -->
+      <div id="tab-costs" class="tab-panel">
+        <div class="section-header">
+          <h2>Costs</h2>
+          <div class="section-actions">
+            <select class="filter-select" id="costsPeriod" onchange="loadCosts()">
+              <option value="1d">1 day</option>
+              <option value="7d" selected>7 days</option>
+              <option value="30d">30 days</option>
+            </select>
+            <button class="btn btn-sm" onclick="loadCosts()">Refresh</button>
+          </div>
+        </div>
+        <div id="costsSummary" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px"></div>
+        <div id="costsChartWrap" style="margin-bottom:20px"></div>
+        <div id="costsTable">
+          <div class="loading">Select the Costs tab to load cost data.</div>
         </div>
       </div>
 
@@ -1540,6 +1653,8 @@
           btn.classList.add('active');
           document.getElementById('tab-' + tab).classList.add('active');
           activeTab = tab;
+          if (tab === 'runs') loadRuns();
+          if (tab === 'costs') loadCosts();
         });
       });
 
