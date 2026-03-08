@@ -834,6 +834,107 @@
 
       .run-bar.error { background: var(--red); }
 
+      /* ── Chat ── */
+      #tab-chat.active {
+        display: flex !important;
+        flex-direction: column;
+        height: calc(100vh - 136px); /* header + tabbar + 2×24px main padding */
+      }
+
+      .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px 0;
+      }
+
+      .chat-msg {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-width: 78%;
+      }
+
+      .chat-msg.user { align-self: flex-end; align-items: flex-end; }
+      .chat-msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+      .chat-label {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .chat-bubble {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.6;
+      }
+
+      .chat-msg.user .chat-bubble {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+      }
+
+      .chat-bubble.streaming { border-color: var(--accent); }
+
+      .chat-input-bar {
+        border-top: 1px solid var(--border);
+        padding: 12px 0 0;
+        display: flex;
+        gap: 8px;
+      }
+
+      .chat-input-bar textarea {
+        flex: 1;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        padding: 8px 12px;
+        resize: none;
+        outline: none;
+        min-height: 40px;
+        max-height: 120px;
+        overflow-y: auto;
+        line-height: 1.5;
+      }
+
+      .chat-input-bar textarea:focus { border-color: var(--border-focus); }
+
+      .chat-input-bar button {
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        align-self: flex-end;
+        white-space: nowrap;
+      }
+
+      .chat-input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .chat-empty {
+        align-self: center;
+        margin: auto;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
       /* ── Responsive ── */
       @media (max-width: 600px) {
         main { padding: 12px; }
@@ -842,6 +943,7 @@
         .form-row { grid-template-columns: 1fr; }
         .card-grid { grid-template-columns: 1fr; }
         .hide-mobile { display: none; }
+        #tab-chat.active { height: calc(100vh - 112px); }
       }
     </style>
   </head>
@@ -868,6 +970,7 @@
       <button class="tab-btn" data-tab="tasks">Tasks</button>
       <button class="tab-btn" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="tools">Tools</button>
+      <button class="tab-btn" data-tab="chat">Chat</button>
     </nav>
 
     <!-- Tab panels -->
@@ -1021,6 +1124,17 @@
         </div>
         <div id="toolsContainer">
           <div class="loading">Loading tools...</div>
+        </div>
+      </div>
+
+      <!-- ── Chat ── -->
+      <div id="tab-chat" class="tab-panel">
+        <div id="chatMessages" class="chat-messages">
+          <div class="chat-empty" id="chatEmpty">Connect and type a message to chat with your familiar.</div>
+        </div>
+        <div class="chat-input-bar">
+          <textarea id="chatInput" placeholder="Message your familiar… (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+          <button id="chatSendBtn" onclick="chatSend()">Send</button>
         </div>
       </div>
     </main>
@@ -1467,6 +1581,16 @@
           if (idx >= 0) tasks[idx] = updated;
           else tasks.unshift(updated);
           if (activeTab === 'tasks') renderTasks();
+        }
+
+        if (msg.type === 'chat:message') {
+          chatAppendMessage(msg.role, msg.text);
+          return;
+        }
+
+        if (msg.type === 'chat:draft') {
+          chatUpdateDraft(msg.text, msg.done);
+          return;
         }
       }
 
@@ -2856,6 +2980,109 @@
           await loadTools(); // revert
         }
       }
+
+      // ── Chat ──────────────────────────────────────────────────────────────
+
+      let chatDraftEl = null; // currently streaming bubble element
+
+      /** Minimal markdown-to-HTML for chat bubbles (safe: escape first, then apply patterns). */
+      function chatMarkdown(text) {
+        const parts = text.split(/(```[\s\S]*?```)/g);
+        let html = '';
+        for (const part of parts) {
+          if (part.startsWith('```')) {
+            const nl = part.indexOf('\n');
+            const code = part.slice(nl > 3 ? nl + 1 : 3, -3);
+            html += `<pre><code>${esc(code)}</code></pre>`;
+          } else {
+            let s = esc(part);
+            s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            s = s.replace(/`(.+?)`/g, '<code>$1</code>');
+            s = s.replace(/\n\n+/g, '</p><p>');
+            s = s.replace(/\n/g, '<br>');
+            html += `<p>${s}</p>`;
+          }
+        }
+        return html;
+      }
+
+      /** Append a permanent chat message bubble. Clears any in-flight draft bubble. */
+      function chatAppendMessage(role, text) {
+        if (chatDraftEl) {
+          chatDraftEl.remove();
+          chatDraftEl = null;
+        }
+        const empty = document.getElementById('chatEmpty');
+        if (empty) empty.style.display = 'none';
+
+        const msg = document.createElement('div');
+        msg.className = `chat-msg ${role}`;
+        msg.innerHTML = `
+          <div class="chat-label">${role === 'user' ? 'You' : 'Familiar'}</div>
+          <div class="chat-bubble">${role === 'user' ? esc(text) : chatMarkdown(text)}</div>`;
+        const container = document.getElementById('chatMessages');
+        container.appendChild(msg);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      /** Update or create the streaming draft bubble; clears it when done=true. */
+      function chatUpdateDraft(text, done) {
+        if (done) {
+          if (chatDraftEl) { chatDraftEl.remove(); chatDraftEl = null; }
+          return;
+        }
+        const empty = document.getElementById('chatEmpty');
+        if (empty) empty.style.display = 'none';
+
+        const container = document.getElementById('chatMessages');
+        if (!chatDraftEl) {
+          chatDraftEl = document.createElement('div');
+          chatDraftEl.className = 'chat-msg assistant';
+          chatDraftEl.innerHTML = `
+            <div class="chat-label">Familiar</div>
+            <div class="chat-bubble streaming"></div>`;
+          container.appendChild(chatDraftEl);
+        }
+        const bubble = chatDraftEl.querySelector('.chat-bubble');
+        if (bubble) bubble.innerHTML = chatMarkdown(text);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      /** Send the chat input to the server via WebSocket. */
+      function chatSend() {
+        const input = document.getElementById('chatInput');
+        const text = input.value.trim();
+        if (!text) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          toast('Not connected — check WebSocket status', 'error');
+          return;
+        }
+        ws.send(JSON.stringify({ type: 'chat:send', text }));
+        input.value = '';
+        chatInputResize(input);
+        const btn = document.getElementById('chatSendBtn');
+        btn.disabled = true;
+        setTimeout(() => { btn.disabled = false; }, 500);
+      }
+
+      function chatInputResize(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+      }
+
+      // Wire up Enter key and auto-resize for chat input
+      document.addEventListener('DOMContentLoaded', () => {
+        const input = document.getElementById('chatInput');
+        if (!input) return;
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatSend();
+          }
+        });
+        input.addEventListener('input', () => chatInputResize(input));
+      });
     </script>
   </body>
 </html>

@@ -30,6 +30,7 @@ import { runMigration } from "./migrations/001-entity-separation.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
 import { WsServer } from "./ws/server.js";
+import { DashboardChannel } from "./channels/dashboard.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -467,6 +468,12 @@ async function cmdStart(configPath?: string): Promise<void> {
       taskStore.onUpdate((task) => {
         wsServer.broadcast({ type: "task:updated", task: task as unknown as Record<string, unknown> });
       });
+
+      // Wire dashboard chat channel
+      const dashboardChannel = new DashboardChannel(wsServer);
+      bridge.addChannel(dashboardChannel);
+      await dashboardChannel.start();
+      log.info("dashboard channel wired");
     }
   }
 

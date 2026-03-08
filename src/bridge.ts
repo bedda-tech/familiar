@@ -33,9 +33,12 @@ export class Bridge {
   private processTracker: ProcessTracker | undefined;
   private sessionConfig: SessionConfig;
   private workingDirectory: string | undefined;
+  private channels: Channel[];
+  /** Maps chatId → the channel that most recently sent a message from that chatId */
+  private chatChannelMap = new Map<string, Channel>();
 
   constructor(
-    private channel: Channel,
+    channel: Channel | Channel[],
     private claude: ClaudeCLI,
     private sessions: SessionStore,
     openai?: OpenAIConfig,
@@ -47,6 +50,7 @@ export class Bridge {
     processTracker?: ProcessTracker,
     workingDirectory?: string,
   ) {
+    this.channels = Array.isArray(channel) ? channel : [channel];
     this.openai = openai;
     this.agents = agents;
     this.memoryStore = memoryStore;
@@ -57,17 +61,24 @@ export class Bridge {
     this.workingDirectory = workingDirectory;
   }
 
-  /** Wire up the channel to the Claude backend */
-  start(): void {
+  /** Return the channel that last heard from this chatId, falling back to the first channel. */
+  private channelFor(chatId: string): Channel {
+    return this.chatChannelMap.get(chatId) ?? this.channels[0];
+  }
+
+  /** Register all message and command handlers on a single channel. */
+  private registerChannelHandlers(ch: Channel): void {
     // Handle regular messages
-    this.channel.onMessage(async (msg) => {
+    ch.onMessage(async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       await this.handleMessage(msg);
     });
 
     // Handle /new — fresh session
-    this.channel.onCommand("new", async (msg) => {
+    ch.onCommand("new", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       this.sessions.clearSession(msg.chatId);
-      await this.channel.sendText(
+      await this.channelFor(msg.chatId).sendText(
         msg.chatId,
         "Session cleared. Next message starts a fresh conversation.",
         msg.replyContext,
@@ -75,10 +86,11 @@ export class Bridge {
     });
 
     // Handle /status — session info
-    this.channel.onCommand("status", async (msg) => {
+    ch.onCommand("status", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const info = this.sessions.getSessionInfo(msg.chatId);
       if (!info) {
-        await this.channel.sendText(msg.chatId, "No active session.", msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, "No active session.", msg.replyContext);
         return;
       }
       const status = [
@@ -88,37 +100,38 @@ export class Bridge {
         `Started: ${info.createdAt}`,
         `Last used: ${info.lastUsedAt}`,
       ].join("\n");
-      await this.channel.sendText(msg.chatId, status, msg.replyContext);
+      await this.channelFor(msg.chatId).sendText(msg.chatId, status, msg.replyContext);
     });
 
     // Handle /model — switch model at runtime or show current
-    this.channel.onCommand("model", async (msg) => {
+    ch.onCommand("model", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const requested = msg.text.trim().toLowerCase();
       if (requested) {
         const valid = ["opus", "sonnet", "haiku"];
         if (valid.includes(requested)) {
           this.claude.setModel(requested);
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             `Model switched to **${requested}**. Use \`/model\` to check, or \`/model reset\` to revert to config default.`,
             msg.replyContext,
           );
         } else if (requested === "reset") {
           this.claude.setModel(null);
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             `Model reverted to config default: **${this.claude.getModel()}**`,
             msg.replyContext,
           );
         } else {
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             `Unknown model: ${requested}\nAvailable: opus, sonnet, haiku\nUse \`/model reset\` to revert to config default.`,
             msg.replyContext,
           );
         }
       } else {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Current model: **${this.claude.getModel()}**\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model reset\``,
           msg.replyContext,
@@ -127,7 +140,8 @@ export class Bridge {
     });
 
     // Handle /cost — show usage costs
-    this.channel.onCommand("cost", async (msg) => {
+    ch.onCommand("cost", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const summary = this.sessions.getCostSummary(msg.chatId);
       const fmt = (n: number) => `$${n.toFixed(4)}`;
       const text = [
@@ -138,25 +152,26 @@ export class Bridge {
         `Last 24h: ${fmt(summary.last24h)}`,
         `All time: ${fmt(summary.allTime.cost)} (${summary.allTime.messages} msgs)`,
       ].join("\n");
-      await this.channel.sendText(msg.chatId, text, msg.replyContext);
+      await this.channelFor(msg.chatId).sendText(msg.chatId, text, msg.replyContext);
     });
 
     // Handle /thinking — toggle thinking block display
-    this.channel.onCommand("thinking", async (msg) => {
+    ch.onCommand("thinking", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const arg = msg.text.trim().toLowerCase();
       if (arg === "on") {
         this.showThinking = true;
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           "Thinking blocks **enabled**. You'll see reasoning before responses.",
           msg.replyContext,
         );
       } else if (arg === "off") {
         this.showThinking = false;
-        await this.channel.sendText(msg.chatId, "Thinking blocks **disabled**.", msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, "Thinking blocks **disabled**.", msg.replyContext);
       } else {
         const state = this.showThinking ? "ON" : "OFF";
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Thinking display: **${state}**\nUsage: \`/thinking on\`, \`/thinking off\``,
           msg.replyContext,
@@ -165,14 +180,15 @@ export class Bridge {
     });
 
     // Handle /spawn — spawn a sub-agent with a task
-    this.channel.onCommand("spawn", async (msg) => {
+    ch.onCommand("spawn", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       if (!this.agents) {
-        await this.channel.sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
         return;
       }
       const text = msg.text.trim();
       if (!text) {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Usage: \`/spawn <task>\`\nOptional flags: \`--model sonnet\`, \`--label name\`\n\nExample: \`/spawn Research the top 5 TypeScript ORMs\``,
           msg.replyContext,
@@ -197,7 +213,7 @@ export class Bridge {
 
       // Validate input lengths
       if (task.length > MAX_TASK_LENGTH) {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Task is too long (${task.length} chars). Maximum is ${MAX_TASK_LENGTH} characters.`,
           msg.replyContext,
@@ -205,7 +221,7 @@ export class Bridge {
         return;
       }
       if (label && label.length > MAX_LABEL_LENGTH) {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Label is too long (${label.length} chars). Maximum is ${MAX_LABEL_LENGTH} characters.`,
           msg.replyContext,
@@ -215,10 +231,10 @@ export class Bridge {
 
       const result = await this.agents.spawn({ task, label, model, chatId: msg.chatId });
       if ("error" in result) {
-        await this.channel.sendText(msg.chatId, result.error, msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, result.error, msg.replyContext);
       } else {
         const display = label ? `**${label}** (\`${result.id}\`)` : `\`${result.id}\``;
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Sub-agent spawned: ${display}\nModel: ${model ?? "sonnet"}\nTask: ${task.slice(0, 200)}`,
           msg.replyContext,
@@ -227,9 +243,10 @@ export class Bridge {
     });
 
     // Handle /agents — list, kill, info
-    this.channel.onCommand("agents", async (msg) => {
+    ch.onCommand("agents", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       if (!this.agents) {
-        await this.channel.sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, "Sub-agents not configured.", msg.replyContext);
         return;
       }
       const args = msg.text.trim().split(/\s+/);
@@ -262,11 +279,11 @@ export class Bridge {
           }
         }
 
-        await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, lines.join("\n"), msg.replyContext);
       } else if (sub === "kill") {
         const target = args[1];
         if (!target) {
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             "Usage: `/agents kill <id>` or `/agents kill all`",
             msg.replyContext,
@@ -275,14 +292,14 @@ export class Bridge {
         }
         if (target === "all") {
           const count = this.agents.killAll();
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             `Killed ${count} sub-agent(s).`,
             msg.replyContext,
           );
         } else {
           const killed = this.agents.kill(target);
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             killed
               ? `Killed sub-agent \`${target}\`.`
@@ -293,12 +310,12 @@ export class Bridge {
       } else if (sub === "info") {
         const target = args[1];
         if (!target) {
-          await this.channel.sendText(msg.chatId, "Usage: `/agents info <id>`", msg.replyContext);
+          await this.channelFor(msg.chatId).sendText(msg.chatId, "Usage: `/agents info <id>`", msg.replyContext);
           return;
         }
         const agent = this.agents.getInfo(target);
         if (!agent) {
-          await this.channel.sendText(
+          await this.channelFor(msg.chatId).sendText(
             msg.chatId,
             `No sub-agent matching \`${target}\`.`,
             msg.replyContext,
@@ -318,9 +335,9 @@ export class Bridge {
         if (agent.resultText) {
           lines.push(`\nResult:\n${agent.resultText.slice(0, 2000)}`);
         }
-        await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, lines.join("\n"), msg.replyContext);
       } else {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           "Usage: `/agents list`, `/agents kill <id|all>`, `/agents info <id>`",
           msg.replyContext,
@@ -329,14 +346,15 @@ export class Bridge {
     });
 
     // Handle /search — search message history and semantic memory
-    this.channel.onCommand("search", async (msg) => {
+    ch.onCommand("search", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const query = msg.text.replace(/^\/search\s*/i, "").trim();
       if (!query) {
-        await this.channel.sendText(msg.chatId, "Usage: `/search <query>`", msg.replyContext);
+        await this.channelFor(msg.chatId).sendText(msg.chatId, "Usage: `/search <query>`", msg.replyContext);
         return;
       }
       if (query.length > MAX_SEARCH_QUERY_LENGTH) {
-        await this.channel.sendText(
+        await this.channelFor(msg.chatId).sendText(
           msg.chatId,
           `Search query is too long (${query.length} chars). Maximum is ${MAX_SEARCH_QUERY_LENGTH} characters.`,
           msg.replyContext,
@@ -388,11 +406,12 @@ export class Bridge {
         results = "No results found.";
       }
 
-      await this.channel.sendText(msg.chatId, results, msg.replyContext);
+      await this.channelFor(msg.chatId).sendText(msg.chatId, results, msg.replyContext);
     });
 
     // Handle /processes (aliased as /ps) — system status overview
     const processesHandler = async (msg: IncomingMessage) => {
+      this.chatChannelMap.set(msg.chatId, ch);
       const lines: string[] = [];
 
       // System uptime
@@ -468,13 +487,25 @@ export class Bridge {
         lines.push("**Cron Jobs:** not configured");
       }
 
-      await this.channel.sendText(msg.chatId, lines.join("\n"), msg.replyContext);
+      await this.channelFor(msg.chatId).sendText(msg.chatId, lines.join("\n"), msg.replyContext);
     };
 
-    this.channel.onCommand("processes", processesHandler);
-    this.channel.onCommand("ps", processesHandler);
+    ch.onCommand("processes", processesHandler);
+    ch.onCommand("ps", processesHandler);
+  }
 
-    log.info("bridge wired up");
+  /** Wire up all channels to the Claude backend */
+  start(): void {
+    for (const ch of this.channels) {
+      this.registerChannelHandlers(ch);
+    }
+    log.info({ channels: this.channels.length }, "bridge wired up");
+  }
+
+  /** Register and wire a channel that was created after Bridge.start() (e.g. DashboardChannel). */
+  addChannel(ch: Channel): void {
+    this.channels.push(ch);
+    this.registerChannelHandlers(ch);
   }
 
   private async handleMessage(msg: IncomingMessage): Promise<void> {
@@ -483,7 +514,7 @@ export class Bridge {
     }
 
     if (msg.text.length > MAX_MESSAGE_LENGTH) {
-      await this.channel.sendText(
+      await this.channelFor(msg.chatId).sendText(
         msg.chatId,
         `Message is too long (${msg.text.length.toLocaleString()} chars). Maximum is ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`,
         msg.replyContext,
@@ -508,12 +539,12 @@ export class Bridge {
         const transcription = await transcribeAudio(msg.filePaths[0], this.openai);
         prompt = transcription;
         // Show transcription to user
-        await this.channel.sendDirectMessage(msg.chatId, `_Voice: ${transcription}_`);
+        await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, `_Voice: ${transcription}_`);
         // Don't pass audio file to Claude — the transcription is the prompt
         msg.filePaths = undefined;
       } catch (e) {
         log.error({ err: e }, "voice transcription failed");
-        await this.channel.sendDirectMessage(
+        await this.channelFor(msg.chatId).sendDirectMessage(
           msg.chatId,
           "Voice transcription failed. Sending audio file to Claude directly.",
         );
@@ -574,19 +605,19 @@ export class Bridge {
     const draft = createDraft();
     const draftCtx: DraftContext = {
       reply: async (text) => {
-        const handle = await this.channel.sendDraft(msg.chatId, text, msg.replyContext);
+        const handle = await this.channelFor(msg.chatId).sendDraft(msg.chatId, text, msg.replyContext);
         return handle.messageId ?? 0;
       },
       edit: async (messageId, text) => {
-        await this.channel.updateDraft({ messageId, chatId: msg.chatId }, text);
+        await this.channelFor(msg.chatId).updateDraft({ messageId, chatId: msg.chatId }, text);
       },
       sendChunks: async (chunks) => {
-        await this.channel.sendChunks(msg.chatId, chunks, msg.replyContext);
+        await this.channelFor(msg.chatId).sendChunks(msg.chatId, chunks, msg.replyContext);
       },
     };
 
     // Show typing indicator while Claude is processing
-    let stopTyping = this.channel.startTyping(msg.chatId);
+    let stopTyping = this.channelFor(msg.chatId).startTyping(msg.chatId);
 
     // Stream response from Claude
     let fullText = "";
@@ -626,7 +657,7 @@ export class Bridge {
             if (this.showThinking && event.text.length > 0) {
               const preview =
                 event.text.length > 3000 ? event.text.slice(0, 3000) + "..." : event.text;
-              await this.channel.sendDirectMessage(msg.chatId, "```\n" + preview + "\n```");
+              await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, "```\n" + preview + "\n```");
             }
             break;
 
@@ -638,10 +669,10 @@ export class Bridge {
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
             // Show tool usage to the user
-            await this.channel.sendDirectMessage(msg.chatId, `\`${event.name}\``);
+            await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, `\`${event.name}\``);
             // Restart typing during tool execution
             if (typingStopped) {
-              stopTyping = this.channel.startTyping(msg.chatId);
+              stopTyping = this.channelFor(msg.chatId).startTyping(msg.chatId);
               typingStopped = false;
             }
             break;
