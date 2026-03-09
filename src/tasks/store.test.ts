@@ -32,6 +32,7 @@ function makeDb(): Database.Database {
       claimed_by TEXT,
       claimed_at TEXT,
       model_hint TEXT,
+      project_id TEXT,
       retry_count INTEGER DEFAULT 0,
       depends_on TEXT,
       stale_timeout_hours REAL DEFAULT NULL

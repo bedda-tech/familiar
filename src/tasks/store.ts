@@ -23,6 +23,7 @@ export interface Task {
   result: string | null;
   tags: string | null;
   model_hint: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
   claimed_by: string | null;
@@ -41,6 +42,7 @@ export interface CreateTaskInput {
   recurrence_schedule?: string;
   tags?: string[];
   model_hint?: string;
+  project_id?: string;
   depends_on?: number[]; // task IDs that must complete before this task becomes ready
   stale_timeout_hours?: number; // Override default 2h stale window
 }
@@ -55,6 +57,7 @@ export interface UpdateTaskInput {
   recurrence_schedule?: string;
   tags?: string[];
   model_hint?: string | null;
+  project_id?: string | null;
   retry_count?: number;
   stale_timeout_hours?: number | null;
 }
@@ -108,8 +111,8 @@ export class TaskStore {
     const initialStatus = dependsOnJson ? "blocked" : "ready";
 
     const stmt = this.db.prepare(`
-      INSERT INTO tasks (title, description, assigned_agent, status, priority, recurring, recurrence_schedule, tags, model_hint, depends_on, stale_timeout_hours)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (title, description, assigned_agent, status, priority, recurring, recurrence_schedule, tags, model_hint, project_id, depends_on, stale_timeout_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.title,
@@ -121,6 +124,7 @@ export class TaskStore {
       input.recurrence_schedule ?? null,
       input.tags ? JSON.stringify(input.tags) : null,
       input.model_hint ?? null,
+      input.project_id ?? null,
       dependsOnJson,
       input.stale_timeout_hours ?? null,
     );
@@ -172,6 +176,10 @@ export class TaskStore {
     if (input.model_hint !== undefined) {
       fields.push("model_hint = ?");
       values.push(input.model_hint ?? null);
+    }
+    if (input.project_id !== undefined) {
+      fields.push("project_id = ?");
+      values.push(input.project_id ?? null);
     }
     if (input.retry_count !== undefined) {
       fields.push("retry_count = ?");
