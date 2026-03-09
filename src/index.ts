@@ -415,6 +415,9 @@ async function cmdStart(configPath?: string): Promise<void> {
   if (config.webhooks?.token) {
     webhooks = new WebhookServer(config.webhooks, config.claude);
 
+    // Wire up database for activity log and other db-dependent endpoints
+    webhooks.setDb(db);
+
     // Wire up cron scheduler for REST API
     if (cron) {
       webhooks.setCronScheduler(cron);
