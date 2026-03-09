@@ -3280,6 +3280,244 @@
         });
       }
 
+      // ── Runs tab ──────────────────────────────────────────────────────────
+
+      let runsCurrentPage = 0;
+      let runsTotalRows = 0;
+
+      async function loadRuns() {
+        if (!token) return;
+        const agentId = document.getElementById('runsAgentFilter').value;
+        const isError = document.getElementById('runsStatusFilter').value;
+        const limit = parseInt(document.getElementById('runsLimitSelect').value || '50', 10);
+        const offset = runsCurrentPage * limit;
+
+        const params = new URLSearchParams({ limit, offset });
+        if (agentId) params.set('agent_id', agentId);
+        if (isError !== '') params.set('is_error', isError);
+
+        try {
+          const data = await api('GET', `/api/runs?${params}`);
+          const runs = data.runs || [];
+          runsTotalRows = data.total || 0;
+          document.getElementById('runsTotal').textContent = runsTotalRows;
+
+          // Populate agent filter once from known agents
+          const sel = document.getElementById('runsAgentFilter');
+          if (sel.options.length <= 1 && agents.length) {
+            const current = sel.value;
+            const ids = [...new Set(agents.map(a => a.id))].sort();
+            sel.innerHTML = '<option value="">All agents</option>' +
+              ids.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join('');
+            sel.value = current;
+          }
+
+          renderRuns(runs, limit);
+        } catch (e) {
+          document.getElementById('runsContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderRuns(runs, limit) {
+        const container = document.getElementById('runsContainer');
+
+        if (runs.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">◎</div>
+              <div class="empty-title">No runs found</div>
+              <div class="empty-desc">Run history will appear here after agents execute.</div>
+            </div>`;
+          document.getElementById('runsPager').style.display = 'none';
+          return;
+        }
+
+        let html = `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Agent</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Turns</th>
+                <th>Cost</th>
+                <th>Status</th>
+                <th>Output</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+        for (const r of runs) {
+          const statusBadge = r.isError
+            ? `<span class="badge badge-red">error</span>`
+            : `<span class="badge badge-green">ok</span>`;
+          const started = r.startedAt ? r.startedAt.slice(0, 16).replace('T', ' ') : '—';
+          const dur = formatDuration(r.durationMs);
+          const cost = r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : '—';
+          const preview = r.resultPreview ? esc(r.resultPreview.slice(0, 120)) : '<span style="color:var(--text-muted)">—</span>';
+
+          html += `
+            <tr>
+              <td style="color:var(--text-muted);font-size:11px">#${r.id}</td>
+              <td><code>${esc(r.jobId)}</code></td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(started)}</td>
+              <td style="color:var(--text-muted)">${esc(dur)}</td>
+              <td style="color:var(--text-muted)">${r.numTurns ?? '—'}</td>
+              <td>${esc(cost)}</td>
+              <td>${statusBadge}</td>
+              <td class="runs-preview">${preview}</td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // Pagination controls
+        const totalPages = Math.max(1, Math.ceil(runsTotalRows / limit));
+        const pager = document.getElementById('runsPager');
+        if (totalPages > 1) {
+          pager.style.display = 'flex';
+          document.getElementById('runsPageLabel').textContent =
+            `Page ${runsCurrentPage + 1} of ${totalPages} (${runsTotalRows} total)`;
+          document.getElementById('runsPrev').disabled = runsCurrentPage === 0;
+          document.getElementById('runsNext').disabled = runsCurrentPage >= totalPages - 1;
+        } else {
+          pager.style.display = 'none';
+        }
+      }
+
+      function runsPage(dir) {
+        const limit = parseInt(document.getElementById('runsLimitSelect').value || '50', 10);
+        const totalPages = Math.ceil(runsTotalRows / limit);
+        runsCurrentPage = Math.max(0, Math.min(totalPages - 1, runsCurrentPage + dir));
+        loadRuns();
+      }
+
+      // ── Costs tab ─────────────────────────────────────────────────────────
+
+      async function loadCosts() {
+        if (!token) return;
+        const period = document.getElementById('costsPeriod').value || '7d';
+
+        try {
+          const [summaryData, dailyData] = await Promise.all([
+            api('GET', `/api/cost/summary?period=${period}`),
+            api('GET', `/api/cost/daily?period=${period}`),
+          ]);
+
+          renderCostSummary(summaryData.agents || [], summaryData.period);
+          renderCostChart(dailyData.days || [], dailyData.totalCostUsd || 0);
+          renderCostTable(summaryData.agents || []);
+        } catch (e) {
+          document.getElementById('costsSummary').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderCostSummary(agents, period) {
+        const totalCost = agents.reduce((s, a) => s + (a.totalCostUsd || 0), 0);
+        const totalRuns = agents.reduce((s, a) => s + (a.runCount || 0), 0);
+        const totalErrors = agents.reduce((s, a) => s + (a.errorCount || 0), 0);
+        const srPct = totalRuns > 0 ? Math.round(((totalRuns - totalErrors) / totalRuns) * 100) : 100;
+        const avgCost = totalRuns > 0 ? totalCost / totalRuns : 0;
+
+        const label = { '1d': '24 hours', '7d': '7 days', '30d': '30 days' }[period] || period;
+
+        document.getElementById('costsSummary').innerHTML = `
+          <div class="cost-stat-card">
+            <div class="cost-stat-label">Total cost (${esc(label)})</div>
+            <div class="cost-stat-value">$${totalCost.toFixed(4)}</div>
+            <div class="cost-stat-sub">${totalRuns} runs across ${agents.length} agents</div>
+          </div>
+          <div class="cost-stat-card">
+            <div class="cost-stat-label">Avg cost / run</div>
+            <div class="cost-stat-value">$${avgCost.toFixed(4)}</div>
+            <div class="cost-stat-sub">${srPct}% success rate</div>
+          </div>
+          <div class="cost-stat-card">
+            <div class="cost-stat-label">Top agent</div>
+            <div class="cost-stat-value" style="font-size:14px">${agents.length ? esc(agents[0].agentId) : '—'}</div>
+            <div class="cost-stat-sub">${agents.length ? `$${agents[0].totalCostUsd.toFixed(4)}` : ''}</div>
+          </div>`;
+      }
+
+      function renderCostChart(days, totalCostUsd) {
+        const wrap = document.getElementById('costsChartWrap');
+        if (!days.length) { wrap.innerHTML = ''; return; }
+
+        const max = Math.max(...days.map(d => d.totalCostUsd), 0.0001);
+
+        const cols = days.map(d => {
+          const pct = Math.round((d.totalCostUsd / max) * 76);
+          const hasError = d.errorCount > 0;
+          const dayLabel = d.day.slice(5); // MM-DD
+          return `
+            <div class="cost-bar-col" title="${esc(d.day)}: $${d.totalCostUsd.toFixed(4)} (${d.runCount} runs)">
+              <div class="cost-bar${hasError ? ' error' : ''}" style="height:${pct}px"></div>
+              <div class="cost-bar-label">${esc(dayLabel)}</div>
+            </div>`;
+        }).join('');
+
+        wrap.innerHTML = `
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">
+            Daily cost — total $${totalCostUsd.toFixed(4)}
+          </div>
+          <div class="cost-bar-chart">${cols}</div>`;
+      }
+
+      function renderCostTable(agentRows) {
+        const container = document.getElementById('costsTable');
+        if (!agentRows.length) {
+          container.innerHTML = '<div class="loading" style="color:var(--text-muted)">No runs in this period.</div>';
+          return;
+        }
+
+        let html = `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Runs</th>
+                <th>Errors</th>
+                <th>Total Cost</th>
+                <th>Avg Cost/Run</th>
+                <th>Daily Budget</th>
+                <th>Last Run</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+        for (const a of agentRows) {
+          const avgCost = a.runCount > 0 ? a.totalCostUsd / a.runCount : 0;
+          const lastRun = a.lastRunAt ? a.lastRunAt.slice(0, 16).replace('T', ' ') : '—';
+          const srPct = a.runCount > 0 ? Math.round(((a.runCount - a.errorCount) / a.runCount) * 100) : 100;
+          const srClass = srPct >= 90 ? 'badge-green' : srPct >= 70 ? 'badge-yellow' : 'badge-red';
+
+          let budgetCell = '—';
+          if (a.dailyBudgetUsd != null) {
+            const pct = Math.min(100, Math.round((a.totalCostUsd / a.dailyBudgetUsd) * 100));
+            const barClass = pct >= 100 ? 'over' : '';
+            budgetCell = `
+              <div>$${a.dailyBudgetUsd.toFixed(2)}/day (${pct}%)</div>
+              <div class="budget-bar-wrap"><div class="budget-bar ${barClass}" style="width:${pct}%"></div></div>`;
+          }
+
+          html += `
+            <tr>
+              <td><code>${esc(a.agentId)}</code></td>
+              <td>${a.runCount} <span class="badge ${srClass}" style="font-size:9px">${srPct}%</span></td>
+              <td style="color:${a.errorCount > 0 ? 'var(--red)' : 'var(--text-muted)'}">${a.errorCount}</td>
+              <td>$${a.totalCostUsd.toFixed(4)}</td>
+              <td>$${avgCost.toFixed(4)}</td>
+              <td style="font-size:11px">${budgetCell}</td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(lastRun)}</td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      }
+
       // ── Chat ──────────────────────────────────────────────────────────────
 
       let chatDraftEl = null; // currently streaming bubble element
