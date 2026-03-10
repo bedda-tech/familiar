@@ -104,6 +104,13 @@ export function runMigration(db: Database.Database, configPath?: string): Migrat
     // Column already exists
   }
 
+  // Add project_id to activity_log if not exists
+  try {
+    db.exec("ALTER TABLE activity_log ADD COLUMN project_id TEXT");
+  } catch {
+    // Column already exists
+  }
+
   // Check if migration has already populated data
   const agentCount = (db.prepare("SELECT COUNT(*) as c FROM agents").get() as { c: number }).c;
   if (agentCount > 0) {

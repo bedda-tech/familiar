@@ -22,6 +22,7 @@ export interface Agent {
   pre_hook: string | null;
   /** Shell command to run after completion (e.g. "git push", "npm run deploy"). */
   post_hook: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +46,7 @@ export interface CreateAgentInput {
   worktree_isolation?: boolean;
   pre_hook?: string | null;
   post_hook?: string | null;
+  project_id?: string | null;
 }
 
 export interface UpdateAgentInput {
@@ -65,4 +67,5 @@ export interface UpdateAgentInput {
   worktree_isolation?: boolean;
   pre_hook?: string | null;
   post_hook?: string | null;
+  project_id?: string | null;
 }

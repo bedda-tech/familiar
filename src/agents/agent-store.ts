@@ -59,15 +59,34 @@ export class AgentCrudStore {
     if (!cols.includes("post_hook")) {
       this.db.exec("ALTER TABLE agents ADD COLUMN post_hook TEXT DEFAULT NULL");
     }
+    if (!cols.includes("project_id")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN project_id TEXT REFERENCES projects(id)");
+      // Backfill known agents with their project IDs
+      this.db.exec(`
+        UPDATE agents SET project_id = 'nozio'    WHERE project_id IS NULL AND id = 'nozio-engineering';
+        UPDATE agents SET project_id = 'bedda-ai'  WHERE project_id IS NULL AND id = 'bedda-ai-engineering';
+        UPDATE agents SET project_id = 'marketing' WHERE project_id IS NULL AND id = 'bedda-marketing-engineering';
+        UPDATE agents SET project_id = 'omnivi'    WHERE project_id IS NULL AND id = 'omnivi-engineering';
+        UPDATE agents SET project_id = 'axon'      WHERE project_id IS NULL AND id = 'axon-engineering';
+        UPDATE agents SET project_id = 'familiar'  WHERE project_id IS NULL AND id IN ('familiar-engineering','heartbeat','infra-agent','cron-doctor');
+        UPDATE agents SET project_id = 'crowdia'   WHERE project_id IS NULL AND id LIKE 'crowdia-%';
+        UPDATE agents SET project_id = 'job-hunt'  WHERE project_id IS NULL AND id IN ('greenhouse','lever','ashby','linkedin');
+        UPDATE agents SET project_id = 'job-hunt'  WHERE project_id IS NULL AND id LIKE 'job-%';
+      `);
+    }
   }
 
-  list(filters?: { enabled?: boolean }): Agent[] {
+  list(filters?: { enabled?: boolean; project_id?: string }): Agent[] {
     let sql = "SELECT * FROM agents WHERE 1=1";
     const params: unknown[] = [];
 
     if (filters?.enabled !== undefined) {
       sql += " AND enabled = ?";
       params.push(filters.enabled ? 1 : 0);
+    }
+    if (filters?.project_id) {
+      sql += " AND project_id = ?";
+      params.push(filters.project_id);
     }
 
     sql += " ORDER BY name ASC";
@@ -81,8 +100,8 @@ export class AgentCrudStore {
   create(input: CreateAgentInput): Agent {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command, worktree_isolation, pre_hook, post_hook)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, description, model, system_prompt, max_turns, working_directory, tools, announce, suppress_pattern, deliver_to, mcp_config, enabled, daily_budget_usd, validation_command, worktree_isolation, pre_hook, post_hook, project_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -103,6 +122,7 @@ export class AgentCrudStore {
         input.worktree_isolation ? 1 : 0,
         input.pre_hook ?? null,
         input.post_hook ?? null,
+        input.project_id ?? null,
       );
     log.info({ id: input.id, name: input.name }, "agent created");
     return this.get(input.id)!;
@@ -182,6 +202,10 @@ export class AgentCrudStore {
     if ("post_hook" in input) {
       fields.push("post_hook = ?");
       values.push(input.post_hook ?? null);
+    }
+    if ("project_id" in input) {
+      fields.push("project_id = ?");
+      values.push(input.project_id ?? null);
     }
 
     if (fields.length === 0) return existing;

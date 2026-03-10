@@ -7,6 +7,7 @@ export interface Schedule {
   timezone: string;
   prompt: string;
   enabled: number; // 0 or 1
+  project_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -19,6 +20,7 @@ export interface CreateScheduleInput {
   timezone?: string;
   prompt: string;
   enabled?: boolean;
+  project_id?: string | null;
 }
 
 export interface UpdateScheduleInput {
@@ -28,4 +30,5 @@ export interface UpdateScheduleInput {
   timezone?: string;
   prompt?: string;
   enabled?: boolean;
+  project_id?: string | null;
 }

@@ -113,7 +113,9 @@ export class ApiRouter {
       // ── Persistent Agents (CRUD) ──
       if (path === "/api/agents") {
         if (this.agentCrudStore) {
-          sendJson(res, 200, { agents: this.agentCrudStore.list() });
+          const params = new URLSearchParams(queryString ?? "");
+          const projectId = params.get("project_id") ?? undefined;
+          sendJson(res, 200, { agents: this.agentCrudStore.list({ project_id: projectId }) });
         } else {
           this.handleListAgents(res);
         }
@@ -142,7 +144,8 @@ export class ApiRouter {
         } else {
           const params = new URLSearchParams(queryString ?? "");
           const agentId = params.get("agent_id") ?? undefined;
-          sendJson(res, 200, { schedules: this.scheduleStore.list({ agent_id: agentId }) });
+          const projectId = params.get("project_id") ?? undefined;
+          sendJson(res, 200, { schedules: this.scheduleStore.list({ agent_id: agentId, project_id: projectId }) });
         }
         return true;
       }
@@ -321,15 +324,15 @@ export class ApiRouter {
         if (!this.db) {
           sendJson(res, 503, { error: "Database not available" });
         } else {
-          const { type, agent_id, schedule_id, task_id, summary, details } = body as any;
+          const { type, agent_id, schedule_id, task_id, summary, details, project_id } = body as any;
           if (!type || !summary) {
             sendJson(res, 400, { error: "Missing required fields: type, summary" });
           } else {
             try {
               const result = this.db
                 .prepare(
-                  `INSERT INTO activity_log (type, agent_id, schedule_id, task_id, summary, details)
-                   VALUES (?, ?, ?, ?, ?, ?)`,
+                  `INSERT INTO activity_log (type, agent_id, schedule_id, task_id, summary, details, project_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 )
                 .run(
                   type,
@@ -338,6 +341,7 @@ export class ApiRouter {
                   task_id ?? null,
                   summary,
                   details ? (typeof details === "string" ? details : JSON.stringify(details)) : null,
+                  project_id ?? null,
                 );
               const entry = this.db
                 .prepare("SELECT * FROM activity_log WHERE id = ?")
@@ -1126,6 +1130,7 @@ export class ApiRouter {
     const limit = Math.min(parseInt(params.get("limit") ?? "50", 10), 200);
     const type = params.get("type") ?? undefined;
     const agentId = params.get("agent_id") ?? undefined;
+    const projectId = params.get("project_id") ?? undefined;
 
     let sql = "SELECT * FROM activity_log WHERE 1=1";
     const sqlParams: unknown[] = [];
@@ -1137,6 +1142,10 @@ export class ApiRouter {
     if (agentId) {
       sql += " AND agent_id = ?";
       sqlParams.push(agentId);
+    }
+    if (projectId) {
+      sql += " AND project_id = ?";
+      sqlParams.push(projectId);
     }
 
     sql += " ORDER BY id DESC LIMIT ?";

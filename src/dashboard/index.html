@@ -1073,6 +1073,9 @@
           <select class="filter-select" id="activityAgentFilter" onchange="renderActivity()">
             <option value="">All agents</option>
           </select>
+          <select class="filter-select" id="activityProjectFilter" onchange="renderActivity()">
+            <option value="">All projects</option>
+          </select>
         </div>
         <div id="activityFeed" class="activity-feed">
           <div class="loading">Loading activity...</div>
@@ -1089,6 +1092,11 @@
             <button class="btn btn-sm btn-success" onclick="openAgentModal()">+ New Agent</button>
           </div>
         </div>
+        <div class="filter-row">
+          <select class="filter-select" id="agentProjectFilter" onchange="renderAgents()">
+            <option value="">All projects</option>
+          </select>
+        </div>
         <div id="agentsGrid" class="card-grid">
           <div class="loading">Loading agents...</div>
         </div>
@@ -1103,6 +1111,11 @@
             <button class="btn btn-sm" onclick="loadSchedules()">Refresh</button>
             <button class="btn btn-sm btn-success" onclick="openScheduleModal()">+ New Schedule</button>
           </div>
+        </div>
+        <div class="filter-row">
+          <select class="filter-select" id="scheduleProjectFilter" onchange="renderSchedules()">
+            <option value="">All projects</option>
+          </select>
         </div>
         <div id="schedulesContainer">
           <div class="loading">Loading schedules...</div>
@@ -1627,6 +1640,7 @@
       let token = localStorage.getItem('familiarToken') || '';
       let ws = null;
       let activeTab = 'activity';
+      let activeProjectFilter = '';
       let activityEntries = [];
       let agents = [];
       let schedules = [];
@@ -1975,11 +1989,13 @@
       function renderActivity(newEntry = null) {
         const typeFilter = document.getElementById('activityTypeFilter').value;
         const agentFilter = document.getElementById('activityAgentFilter').value;
+        const projectFilter = document.getElementById('activityProjectFilter').value;
         const feed = document.getElementById('activityFeed');
 
         const filtered = activityEntries.filter(e => {
           if (typeFilter && e.type !== typeFilter) return false;
           if (agentFilter && e.agent_id !== agentFilter) return false;
+          if (projectFilter && e.project_id !== projectFilter) return false;
           return true;
         });
 
@@ -2020,6 +2036,7 @@
                   ${entry.agent_id ? `<span>agent: <code>${esc(entry.agent_id)}</code></span>` : ''}
                   ${entry.schedule_id ? `<span>schedule: <code>${esc(entry.schedule_id)}</code></span>` : ''}
                   ${entry.task_id ? `<span>task: <code>#${entry.task_id}</code></span>` : ''}
+                  ${entry.project_id ? `<span>project: <code>${esc(entry.project_id)}</code></span>` : ''}
                 </div>
                 ${hasDetails ? `<div class="activity-details" id="${entryId}">${esc(formatDetails(entry.details))}</div>` : ''}
               </div>
@@ -2076,8 +2093,11 @@
 
       function renderAgents() {
         const grid = document.getElementById('agentsGrid');
+        const projectFilter = document.getElementById('agentProjectFilter').value;
 
-        if (agents.length === 0) {
+        const filtered = projectFilter ? agents.filter(a => a.project_id === projectFilter) : agents;
+
+        if (filtered.length === 0) {
           grid.innerHTML = `
             <div class="empty-state" style="grid-column:1/-1">
               <div class="empty-icon">◎</div>
@@ -2089,8 +2109,10 @@
         }
 
         const modelColors = { sonnet: 'badge-blue', haiku: 'badge-green', opus: 'badge-purple' };
+        const projectMap = {};
+        projects.forEach(p => { projectMap[p.id] = p.name || p.id; });
 
-        grid.innerHTML = agents.map(a => {
+        grid.innerHTML = filtered.map(a => {
           const modelBadge = `<span class="badge ${modelColors[a.model] || 'badge-gray'}">${esc(a.model || 'sonnet')}</span>`;
           const enabledBadge = a.enabled
             ? `<span class="badge badge-green">on</span>`
@@ -2101,6 +2123,7 @@
             const budgetLabel = a.daily_budget_usd !== null ? ` / $${a.daily_budget_usd.toFixed(2)}` : '';
             costBadge = `<span class="badge ${overBudget ? 'badge-red' : 'badge-gray'}" title="Cost today${budgetLabel}">$${a._dailyCostUsd.toFixed(3)}${budgetLabel}</span>`;
           }
+          const projectBadge = a.project_id ? `<span class="badge badge-purple" title="Project">${esc(projectMap[a.project_id] || a.project_id)}</span>` : '';
           return `
             <div class="card" onclick="openAgentModal('${esc(a.id)}')">
               <div class="card-title">
@@ -2111,6 +2134,7 @@
               <div class="card-meta">
                 ${modelBadge}
                 ${a._scheduleCount > 0 ? `<span class="badge badge-gray">${a._scheduleCount} schedule${a._scheduleCount !== 1 ? 's' : ''}</span>` : ''}
+                ${projectBadge}
                 ${costBadge}
                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteAgent('${esc(a.id)}', '${esc(a.name)}')">Delete</button>
               </div>
@@ -2276,8 +2300,11 @@
 
       function renderSchedules() {
         const container = document.getElementById('schedulesContainer');
+        const projectFilter = document.getElementById('scheduleProjectFilter').value;
 
-        if (schedules.length === 0) {
+        const filtered = projectFilter ? schedules.filter(s => s.project_id === projectFilter) : schedules;
+
+        if (filtered.length === 0) {
           container.innerHTML = `
             <div class="empty-state">
               <div class="empty-icon">◷</div>
@@ -2288,9 +2315,11 @@
           return;
         }
 
-        // Build agent name lookup
+        // Build agent name and project name lookups
         const agentNames = {};
         agents.forEach(a => { agentNames[a.id] = a.name || a.id; });
+        const projectMap = {};
+        projects.forEach(p => { projectMap[p.id] = p.name || p.id; });
 
         let html = `
           <table class="data-table">
@@ -2298,6 +2327,7 @@
               <tr>
                 <th>Name / ID</th>
                 <th>Agent</th>
+                <th class="hide-mobile">Project</th>
                 <th>Schedule</th>
                 <th class="hide-mobile">Next Run</th>
                 <th class="hide-mobile">Last Run</th>
@@ -2308,10 +2338,13 @@
             </thead>
             <tbody>`;
 
-        for (const s of schedules) {
+        for (const s of filtered) {
           const enabledBadge = s.enabled
             ? `<span class="badge badge-green">on</span>`
             : `<span class="badge badge-gray">off</span>`;
+          const projectBadge = s.project_id
+            ? `<span class="badge badge-purple">${esc(projectMap[s.project_id] || s.project_id)}</span>`
+            : `<span style="color:var(--text-muted)">—</span>`;
 
           html += `
             <tr class="clickable" onclick="openScheduleModal('${esc(s.id)}')">
@@ -2320,6 +2353,7 @@
                 ${s.name ? `<div style="font-size:10px;color:var(--text-muted)">${esc(s.id)}</div>` : ''}
               </td>
               <td>${esc(agentNames[s.agent_id] || s.agent_id)}</td>
+              <td class="hide-mobile">${projectBadge}</td>
               <td><code>${esc(s.schedule)}</code></td>
               <td class="hide-mobile">${formatRelative(s._nextRun)}</td>
               <td class="hide-mobile">${formatRelative(s._lastRun)}</td>
@@ -2891,12 +2925,25 @@
       }
 
       // ── Projects tab ──────────────────────────────────────────────────
+      function populateProjectFilters() {
+        ['agentProjectFilter', 'scheduleProjectFilter', 'activityProjectFilter'].forEach(selId => {
+          const sel = document.getElementById(selId);
+          if (!sel) return;
+          const current = sel.value;
+          sel.innerHTML = '<option value="">All projects</option>' +
+            projects.map(p => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join('');
+          sel.value = current;
+        });
+      }
+
       async function loadProjects() {
         if (!token) return;
         try {
           const data = await api('GET', '/api/projects');
           projects = data.projects || [];
           document.getElementById('projectCount').textContent = projects.length;
+          populateProjectFilters();
+          populateProjectDropdowns();
           renderProjects();
         } catch (e) {
           document.getElementById('projectsGrid').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
@@ -2917,6 +2964,14 @@
           return;
         }
 
+        // Compute entity counts per project
+        const projAgentCount = {};
+        const projTaskCount = {};
+        const projSchedCount = {};
+        agents.forEach(a => { if (a.project_id) projAgentCount[a.project_id] = (projAgentCount[a.project_id] || 0) + 1; });
+        tasks.forEach(t => { if (t.project_id) projTaskCount[t.project_id] = (projTaskCount[t.project_id] || 0) + 1; });
+        schedules.forEach(s => { if (s.project_id) projSchedCount[s.project_id] = (projSchedCount[s.project_id] || 0) + 1; });
+
         grid.innerHTML = projects.map(p => {
           let tags = [];
           try { tags = p.tags ? JSON.parse(p.tags) : []; } catch {}
@@ -2926,12 +2981,21 @@
           const enabledBadge = p.enabled
             ? `<span class="badge badge-green">on</span>`
             : `<span class="badge badge-gray">off</span>`;
+          const ac = projAgentCount[p.id] || 0;
+          const tc = projTaskCount[p.id] || 0;
+          const sc = projSchedCount[p.id] || 0;
+          const countBadges = [
+            ac ? `<span class="badge badge-blue" title="Agents">${ac}a</span>` : '',
+            sc ? `<span class="badge badge-gray" title="Schedules">${sc}s</span>` : '',
+            tc ? `<span class="badge badge-gray" title="Tasks">${tc}t</span>` : '',
+          ].filter(Boolean).join('');
 
           return `
             <div class="card" onclick="openProjectModal('${esc(p.id)}')">
               <div class="card-title">${esc(p.name)} ${enabledBadge}</div>
               ${p.description ? `<div class="card-desc">${esc(p.description)}</div>` : '<div class="card-desc" style="opacity:0.4">No description</div>'}
               <div class="card-meta">
+                ${countBadges}
                 ${p.path ? `<code style="font-size:10px">${esc(p.path)}</code>` : ''}
                 ${tagsHtml}
                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProject('${esc(p.id)}', '${esc(p.name)}')">Delete</button>

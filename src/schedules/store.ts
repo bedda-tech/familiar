@@ -31,9 +31,22 @@ export class ScheduleStore {
         FOREIGN KEY (agent_id) REFERENCES agents(id)
       );
     `);
+
+    const cols = (
+      this.db.prepare("PRAGMA table_info(schedules)").all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    if (!cols.includes("project_id")) {
+      this.db.exec("ALTER TABLE schedules ADD COLUMN project_id TEXT REFERENCES projects(id)");
+      // Backfill: derive project_id from agent_id pattern
+      this.db.exec(`
+        UPDATE schedules SET project_id = (
+          SELECT a.project_id FROM agents a WHERE a.id = schedules.agent_id
+        ) WHERE project_id IS NULL;
+      `);
+    }
   }
 
-  list(filters?: { enabled?: boolean; agent_id?: string }): Schedule[] {
+  list(filters?: { enabled?: boolean; agent_id?: string; project_id?: string }): Schedule[] {
     let sql = "SELECT * FROM schedules WHERE 1=1";
     const params: unknown[] = [];
 
@@ -44,6 +57,10 @@ export class ScheduleStore {
     if (filters?.agent_id) {
       sql += " AND agent_id = ?";
       params.push(filters.agent_id);
+    }
+    if (filters?.project_id) {
+      sql += " AND project_id = ?";
+      params.push(filters.project_id);
     }
 
     sql += " ORDER BY name ASC";
@@ -57,8 +74,8 @@ export class ScheduleStore {
   create(input: CreateScheduleInput): Schedule {
     this.db
       .prepare(
-        `INSERT INTO schedules (id, agent_id, name, schedule, timezone, prompt, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO schedules (id, agent_id, name, schedule, timezone, prompt, enabled, project_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -68,6 +85,7 @@ export class ScheduleStore {
         input.timezone ?? "UTC",
         input.prompt,
         input.enabled !== false ? 1 : 0,
+        input.project_id ?? null,
       );
     log.info({ id: input.id, agent_id: input.agent_id }, "schedule created");
     return this.get(input.id)!;
@@ -103,6 +121,10 @@ export class ScheduleStore {
     if (input.enabled !== undefined) {
       fields.push("enabled = ?");
       values.push(input.enabled ? 1 : 0);
+    }
+    if ("project_id" in input) {
+      fields.push("project_id = ?");
+      values.push(input.project_id ?? null);
     }
 
     if (fields.length === 0) return existing;
