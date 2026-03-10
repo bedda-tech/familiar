@@ -1192,6 +1192,14 @@
           <h2>Tools</h2>
           <span id="toolCount" class="count-badge">0</span>
           <div class="section-actions">
+            <select class="filter-select" id="toolTypeFilter" onchange="renderTools()">
+              <option value="">All types</option>
+              <option value="builtin">Builtin</option>
+              <option value="cli">CLI</option>
+              <option value="mcp">MCP</option>
+              <option value="script">Script</option>
+            </select>
+            <button class="btn btn-sm btn-primary" onclick="openNewToolModal()">+ New Tool</button>
             <button class="btn btn-sm" onclick="loadTools()">Refresh</button>
           </div>
         </div>
@@ -1552,22 +1560,47 @@
         </div>
         <div class="modal-body">
           <input type="hidden" id="toolFormId" />
-          <div class="form-group">
-            <label>Name</label>
-            <input class="form-control" id="toolFormName" readonly />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Name <span id="toolFormNameRequired" class="required">*</span></label>
+              <input class="form-control" id="toolFormName" placeholder="my-tool" />
+            </div>
+            <div class="form-group">
+              <label>Type</label>
+              <select class="form-control" id="toolFormType">
+                <option value="builtin">Builtin</option>
+                <option value="cli">CLI</option>
+                <option value="mcp">MCP</option>
+                <option value="script">Script</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label>Description</label>
             <input class="form-control" id="toolFormDescription" placeholder="What does this tool do?" />
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>CLI Command</label>
+              <input class="form-control" id="toolFormCliCommand" placeholder="e.g. vercel, gh, bird" />
+            </div>
+            <div class="form-group">
+              <label>Version</label>
+              <input class="form-control" id="toolFormVersion" placeholder="e.g. 1.2.3" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Binary Path</label>
+            <input class="form-control" id="toolFormBinaryPath" placeholder="/usr/local/bin/vercel" />
+          </div>
           <div class="form-group">
             <label>Config (JSON)</label>
-            <textarea class="form-control" id="toolFormConfig" rows="5" placeholder='{"command": "...", "args": []}'></textarea>
+            <textarea class="form-control" id="toolFormConfig" rows="4" placeholder='{"command": "...", "args": []}'></textarea>
           </div>
           <div class="form-group">
             <label>Enabled</label>
             <label class="toggle" style="margin-top: 4px;">
-              <input type="checkbox" id="toolFormEnabled" />
+              <input type="checkbox" id="toolFormEnabled" checked />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -1575,6 +1608,50 @@
         <div class="modal-footer">
           <button class="btn" onclick="closeModal('toolModal')">Cancel</button>
           <button class="btn btn-primary" id="toolModalSave" onclick="saveTool()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tool Accounts Modal ── -->
+    <div id="toolAccountsModal" class="modal-overlay">
+      <div class="modal" style="max-width:700px">
+        <div class="modal-header">
+          <h3 id="toolAccountsModalTitle">Accounts</h3>
+          <button class="modal-close" onclick="closeModal('toolAccountsModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="toolAccountsList"></div>
+          <hr style="border-color:var(--border);margin:16px 0" />
+          <h4 style="margin:0 0 12px;font-size:13px;color:var(--text-muted)">Add Account</h4>
+          <input type="hidden" id="accountFormToolId" />
+          <input type="hidden" id="accountFormId" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Account Name <span class="required">*</span></label>
+              <input class="form-control" id="accountFormName" placeholder="e.g. matt-personal" />
+            </div>
+            <div class="form-group">
+              <label>Project</label>
+              <select class="form-control" id="accountFormProject">
+                <option value="">None</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Credentials (JSON) <span class="required">*</span></label>
+            <textarea class="form-control" id="accountFormCredentials" rows="4" placeholder='{"AUTH_TOKEN": "...", "CT0": "..."}'></textarea>
+          </div>
+          <div class="form-group">
+            <label>Default account</label>
+            <label class="toggle" style="margin-top:4px">
+              <input type="checkbox" id="accountFormDefault" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal('toolAccountsModal')">Close</button>
+          <button class="btn btn-primary" id="accountModalSave" onclick="saveAccount()">Add Account</button>
         </div>
       </div>
     </div>
@@ -3108,18 +3185,20 @@
 
       function renderTools() {
         const container = document.getElementById('toolsContainer');
+        const typeFilter = document.getElementById('toolTypeFilter').value;
+        const filtered = typeFilter ? tools.filter(t => t.type === typeFilter) : tools;
 
-        if (tools.length === 0) {
+        if (filtered.length === 0) {
           container.innerHTML = `
             <div class="empty-state">
               <div class="empty-icon">◧</div>
               <div class="empty-title">No tools yet</div>
-              <div class="empty-desc">Tools extend what agents can do. Builtin tools are seeded on first run.</div>
+              <div class="empty-desc">Tools extend what agents can do. Add CLI tools, MCPs, or custom scripts.</div>
             </div>`;
           return;
         }
 
-        const typeColors = { builtin: 'badge-blue', cli: 'badge-orange', mcp: 'badge-purple' };
+        const typeColors = { builtin: 'badge-blue', cli: 'badge-orange', mcp: 'badge-purple', script: 'badge-gray' };
 
         let html = `
           <table class="data-table">
@@ -3127,22 +3206,29 @@
               <tr>
                 <th>Name</th>
                 <th>Type</th>
+                <th>Command / Path</th>
                 <th>Description</th>
+                <th>Accounts</th>
                 <th>Enabled</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>`;
 
-        for (const t of tools) {
+        for (const t of filtered) {
           const typeBadge = `<span class="badge ${typeColors[t.type] || 'badge-gray'}">${esc(t.type)}</span>`;
           const isBuiltin = t.type === 'builtin';
+          const cmdOrPath = t.cli_command || t.binary_path || '—';
 
           html += `
             <tr>
-              <td><strong>${esc(t.name)}</strong></td>
+              <td><strong>${esc(t.name)}</strong>${t.version ? `<br><span style="color:var(--text-muted);font-size:10px">v${esc(t.version)}</span>` : ''}</td>
               <td>${typeBadge}</td>
+              <td style="font-size:11px;font-family:monospace">${esc(cmdOrPath)}</td>
               <td style="color:var(--text-muted);font-size:11px">${esc(t.description || '—')}</td>
+              <td>
+                ${!isBuiltin ? `<button class="btn btn-sm" onclick="openToolAccounts('${esc(t.id)}', '${esc(t.name)}')" style="font-size:10px">Accounts${t.account_count > 0 ? ` (${t.account_count})` : ''}</button>` : '<span style="color:var(--text-muted);font-size:10px">—</span>'}
+              </td>
               <td>
                 <label class="toggle" title="${isBuiltin ? 'Builtin tools cannot be disabled' : ''}">
                   <input type="checkbox" ${t.enabled ? 'checked' : ''} ${isBuiltin ? 'disabled' : ''}
@@ -3151,13 +3237,29 @@
                 </label>
               </td>
               <td>
-                ${!isBuiltin ? `<button class="btn btn-sm" onclick="openToolModal('${esc(t.id)}')">Edit</button>` : '<span style="color:var(--text-muted);font-size:10px">builtin</span>'}
+                ${!isBuiltin ? `<button class="btn btn-sm" onclick="openToolModal('${esc(t.id)}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="deleteTool('${esc(t.id)}')">Del</button>` : '<span style="color:var(--text-muted);font-size:10px">builtin</span>'}
               </td>
             </tr>`;
         }
 
         html += '</tbody></table>';
         container.innerHTML = html;
+      }
+
+      function openNewToolModal() {
+        document.getElementById('toolFormId').value = '';
+        document.getElementById('toolModalTitle').textContent = 'New Tool';
+        document.getElementById('toolFormName').value = '';
+        document.getElementById('toolFormName').readOnly = false;
+        document.getElementById('toolFormType').value = 'cli';
+        document.getElementById('toolFormDescription').value = '';
+        document.getElementById('toolFormCliCommand').value = '';
+        document.getElementById('toolFormVersion').value = '';
+        document.getElementById('toolFormBinaryPath').value = '';
+        document.getElementById('toolFormConfig').value = '';
+        document.getElementById('toolFormEnabled').checked = true;
+        document.getElementById('toolModalSave').textContent = 'Create';
+        document.getElementById('toolModal').classList.add('visible');
       }
 
       function openToolModal(toolId) {
@@ -3167,18 +3269,28 @@
         document.getElementById('toolFormId').value = t.id;
         document.getElementById('toolModalTitle').textContent = `Edit Tool: ${t.name}`;
         document.getElementById('toolFormName').value = t.name;
+        document.getElementById('toolFormName').readOnly = true;
+        document.getElementById('toolFormType').value = t.type || 'cli';
         document.getElementById('toolFormDescription').value = t.description || '';
+        document.getElementById('toolFormCliCommand').value = t.cli_command || '';
+        document.getElementById('toolFormVersion').value = t.version || '';
+        document.getElementById('toolFormBinaryPath').value = t.binary_path || '';
         let configStr = '';
         try { configStr = t.config ? JSON.stringify(JSON.parse(t.config), null, 2) : ''; } catch { configStr = t.config || ''; }
         document.getElementById('toolFormConfig').value = configStr;
         document.getElementById('toolFormEnabled').checked = !!t.enabled;
+        document.getElementById('toolModalSave').textContent = 'Save';
 
         document.getElementById('toolModal').classList.add('visible');
       }
 
       async function saveTool() {
-        const id = document.getElementById('toolFormId').value;
+        const id = document.getElementById('toolFormId').value.trim();
+        const name = document.getElementById('toolFormName').value.trim();
         const configRaw = document.getElementById('toolFormConfig').value.trim();
+        const isNew = !id;
+
+        if (isNew && !name) { toast('Name is required', 'error'); return; }
 
         let config = null;
         if (configRaw) {
@@ -3187,7 +3299,11 @@
         }
 
         const payload = {
+          ...(isNew ? { id: name.toLowerCase().replace(/[^a-z0-9-_]/g, '-'), name, type: document.getElementById('toolFormType').value } : {}),
           description: document.getElementById('toolFormDescription').value.trim() || null,
+          cli_command: document.getElementById('toolFormCliCommand').value.trim() || null,
+          version: document.getElementById('toolFormVersion').value.trim() || null,
+          binary_path: document.getElementById('toolFormBinaryPath').value.trim() || null,
           config,
           enabled: document.getElementById('toolFormEnabled').checked ? 1 : 0,
         };
@@ -3196,14 +3312,30 @@
         btn.disabled = true; btn.textContent = 'Saving...';
 
         try {
-          await api('PUT', `/api/tools/${encodeURIComponent(id)}`, payload);
-          toast('Tool updated', 'success');
+          if (isNew) {
+            await api('POST', '/api/tools', payload);
+            toast('Tool created', 'success');
+          } else {
+            await api('PUT', `/api/tools/${encodeURIComponent(id)}`, payload);
+            toast('Tool updated', 'success');
+          }
           closeModal('toolModal');
           await loadTools();
         } catch (e) {
           toast(`Failed: ${e.message}`, 'error');
         } finally {
-          btn.disabled = false; btn.textContent = 'Save';
+          btn.disabled = false; btn.textContent = isNew ? 'Create' : 'Save';
+        }
+      }
+
+      async function deleteTool(id) {
+        if (!confirm('Delete this tool and all its accounts?')) return;
+        try {
+          await api('DELETE', `/api/tools/${encodeURIComponent(id)}`);
+          toast('Tool deleted', 'success');
+          await loadTools();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
         }
       }
 
@@ -3215,6 +3347,166 @@
         } catch (e) {
           toast(`Failed: ${e.message}`, 'error');
           await loadTools(); // revert
+        }
+      }
+
+      // ── Tool Accounts ──────────────────────────────────────────────────────
+      let currentToolId = null;
+      let currentAccounts = [];
+
+      async function openToolAccounts(toolId, toolName) {
+        currentToolId = toolId;
+        document.getElementById('toolAccountsModalTitle').textContent = `Accounts: ${toolName}`;
+        document.getElementById('accountFormToolId').value = toolId;
+        document.getElementById('accountFormId').value = '';
+        document.getElementById('accountFormName').value = '';
+        document.getElementById('accountFormCredentials').value = '';
+        document.getElementById('accountFormDefault').checked = false;
+        document.getElementById('accountModalSave').textContent = 'Add Account';
+
+        // Populate project select
+        const projSel = document.getElementById('accountFormProject');
+        projSel.innerHTML = '<option value="">None</option>';
+        for (const p of projects) {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          projSel.appendChild(opt);
+        }
+
+        await refreshToolAccounts();
+        document.getElementById('toolAccountsModal').classList.add('visible');
+      }
+
+      async function refreshToolAccounts() {
+        try {
+          const data = await api('GET', `/api/tools/${encodeURIComponent(currentToolId)}/accounts`);
+          currentAccounts = data.accounts || [];
+          renderToolAccounts();
+        } catch (e) {
+          document.getElementById('toolAccountsList').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderToolAccounts() {
+        const el = document.getElementById('toolAccountsList');
+        if (currentAccounts.length === 0) {
+          el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No accounts yet. Add one below.</div>';
+          return;
+        }
+
+        let html = '<div style="display:flex;flex-direction:column;gap:8px">';
+        for (const a of currentAccounts) {
+          let creds = {};
+          try { creds = JSON.parse(a.credentials); } catch {}
+          const credKeys = Object.keys(creds);
+          const credHtml = credKeys.map(k => `
+            <span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg-hover);border-radius:4px;padding:2px 6px;font-size:10px;font-family:monospace">
+              ${esc(k)}: <span id="cred-${esc(a.id)}-${esc(k)}" data-real="${esc(creds[k])}">****</span>
+              <button onclick="toggleReveal('${esc(a.id)}','${esc(k)}')" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:9px;padding:0">reveal</button>
+            </span>`).join(' ');
+
+          html += `
+            <div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <span style="font-weight:600;font-size:13px">${esc(a.account_name)}</span>
+                <div style="display:flex;gap:6px;align-items:center">
+                  ${a.is_default ? '<span class="badge badge-green" style="font-size:9px">default</span>' : ''}
+                  ${!a.enabled ? '<span class="badge badge-gray" style="font-size:9px">disabled</span>' : ''}
+                  <button class="btn btn-sm" onclick="editAccount('${esc(a.id)}')" style="font-size:10px">Edit</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteAccount('${esc(a.id)}')" style="font-size:10px">Del</button>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">${credHtml}</div>
+            </div>`;
+        }
+        html += '</div>';
+        el.innerHTML = html;
+      }
+
+      function toggleReveal(accountId, key) {
+        const el = document.getElementById(`cred-${accountId}-${key}`);
+        if (!el) return;
+        if (el.textContent === '****') {
+          el.textContent = el.dataset.real;
+          el.nextElementSibling.textContent = 'hide';
+        } else {
+          el.textContent = '****';
+          el.nextElementSibling.textContent = 'reveal';
+        }
+      }
+
+      function editAccount(accountId) {
+        const a = currentAccounts.find(x => x.id === accountId);
+        if (!a) return;
+        // We need the real credentials -- fetch with reveal=true
+        api('GET', `/api/tools/${encodeURIComponent(currentToolId)}/accounts/${encodeURIComponent(accountId)}?reveal=true`)
+          .then(data => {
+            const acc = data.account;
+            document.getElementById('accountFormId').value = acc.id;
+            document.getElementById('accountFormName').value = acc.account_name;
+            let credStr = '';
+            try { credStr = JSON.stringify(JSON.parse(acc.credentials), null, 2); } catch { credStr = acc.credentials; }
+            document.getElementById('accountFormCredentials').value = credStr;
+            document.getElementById('accountFormDefault').checked = !!acc.is_default;
+            document.getElementById('accountFormProject').value = acc.project_id || '';
+            document.getElementById('accountModalSave').textContent = 'Update Account';
+          })
+          .catch(e => toast(`Failed to load account: ${e.message}`, 'error'));
+      }
+
+      async function saveAccount() {
+        const toolId = document.getElementById('accountFormToolId').value;
+        const accountId = document.getElementById('accountFormId').value;
+        const accountName = document.getElementById('accountFormName').value.trim();
+        const credRaw = document.getElementById('accountFormCredentials').value.trim();
+        const isDefault = document.getElementById('accountFormDefault').checked;
+        const projectId = document.getElementById('accountFormProject').value || null;
+        const isUpdate = !!accountId;
+
+        if (!accountName) { toast('Account name is required', 'error'); return; }
+        if (!credRaw && !isUpdate) { toast('Credentials are required', 'error'); return; }
+
+        let credentials = null;
+        if (credRaw) {
+          try { credentials = JSON.parse(credRaw); }
+          catch { toast('Credentials must be valid JSON', 'error'); return; }
+        }
+
+        const btn = document.getElementById('accountModalSave');
+        btn.disabled = true;
+
+        try {
+          if (isUpdate) {
+            const payload = { account_name: accountName, is_default: isDefault, project_id: projectId };
+            if (credentials) payload.credentials = credentials;
+            await api('PUT', `/api/tools/${encodeURIComponent(toolId)}/accounts/${encodeURIComponent(accountId)}`, payload);
+            toast('Account updated', 'success');
+          } else {
+            await api('POST', `/api/tools/${encodeURIComponent(toolId)}/accounts`, { account_name: accountName, credentials, is_default: isDefault, project_id: projectId });
+            toast('Account added', 'success');
+          }
+          document.getElementById('accountFormId').value = '';
+          document.getElementById('accountFormName').value = '';
+          document.getElementById('accountFormCredentials').value = '';
+          document.getElementById('accountFormDefault').checked = false;
+          document.getElementById('accountModalSave').textContent = 'Add Account';
+          await refreshToolAccounts();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      async function deleteAccount(accountId) {
+        if (!confirm('Delete this account?')) return;
+        try {
+          await api('DELETE', `/api/tools/${encodeURIComponent(currentToolId)}/accounts/${encodeURIComponent(accountId)}`);
+          toast('Account deleted', 'success');
+          await refreshToolAccounts();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
         }
       }
 

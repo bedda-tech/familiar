@@ -1,7 +1,7 @@
 /**
  * ToolStore -- SQLite-backed CRUD for tool entities.
  *
- * Tools represent capabilities available to agents (builtin, CLI, MCP).
+ * Tools represent capabilities available to agents (builtin, CLI, MCP, script).
  */
 
 import type Database from "better-sqlite3";
@@ -23,11 +23,27 @@ export class ToolStore {
         type TEXT NOT NULL DEFAULT 'builtin',
         description TEXT,
         config TEXT,
+        cli_command TEXT,
+        binary_path TEXT,
+        version TEXT,
         enabled INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Add new columns to existing tables (idempotent via try/catch)
+    for (const col of [
+      "ALTER TABLE tools ADD COLUMN cli_command TEXT",
+      "ALTER TABLE tools ADD COLUMN binary_path TEXT",
+      "ALTER TABLE tools ADD COLUMN version TEXT",
+    ]) {
+      try {
+        this.db.exec(col);
+      } catch {
+        // column already exists
+      }
+    }
   }
 
   list(filters?: { enabled?: boolean; type?: string }): Tool[] {
@@ -54,8 +70,8 @@ export class ToolStore {
   create(input: CreateToolInput): Tool {
     this.db
       .prepare(
-        `INSERT INTO tools (id, name, type, description, config, enabled)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tools (id, name, type, description, config, cli_command, binary_path, version, enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -63,6 +79,9 @@ export class ToolStore {
         input.type,
         input.description ?? null,
         input.config ? JSON.stringify(input.config) : null,
+        input.cli_command ?? null,
+        input.binary_path ?? null,
+        input.version ?? null,
         input.enabled !== false ? 1 : 0,
       );
     log.info({ id: input.id, name: input.name }, "tool created");
@@ -91,6 +110,18 @@ export class ToolStore {
     if (input.config !== undefined) {
       fields.push("config = ?");
       values.push(input.config ? JSON.stringify(input.config) : null);
+    }
+    if (input.cli_command !== undefined) {
+      fields.push("cli_command = ?");
+      values.push(input.cli_command);
+    }
+    if (input.binary_path !== undefined) {
+      fields.push("binary_path = ?");
+      values.push(input.binary_path);
+    }
+    if (input.version !== undefined) {
+      fields.push("version = ?");
+      values.push(input.version);
     }
     if (input.enabled !== undefined) {
       fields.push("enabled = ?");

@@ -34,6 +34,7 @@ import type { TaskStore } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
 import type { ToolStore } from "../tools/store.js";
+import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
 import { getLogger } from "../util/logger.js";
 
@@ -47,6 +48,7 @@ export class ApiRouter {
   private scheduleStore: ScheduleStore | null = null;
   private projectStore: ProjectStore | null = null;
   private toolStore: ToolStore | null = null;
+  private toolAccountStore: ToolAccountStore | null = null;
   private templateStore: TemplateStore | null = null;
   private db: Database.Database | null = null;
   private configPath: string | null = null;
@@ -82,6 +84,10 @@ export class ApiRouter {
 
   setToolStore(store: ToolStore): void {
     this.toolStore = store;
+  }
+
+  setToolAccountStore(store: ToolAccountStore): void {
+    this.toolAccountStore = store;
   }
 
   setTemplateStore(store: TemplateStore): void {
@@ -187,7 +193,12 @@ export class ApiRouter {
         if (!this.toolStore) {
           sendJson(res, 503, { error: "Tool store not available" });
         } else {
-          sendJson(res, 200, { tools: this.toolStore.list() });
+          const toolList = this.toolStore.list();
+          const enriched = toolList.map((t) => ({
+            ...t,
+            account_count: this.toolAccountStore ? this.toolAccountStore.countByTool(t.id) : 0,
+          }));
+          sendJson(res, 200, { tools: enriched });
         }
         return true;
       }
@@ -199,6 +210,39 @@ export class ApiRouter {
           const t = this.toolStore.get(decodeURIComponent(toolMatch[1]));
           if (!t) sendJson(res, 404, { error: "Tool not found" });
           else sendJson(res, 200, { tool: t });
+        }
+        return true;
+      }
+
+      // ── Tool Accounts ──
+      const toolAccountsMatch = path.match(/^\/api\/tools\/([^/]+)\/accounts$/);
+      if (toolAccountsMatch) {
+        if (!this.toolAccountStore) {
+          sendJson(res, 503, { error: "Tool account store not available" });
+        } else {
+          const toolId = decodeURIComponent(toolAccountsMatch[1]);
+          const params = new URLSearchParams(queryString ?? "");
+          const reveal = params.get("reveal") === "1";
+          const accounts = reveal
+            ? this.toolAccountStore.list(toolId)
+            : this.toolAccountStore.listMasked(toolId);
+          sendJson(res, 200, { accounts });
+        }
+        return true;
+      }
+      const singleAccountMatch = path.match(/^\/api\/tools\/([^/]+)\/accounts\/([^/]+)$/);
+      if (singleAccountMatch) {
+        if (!this.toolAccountStore) {
+          sendJson(res, 503, { error: "Tool account store not available" });
+        } else {
+          const params = new URLSearchParams(queryString ?? "");
+          const reveal = params.get("reveal") === "1";
+          const accountId = decodeURIComponent(singleAccountMatch[2]);
+          const a = reveal
+            ? this.toolAccountStore.get(accountId)
+            : this.toolAccountStore.getMasked(accountId);
+          if (!a) sendJson(res, 404, { error: "Tool account not found" });
+          else sendJson(res, 200, { account: a });
         }
         return true;
       }
@@ -442,6 +486,28 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Tool Account create ──
+      const toolAccountCreateMatch = path.match(/^\/api\/tools\/([^/]+)\/accounts$/);
+      if (toolAccountCreateMatch && body) {
+        if (!this.toolAccountStore) {
+          sendJson(res, 503, { error: "Tool account store not available" });
+        } else {
+          const toolId = decodeURIComponent(toolAccountCreateMatch[1]);
+          const { account_name, credentials } = body as any;
+          if (!account_name || !credentials) {
+            sendJson(res, 400, { error: "Missing required fields: account_name, credentials" });
+          } else {
+            try {
+              const a = this.toolAccountStore.create({ ...body as any, tool_id: toolId });
+              sendJson(res, 201, { account: { ...a, credentials: maskObj(a.credentials) } });
+            } catch (e: any) {
+              sendJson(res, 409, { error: e.message ?? "Failed to create tool account" });
+            }
+          }
+        }
+        return true;
+      }
+
       // ── Template create ──
       if (path === "/api/templates" && body) {
         if (!this.templateStore) {
@@ -545,6 +611,20 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Tool Account update ──
+      const toolAccountUpdateMatch = path.match(/^\/api\/tools\/([^/]+)\/accounts\/([^/]+)$/);
+      if (toolAccountUpdateMatch && body) {
+        if (!this.toolAccountStore) {
+          sendJson(res, 503, { error: "Tool account store not available" });
+        } else {
+          const accountId = decodeURIComponent(toolAccountUpdateMatch[2]);
+          const a = this.toolAccountStore.update(accountId, body as any);
+          if (!a) sendJson(res, 404, { error: "Tool account not found" });
+          else sendJson(res, 200, { account: { ...a, credentials: maskObj(a.credentials) } });
+        }
+        return true;
+      }
+
       // ── Template update ──
       const templateUpdateMatch = path.match(/^\/api\/templates\/(\d+)$/);
       if (templateUpdateMatch && body) {
@@ -636,6 +716,22 @@ export class ApiRouter {
         } else {
           if (!this.toolStore.delete(decodeURIComponent(toolDeleteMatch[1]))) {
             sendJson(res, 404, { error: "Tool not found" });
+          } else {
+            sendJson(res, 200, { status: "deleted" });
+          }
+        }
+        return true;
+      }
+
+      // ── Tool Account delete ──
+      const toolAccountDeleteMatch = path.match(/^\/api\/tools\/([^/]+)\/accounts\/([^/]+)$/);
+      if (toolAccountDeleteMatch) {
+        if (!this.toolAccountStore) {
+          sendJson(res, 503, { error: "Tool account store not available" });
+        } else {
+          const accountId = decodeURIComponent(toolAccountDeleteMatch[2]);
+          if (!this.toolAccountStore.delete(accountId)) {
+            sendJson(res, 404, { error: "Tool account not found" });
           } else {
             sendJson(res, 200, { status: "deleted" });
           }
@@ -1511,6 +1607,20 @@ export class ApiRouter {
 }
 
 /** Mask a token/key, showing only the last 4 characters. */
+/** Replace all values in a JSON credentials blob with "****". */
+function maskObj(credentialsJson: string): string {
+  try {
+    const obj = JSON.parse(credentialsJson) as Record<string, unknown>;
+    const masked: Record<string, string> = {};
+    for (const key of Object.keys(obj)) {
+      masked[key] = "****";
+    }
+    return JSON.stringify(masked);
+  } catch {
+    return "****";
+  }
+}
+
 function maskToken(token: string): string {
   if (token.length <= 4) return "****";
   return "****" + token.slice(-4);
