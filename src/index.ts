@@ -501,6 +501,11 @@ async function cmdStart(configPath?: string): Promise<void> {
     webhooks.setAgentCrudStore(agentCrudStore);
     webhooks.setScheduleStore(scheduleStore);
     webhooks.setProjectStore(projectStore);
+
+    // Wire up repo manager for project repo operations
+    const { RepoManager } = await import("./projects/repo-manager.js");
+    const repoManager = new RepoManager(config.claude.workingDirectory);
+    webhooks.setRepoManager(repoManager);
     webhooks.setToolStore(toolStore);
     webhooks.setToolAccountStore(toolAccountStore);
     webhooks.setTemplateStore(new TemplateStore(db));
@@ -910,9 +915,17 @@ switch (command) {
       const { TemplateStore } = await import("./templates/store.js");
       const templateStore = new TemplateStore(db);
 
+      const cloneRepos = args.includes("--clone-repos");
+      let repoManager: import("./projects/repo-manager.js").RepoManager | undefined;
+      if (cloneRepos) {
+        const { RepoManager } = await import("./projects/repo-manager.js");
+        repoManager = new RepoManager(personaPath);
+      }
+
       const { importFromPersona } = await import("./sync/import.js");
-      const result = importFromPersona({
+      const result = await importFromPersona({
         personaPath, db, agentStore, scheduleStore, toolStore, projectStore, templateStore,
+        repoManager, cloneRepos,
       });
       console.log(`Synced from ${personaPath}:`);
       console.log(`  Agents:    ${result.agents.total} (${result.agents.created} new, ${result.agents.updated} updated)`);

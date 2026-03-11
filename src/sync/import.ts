@@ -7,9 +7,13 @@
  *
  * Handles: agents, schedules, tools, projects, templates.
  * Preserves runtime state (cron_runs, cron_state, activity_log are NOT touched).
+ *
+ * Projects can be in two formats:
+ *   1. Per-project folders: projects/{id}/project.yaml (preferred)
+ *   2. Flat file: projects/projects.yaml (legacy fallback)
  */
 
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 import { parse } from "yaml";
 import type Database from "better-sqlite3";
@@ -18,6 +22,7 @@ import type { ScheduleStore } from "../schedules/store.js";
 import type { ToolStore } from "../tools/store.js";
 import type { ProjectStore } from "../projects/store.js";
 import type { TemplateStore } from "../templates/store.js";
+import type { RepoManager } from "../projects/repo-manager.js";
 import type {
   AgentWithScheduleYaml,
   ScheduleYaml,
@@ -35,6 +40,8 @@ export interface ImportOptions {
   toolStore: ToolStore;
   projectStore: ProjectStore;
   templateStore: TemplateStore;
+  repoManager?: RepoManager;
+  cloneRepos?: boolean;
 }
 
 /** Read all YAML files from a directory (non-recursive). */
@@ -59,8 +66,32 @@ function readYamlDir<T>(dirPath: string): T[] {
   return results;
 }
 
+/** Scan projects/ for subdirectories containing project.yaml (per-project folder format). */
+function readProjectFolders(projectsDir: string): ProjectYaml[] {
+  if (!existsSync(projectsDir)) return [];
+
+  const results: ProjectYaml[] = [];
+  const entries = readdirSync(projectsDir);
+
+  for (const entry of entries) {
+    const entryPath = join(projectsDir, entry);
+    if (!statSync(entryPath).isDirectory()) continue;
+
+    const projectYamlPath = join(entryPath, "project.yaml");
+    if (!existsSync(projectYamlPath)) continue;
+
+    const content = readFileSync(projectYamlPath, "utf-8");
+    const parsed = parse(content);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      results.push(parsed as ProjectYaml);
+    }
+  }
+
+  return results;
+}
+
 /** Import persona repo YAML files into the DB. */
-export function importFromPersona(opts: ImportOptions): SyncResult {
+export async function importFromPersona(opts: ImportOptions): Promise<SyncResult> {
   const { personaPath, agentStore, scheduleStore, toolStore, projectStore, templateStore } = opts;
 
   const result: SyncResult = {
@@ -72,7 +103,14 @@ export function importFromPersona(opts: ImportOptions): SyncResult {
   };
 
   // Import projects first (agents may reference them)
-  const projects = readYamlDir<ProjectYaml>(join(personaPath, "projects"));
+  // Try per-project folders first, fall back to flat file
+  const projectsDir = join(personaPath, "projects");
+  let projects = readProjectFolders(projectsDir);
+  if (projects.length === 0) {
+    // Fallback: read flat projects.yaml
+    projects = readYamlDir<ProjectYaml>(projectsDir);
+  }
+
   for (const p of projects) {
     const existing = projectStore.get(p.id);
     if (existing) {
@@ -83,6 +121,11 @@ export function importFromPersona(opts: ImportOptions): SyncResult {
         context_file: p.context_file,
         tags: p.tags,
         enabled: p.enabled,
+        status: p.status,
+        priority: p.priority,
+        repos: p.repos,
+        issue_tracking: p.issue_tracking,
+        env_refs: p.env_refs,
       });
       result.projects.updated++;
     } else {
@@ -94,10 +137,29 @@ export function importFromPersona(opts: ImportOptions): SyncResult {
         context_file: p.context_file,
         tags: p.tags,
         enabled: p.enabled,
+        status: p.status,
+        priority: p.priority,
+        repos: p.repos,
+        issue_tracking: p.issue_tracking,
+        env_refs: p.env_refs,
       });
       result.projects.created++;
     }
     result.projects.total++;
+  }
+
+  // Clone repos if requested
+  if (opts.cloneRepos && opts.repoManager) {
+    for (const p of projects) {
+      if (p.repos && p.repos.length > 0) {
+        const cloneResults = await opts.repoManager.ensureRepos(p.id, p.repos);
+        const succeeded = cloneResults.filter((r) => r.success).length;
+        const failed = cloneResults.filter((r) => !r.success).length;
+        if (failed > 0) {
+          console.warn(`  Project ${p.id}: cloned ${succeeded}/${cloneResults.length} repos (${failed} failed)`);
+        }
+      }
+    }
   }
 
   // Import agents (with inline schedules)

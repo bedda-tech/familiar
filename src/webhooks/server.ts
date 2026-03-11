@@ -42,6 +42,7 @@ import type { AgentCrudStore } from "../agents/agent-store.js";
 import type { TaskStore } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
+import type { RepoManager } from "../projects/repo-manager.js";
 import type { ToolStore } from "../tools/store.js";
 import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
@@ -105,6 +106,11 @@ export class WebhookServer {
   /** Attach the project store. */
   setProjectStore(store: ProjectStore): void {
     this.apiRouter.setProjectStore(store);
+  }
+
+  /** Attach the repo manager for project repo operations. */
+  setRepoManager(manager: RepoManager): void {
+    this.apiRouter.setRepoManager(manager);
   }
 
   /** Attach the tool store. */

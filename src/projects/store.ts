@@ -29,9 +29,36 @@ export class ProjectStore {
         updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Additive migrations -- add columns if missing
+    const cols = this.db
+      .prepare("PRAGMA table_info(projects)")
+      .all() as Array<{ name: string }>;
+    const colNames = new Set(cols.map((c) => c.name));
+
+    if (!colNames.has("status")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN status TEXT DEFAULT 'active'");
+      log.info("migrated: added status column to projects");
+    }
+    if (!colNames.has("priority")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN priority INTEGER DEFAULT 5");
+      log.info("migrated: added priority column to projects");
+    }
+    if (!colNames.has("repos")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN repos TEXT");
+      log.info("migrated: added repos column to projects");
+    }
+    if (!colNames.has("issue_tracking")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN issue_tracking TEXT");
+      log.info("migrated: added issue_tracking column to projects");
+    }
+    if (!colNames.has("env_refs")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN env_refs TEXT");
+      log.info("migrated: added env_refs column to projects");
+    }
   }
 
-  list(filters?: { enabled?: boolean }): Project[] {
+  list(filters?: { enabled?: boolean; status?: string }): Project[] {
     let sql = "SELECT * FROM projects WHERE 1=1";
     const params: unknown[] = [];
 
@@ -39,8 +66,12 @@ export class ProjectStore {
       sql += " AND enabled = ?";
       params.push(filters.enabled ? 1 : 0);
     }
+    if (filters?.status !== undefined) {
+      sql += " AND status = ?";
+      params.push(filters.status);
+    }
 
-    sql += " ORDER BY name ASC";
+    sql += " ORDER BY priority ASC, name ASC";
     return this.db.prepare(sql).all(...params) as Project[];
   }
 
@@ -51,8 +82,8 @@ export class ProjectStore {
   create(input: CreateProjectInput): Project {
     this.db
       .prepare(
-        `INSERT INTO projects (id, name, description, path, context_file, tags, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO projects (id, name, description, path, context_file, tags, enabled, status, priority, repos, issue_tracking, env_refs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -62,6 +93,11 @@ export class ProjectStore {
         input.context_file ?? null,
         input.tags ? JSON.stringify(input.tags) : null,
         input.enabled !== false ? 1 : 0,
+        input.status ?? "active",
+        input.priority ?? 5,
+        input.repos ? JSON.stringify(input.repos) : null,
+        input.issue_tracking ? JSON.stringify(input.issue_tracking) : null,
+        input.env_refs ? JSON.stringify(input.env_refs) : null,
       );
     log.info({ id: input.id, name: input.name }, "project created");
     return this.get(input.id)!;
@@ -97,6 +133,26 @@ export class ProjectStore {
     if (input.enabled !== undefined) {
       fields.push("enabled = ?");
       values.push(input.enabled ? 1 : 0);
+    }
+    if (input.status !== undefined) {
+      fields.push("status = ?");
+      values.push(input.status);
+    }
+    if (input.priority !== undefined) {
+      fields.push("priority = ?");
+      values.push(input.priority);
+    }
+    if (input.repos !== undefined) {
+      fields.push("repos = ?");
+      values.push(JSON.stringify(input.repos));
+    }
+    if (input.issue_tracking !== undefined) {
+      fields.push("issue_tracking = ?");
+      values.push(input.issue_tracking ? JSON.stringify(input.issue_tracking) : null);
+    }
+    if (input.env_refs !== undefined) {
+      fields.push("env_refs = ?");
+      values.push(input.env_refs ? JSON.stringify(input.env_refs) : null);
     }
 
     if (fields.length === 0) return existing;

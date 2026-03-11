@@ -34,6 +34,7 @@ import type { AgentCrudStore } from "../agents/agent-store.js";
 import type { TaskStore } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
+import type { RepoManager } from "../projects/repo-manager.js";
 import type { ToolStore } from "../tools/store.js";
 import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
@@ -55,6 +56,7 @@ export class ApiRouter {
   private configPath: string | null = null;
   private onConfigChange: (() => Promise<void>) | null = null;
   private memoryStore: import("../memory/store.js").MemoryStore | null = null;
+  private repoManager: RepoManager | null = null;
 
   setCronScheduler(scheduler: CronScheduler): void {
     this.cronScheduler = scheduler;
@@ -82,6 +84,10 @@ export class ApiRouter {
 
   setProjectStore(store: ProjectStore): void {
     this.projectStore = store;
+  }
+
+  setRepoManager(manager: RepoManager): void {
+    this.repoManager = manager;
   }
 
   setToolStore(store: ToolStore): void {
@@ -190,6 +196,32 @@ export class ApiRouter {
           const p = this.projectStore.get(decodeURIComponent(projectMatch[1]));
           if (!p) sendJson(res, 404, { error: "Project not found" });
           else sendJson(res, 200, { project: p });
+        }
+        return true;
+      }
+
+      // ── Project Repos ──
+      const repoListMatch = path.match(/^\/api\/projects\/([^/]+)\/repos$/);
+      if (repoListMatch) {
+        if (!this.repoManager) {
+          sendJson(res, 503, { error: "Repo manager not available" });
+        } else {
+          const projectId = decodeURIComponent(repoListMatch[1]);
+          const repos = this.repoManager.listRepos(projectId);
+          sendJson(res, 200, { repos });
+        }
+        return true;
+      }
+      const repoStatusMatch = path.match(/^\/api\/projects\/([^/]+)\/repos\/([^/]+)\/status$/);
+      if (repoStatusMatch) {
+        if (!this.repoManager) {
+          sendJson(res, 503, { error: "Repo manager not available" });
+        } else {
+          const projectId = decodeURIComponent(repoStatusMatch[1]);
+          const repoName = decodeURIComponent(repoStatusMatch[2]);
+          const status = this.repoManager.getRepoStatus(projectId, repoName);
+          if (!status) sendJson(res, 404, { error: "Repo not found" });
+          else sendJson(res, 200, { status });
         }
         return true;
       }
@@ -502,6 +534,44 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Project Repo POST endpoints ──
+      const repoCloneMatch = path.match(/^\/api\/projects\/([^/]+)\/repos$/);
+      if (repoCloneMatch && body) {
+        if (!this.repoManager) {
+          sendJson(res, 503, { error: "Repo manager not available" });
+        } else {
+          const projectId = decodeURIComponent(repoCloneMatch[1]);
+          const { url } = body as any;
+          if (!url) {
+            sendJson(res, 400, { error: "Missing required field: url" });
+          } else {
+            try {
+              const result = await this.repoManager.cloneRepo(projectId, body as any);
+              if (result.success) {
+                sendJson(res, 201, { result });
+              } else {
+                sendJson(res, 500, { error: result.error, result });
+              }
+            } catch (e: any) {
+              sendJson(res, 500, { error: e.message ?? "Clone failed" });
+            }
+          }
+        }
+        return true;
+      }
+      const repoPullMatch = path.match(/^\/api\/projects\/([^/]+)\/repos\/([^/]+)\/pull$/);
+      if (repoPullMatch) {
+        if (!this.repoManager) {
+          sendJson(res, 503, { error: "Repo manager not available" });
+        } else {
+          const projectId = decodeURIComponent(repoPullMatch[1]);
+          const repoName = decodeURIComponent(repoPullMatch[2]);
+          const result = this.repoManager.pullRepo(projectId, repoName);
+          sendJson(res, result.success ? 200 : 500, { result });
+        }
+        return true;
+      }
+
       // ── Tool CRUD ──
       if (path === "/api/tools" && body) {
         if (!this.toolStore) {
@@ -742,6 +812,23 @@ export class ApiRouter {
         } else {
           if (!this.projectStore.delete(decodeURIComponent(projectDeleteMatch[1]))) {
             sendJson(res, 404, { error: "Project not found" });
+          } else {
+            sendJson(res, 200, { status: "deleted" });
+          }
+        }
+        return true;
+      }
+
+      // ── Project repo delete ──
+      const repoDeleteMatch = path.match(/^\/api\/projects\/([^/]+)\/repos\/([^/]+)$/);
+      if (repoDeleteMatch) {
+        if (!this.repoManager) {
+          sendJson(res, 503, { error: "Repo manager not available" });
+        } else {
+          const projectId = decodeURIComponent(repoDeleteMatch[1]);
+          const repoName = decodeURIComponent(repoDeleteMatch[2]);
+          if (!this.repoManager.removeRepo(projectId, repoName)) {
+            sendJson(res, 404, { error: "Repo not found" });
           } else {
             sendJson(res, 200, { status: "deleted" });
           }

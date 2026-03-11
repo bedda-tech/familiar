@@ -5,6 +5,8 @@
  * (agents/, schedules/, tools/, projects/, templates/).
  */
 
+import type { RepoConfig, IssueTrackingConfig } from "../projects/types.js";
+
 /** Agent YAML config -- one file per agent in agents/ */
 export interface AgentYaml {
   id: string;
@@ -93,6 +95,12 @@ export interface ProjectYaml {
   context_file?: string;
   tags?: string[];
   enabled?: boolean;
+  status?: string;
+  priority?: number;
+  repos?: RepoConfig[];
+  agents?: string[]; // informational: agent IDs assigned to this project
+  issue_tracking?: IssueTrackingConfig;
+  env_refs?: Record<string, string>;
 }
 
 /** Template YAML config */

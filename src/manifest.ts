@@ -12,7 +12,7 @@ import type { FamiliarConfig } from "./config.js";
 import type { Agent } from "./agents/types.js";
 import type { Schedule } from "./schedules/types.js";
 import type { Tool } from "./tools/types.js";
-import type { Project } from "./projects/types.js";
+import type { Project, RepoConfig } from "./projects/types.js";
 
 export interface ManifestOptions {
   personaPath: string;
@@ -96,17 +96,36 @@ export function generateManifest(opts: ManifestOptions): void {
     lines.push("");
   }
 
-  // Projects
-  const projects = safeQuery<Project>(db, "SELECT * FROM projects ORDER BY name ASC");
+  // Projects (enhanced with status, priority, repo count, issue tracking)
+  const projects = safeQuery<Project>(db, "SELECT * FROM projects ORDER BY priority ASC, name ASC");
   if (projects.length > 0) {
     lines.push("## Projects");
     lines.push("");
-    lines.push("| ID | Name | Path | Enabled |");
-    lines.push("|---|---|---|---|");
+    lines.push("| ID | Name | Status | Priority | Repos | Issues | Enabled |");
+    lines.push("|---|---|---|---|---|---|---|");
     for (const p of projects) {
-      const path = p.path ?? "--";
+      const status = p.status ?? "active";
+      const priority = p.priority ?? 5;
+      let repoCount = 0;
+      if (p.repos) {
+        try {
+          const repos = JSON.parse(p.repos) as RepoConfig[];
+          repoCount = repos.length;
+        } catch {
+          // skip
+        }
+      }
+      let issueType = "--";
+      if (p.issue_tracking) {
+        try {
+          const it = JSON.parse(p.issue_tracking);
+          issueType = it.type ?? "--";
+        } catch {
+          // skip
+        }
+      }
       const enabled = p.enabled ? "yes" : "no";
-      lines.push(`| ${p.id} | ${p.name} | ${path} | ${enabled} |`);
+      lines.push(`| ${p.id} | ${p.name} | ${status} | ${priority} | ${repoCount} | ${issueType} | ${enabled} |`);
     }
     lines.push("");
   }
@@ -120,25 +139,29 @@ export function generateManifest(opts: ManifestOptions): void {
   lines.push("- **Spawn Queue**: File-based queue at ~/.familiar/spawn-queue/ for sub-agent requests");
   lines.push("- **Agent Workspace**: Persistent state/output/memory dirs per agent at ~/.familiar/agents/");
   lines.push("- **Memory Store**: Semantic search via OpenAI embeddings (index with `familiar index-memory`)");
+  lines.push("- **Projects**: Per-project folders at projects/{id}/ with CLAUDE.md, project.yaml, docs/, repos/");
   lines.push("");
 
   // API endpoints
   lines.push("## API Endpoints");
   lines.push("");
   lines.push("```");
-  lines.push("GET  /health                  Health check");
-  lines.push("GET  /api/agents/crud         List persistent agents");
-  lines.push("GET  /api/schedules           List schedules");
-  lines.push("GET  /api/tools               List tools");
-  lines.push("GET  /api/projects            List projects");
-  lines.push("GET  /api/tasks               List tasks");
-  lines.push("GET  /api/tasks/next?agent=ID Get next task for agent");
-  lines.push("GET  /api/cron/jobs           List cron jobs with state");
-  lines.push("GET  /api/runs                Fleet-wide run history");
-  lines.push("GET  /api/cost/summary        Per-agent cost totals");
-  lines.push("GET  /api/memory/search?q=    Semantic memory search");
-  lines.push("POST /hooks/wake              Inject message into session");
-  lines.push("POST /hooks/agent             Run isolated agent turn");
+  lines.push("GET  /health                          Health check");
+  lines.push("GET  /api/agents/crud                 List persistent agents");
+  lines.push("GET  /api/schedules                   List schedules");
+  lines.push("GET  /api/tools                       List tools");
+  lines.push("GET  /api/projects                    List projects");
+  lines.push("GET  /api/projects/:id/repos          List project repos");
+  lines.push("POST /api/projects/:id/repos          Clone a repo");
+  lines.push("POST /api/projects/:id/repos/:name/pull  Git pull in repo");
+  lines.push("GET  /api/tasks                       List tasks");
+  lines.push("GET  /api/tasks/next?agent=ID         Get next task for agent");
+  lines.push("GET  /api/cron/jobs                   List cron jobs with state");
+  lines.push("GET  /api/runs                        Fleet-wide run history");
+  lines.push("GET  /api/cost/summary                Per-agent cost totals");
+  lines.push("GET  /api/memory/search?q=            Semantic memory search");
+  lines.push("POST /hooks/wake                      Inject message into session");
+  lines.push("POST /hooks/agent                     Run isolated agent turn");
   lines.push("```");
   lines.push("");
 

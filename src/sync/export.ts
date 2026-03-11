@@ -6,18 +6,22 @@
  *
  * Reads agents, schedules, tools, projects, templates from the DB
  * and writes them as YAML files into the persona repo directories.
+ *
+ * Projects are written as per-project folders under projects/{id}/project.yaml
+ * with auto-generated CLAUDE.md files.
  */
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join, basename } from "node:path";
 import { stringify } from "yaml";
 import type Database from "better-sqlite3";
 import type { Agent } from "../agents/types.js";
 import type { Schedule } from "../schedules/types.js";
 import type { Tool, ToolAccount } from "../tools/types.js";
-import type { Project } from "../projects/types.js";
+import type { Project, RepoConfig, IssueTrackingConfig } from "../projects/types.js";
 import type { Template } from "../templates/types.js";
 import type { AgentWithScheduleYaml, ToolYaml, ProjectYaml, TemplateYaml } from "./types.js";
+import { RepoManager } from "../projects/repo-manager.js";
 
 export interface ExportOptions {
   personaPath: string;
@@ -38,9 +42,10 @@ export function exportToPersona(opts: ExportOptions): ExportResult {
   const result: ExportResult = { agents: 0, schedules: 0, tools: 0, projects: 0, templates: 0 };
 
   // Ensure directories exist
-  for (const dir of ["agents", "tools", "schedules", "projects", "templates"]) {
+  for (const dir of ["agents", "tools", "schedules", "templates"]) {
     mkdirSync(join(personaPath, dir), { recursive: true });
   }
+  // projects/ dir is created per-project below
 
   // Export agents (with inline schedules)
   const agents = db.prepare("SELECT * FROM agents ORDER BY id").all() as Agent[];
@@ -52,6 +57,16 @@ export function exportToPersona(opts: ExportOptions): ExportResult {
     const list = schedulesByAgent.get(s.agent_id) ?? [];
     list.push(s);
     schedulesByAgent.set(s.agent_id, list);
+  }
+
+  // Group agents by project_id for project CLAUDE.md generation
+  const agentsByProject = new Map<string, string[]>();
+  for (const agent of agents) {
+    if (agent.project_id) {
+      const list = agentsByProject.get(agent.project_id) ?? [];
+      list.push(agent.id);
+      agentsByProject.set(agent.project_id, list);
+    }
   }
 
   for (const agent of agents) {
@@ -106,12 +121,42 @@ export function exportToPersona(opts: ExportOptions): ExportResult {
     result.tools += typeTools.length;
   }
 
-  // Export projects
+  // Export projects as per-project folders
   const projects = db.prepare("SELECT * FROM projects ORDER BY id").all() as Project[];
+  const repoManager = new RepoManager(personaPath);
+
+  for (const p of projects) {
+    const projectDir = join(personaPath, "projects", p.id);
+    mkdirSync(join(projectDir, "docs"), { recursive: true });
+
+    const projectAgents = agentsByProject.get(p.id) ?? [];
+    const yaml = projectToYaml(p, projectAgents);
+    writeFileSync(join(projectDir, "project.yaml"), stringify(yaml, { lineWidth: 120 }));
+
+    // Generate CLAUDE.md for the project
+    let repos: RepoConfig[] | undefined;
+    if (p.repos) {
+      try {
+        repos = JSON.parse(p.repos);
+      } catch {
+        // skip
+      }
+    }
+    repoManager.generateProjectClaudeMd(p.id, {
+      name: p.name,
+      description: p.description ?? undefined,
+      repos,
+      agents: projectAgents,
+    });
+
+    result.projects++;
+  }
+
+  // Backward compat: also write flat projects.yaml
   if (projects.length > 0) {
-    const yamls = projects.map(projectToYaml);
-    writeFileSync(join(personaPath, "projects", "projects.yaml"), stringify(yamls, { lineWidth: 120 }));
-    result.projects = projects.length;
+    mkdirSync(join(personaPath, "projects"), { recursive: true });
+    const flatYamls = projects.map((p) => projectToYaml(p, agentsByProject.get(p.id) ?? []));
+    writeFileSync(join(personaPath, "projects", "projects.yaml"), stringify(flatYamls, { lineWidth: 120 }));
   }
 
   // Export templates
@@ -244,8 +289,8 @@ function toolToYaml(tool: Tool, accounts: ToolAccount[]): ToolYaml {
   return yaml;
 }
 
-/** Convert a Project to YAML. */
-function projectToYaml(p: Project): ProjectYaml {
+/** Convert a Project to YAML (per-project folder format). */
+function projectToYaml(p: Project, agentIds: string[]): ProjectYaml {
   const yaml: ProjectYaml = {
     id: p.id,
     name: p.name,
@@ -262,6 +307,30 @@ function projectToYaml(p: Project): ProjectYaml {
     }
   }
   if (p.enabled === 0) yaml.enabled = false;
+  if (p.status && p.status !== "active") yaml.status = p.status;
+  if (p.priority != null && p.priority !== 5) yaml.priority = p.priority;
+  if (p.repos) {
+    try {
+      yaml.repos = JSON.parse(p.repos);
+    } catch {
+      // skip
+    }
+  }
+  if (agentIds.length > 0) yaml.agents = agentIds;
+  if (p.issue_tracking) {
+    try {
+      yaml.issue_tracking = JSON.parse(p.issue_tracking);
+    } catch {
+      // skip
+    }
+  }
+  if (p.env_refs) {
+    try {
+      yaml.env_refs = JSON.parse(p.env_refs);
+    } catch {
+      // skip
+    }
+  }
 
   return yaml;
 }
