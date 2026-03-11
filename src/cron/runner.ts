@@ -352,14 +352,18 @@ export async function runCronJob(
     }
   }
 
-  if (defaultConfig.allowedTools && defaultConfig.allowedTools.length > 0) {
-    args.push("--allowedTools", defaultConfig.allowedTools.join(","));
+  // Per-agent tool override takes priority over default config
+  const effectiveTools = job.allowedTools ?? defaultConfig.allowedTools;
+  if (effectiveTools && effectiveTools.length > 0) {
+    args.push("--allowedTools", effectiveTools.join(","));
   }
 
   args.push("--max-turns", String(maxTurns));
 
-  if (defaultConfig.mcpConfig) {
-    args.push("--mcp-config", defaultConfig.mcpConfig);
+  // Per-agent MCP config override takes priority over default config
+  const effectiveMcpConfig = job.mcpConfig ?? defaultConfig.mcpConfig;
+  if (effectiveMcpConfig) {
+    args.push("--mcp-config", effectiveMcpConfig);
   }
 
   // Only spawn with --chrome when the job needs browser access (default: true)

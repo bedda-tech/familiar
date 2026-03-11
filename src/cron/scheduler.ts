@@ -20,6 +20,17 @@ const log = getLogger("cron-scheduler");
 /** Agents that skip task-awareness injection (infrastructure agents). */
 const SKIP_TASK_PREFIX_AGENTS = new Set(["heartbeat", "cron-doctor", "pipeline-monitor"]);
 
+/** Parse a JSON string array column, returning undefined if null/invalid. */
+function parseJsonArray(value: string | null): string[] | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface CronDeliveryHandler {
   (jobId: string, result: CronRunResult, config: CronJobConfig, runId?: number): Promise<void>;
 }
@@ -329,7 +340,8 @@ export class CronScheduler {
                   a.name as agent_name, a.model, a.system_prompt, a.max_turns,
                   a.working_directory, a.tools as agent_tools, a.announce,
                   a.suppress_pattern, a.deliver_to, a.mcp_config, a.enabled as agent_enabled,
-                  a.chrome, a.max_run_budget_usd, a.worktree_isolation
+                  a.chrome, a.max_run_budget_usd, a.worktree_isolation,
+                  a.pre_hook, a.post_hook
            FROM schedules s
            JOIN agents a ON s.agent_id = a.id
            WHERE s.enabled = 1 AND a.enabled = 1`,
@@ -361,6 +373,8 @@ export class CronScheduler {
             worktreeIsolation: (row.worktree_isolation as number) === 1,
             preHook: (row.pre_hook as string) ?? undefined,
             postHook: (row.post_hook as string) ?? undefined,
+            allowedTools: parseJsonArray(row.agent_tools as string | null),
+            mcpConfig: (row.mcp_config as string) ?? undefined,
           };
 
           const cron = new Cron(

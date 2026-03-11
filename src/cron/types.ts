@@ -38,6 +38,10 @@ export interface CronJobConfig {
   preHook?: string | null;
   /** Shell command to run after completion (e.g. "git push", "npm run deploy"). */
   postHook?: string | null;
+  /** Per-agent allowed tools override. When set, passed as --allowedTools instead of the default config. */
+  allowedTools?: string[];
+  /** Per-agent MCP config path override. When set, passed as --mcp-config instead of the default. */
+  mcpConfig?: string;
 }
 
 /** Runtime state for a cron job, persisted in SQLite */

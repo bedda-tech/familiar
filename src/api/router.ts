@@ -54,6 +54,7 @@ export class ApiRouter {
   private db: Database.Database | null = null;
   private configPath: string | null = null;
   private onConfigChange: (() => Promise<void>) | null = null;
+  private memoryStore: import("../memory/store.js").MemoryStore | null = null;
 
   setCronScheduler(scheduler: CronScheduler): void {
     this.cronScheduler = scheduler;
@@ -97,6 +98,10 @@ export class ApiRouter {
 
   setDb(db: Database.Database): void {
     this.db = db;
+  }
+
+  setMemoryStore(store: import("../memory/store.js").MemoryStore): void {
+    this.memoryStore = store;
   }
 
   setConfigChangeHandler(handler: () => Promise<void>): void {
@@ -366,6 +371,29 @@ export class ApiRouter {
         const params = new URLSearchParams(queryString ?? "");
         const limit = parseInt(params.get("limit") ?? "30", 10);
         this.handleAgentCostHistory(decodeURIComponent(agentCostMatch[1]), Math.min(Math.max(limit, 1), 100), res);
+        return true;
+      }
+
+      // ── Memory Search ──
+      if (path === "/api/memory/search") {
+        const params = new URLSearchParams(queryString ?? "");
+        const query = params.get("q") ?? "";
+        const limit = parseInt(params.get("limit") ?? "10", 10);
+        if (!query) {
+          sendJson(res, 400, { error: "Missing required 'q' query parameter" });
+          return true;
+        }
+        if (!this.memoryStore) {
+          sendJson(res, 503, { error: "Memory store not available (requires openai config)" });
+          return true;
+        }
+        try {
+          const results = await this.memoryStore.search(query, Math.min(Math.max(limit, 1), 50));
+          sendJson(res, 200, { results, query, count: results.length });
+        } catch (e) {
+          log.error({ err: e }, "memory search failed");
+          sendJson(res, 500, { error: "Memory search failed" });
+        }
         return true;
       }
     }

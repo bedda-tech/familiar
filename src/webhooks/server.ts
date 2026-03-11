@@ -122,6 +122,11 @@ export class WebhookServer {
     this.apiRouter.setTemplateStore(store);
   }
 
+  /** Attach the memory store for /api/memory/search. */
+  setMemoryStore(store: import("../memory/store.js").MemoryStore): void {
+    this.apiRouter.setMemoryStore(store);
+  }
+
   /** Attach the database for activity log queries. */
   setDb(db: Database.Database): void {
     this.apiRouter.setDb(db);

@@ -87,6 +87,9 @@ Usage:
   familiar configure             Interactive configuration wizard
   familiar init                 Initialize config and workspace
   familiar migrate-from-openclaw  Migrate an existing OpenClaw assistant
+  familiar export [--persona <path>]  Export DB state to persona repo YAML files
+  familiar sync [--from <path>]      Import persona repo YAML files into DB
+  familiar manifest [--persona <path>]  Generate SYSTEM.md from DB state
   familiar install-service      Install systemd user service
   familiar help                 Show this help
 
@@ -502,6 +505,11 @@ async function cmdStart(configPath?: string): Promise<void> {
     webhooks.setToolAccountStore(toolAccountStore);
     webhooks.setTemplateStore(new TemplateStore(db));
 
+    // Wire up memory store for /api/memory/search
+    if (memoryStore) {
+      webhooks.setMemoryStore(memoryStore);
+    }
+
     // Wire up task store for REST API (named so we can add onUpdate callback)
     const taskStore = new TaskStore(db);
     webhooks.setTaskStore(taskStore);
@@ -549,6 +557,15 @@ async function cmdStart(configPath?: string): Promise<void> {
       await dashboardChannel.start();
       log.info("dashboard channel wired");
     }
+  }
+
+  // Generate SYSTEM.md manifest on startup
+  try {
+    const { generateManifest } = await import("./manifest.js");
+    generateManifest({ personaPath: config.claude.workingDirectory, db, config });
+    log.info("SYSTEM.md manifest generated");
+  } catch (e) {
+    log.warn({ err: e }, "failed to generate SYSTEM.md manifest");
   }
 
   // Send startup notification to Telegram
@@ -821,6 +838,123 @@ switch (command) {
     (async () => {
       const { runDoctor } = await import("./doctor.js");
       runDoctor();
+    })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "export":
+    (async () => {
+      const config = loadConfig();
+      const personaIdx = args.indexOf("--persona");
+      const personaPath = personaIdx >= 0 ? args[personaIdx + 1] : config.claude.workingDirectory;
+      if (!personaPath) {
+        console.error("No persona path specified. Use --persona <path> or set claude.workingDirectory in config.");
+        process.exit(1);
+      }
+
+      const { SessionStore } = await import("./session/store.js");
+      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
+      const db = sessions.getDb();
+
+      // Ensure entity tables exist
+      const { AgentCrudStore } = await import("./agents/agent-store.js");
+      new AgentCrudStore(db);
+      const { ScheduleStore } = await import("./schedules/store.js");
+      new ScheduleStore(db);
+      const { ToolStore } = await import("./tools/store.js");
+      new ToolStore(db);
+      const { ProjectStore } = await import("./projects/store.js");
+      new ProjectStore(db);
+      const { TemplateStore } = await import("./templates/store.js");
+      new TemplateStore(db);
+
+      const { exportToPersona } = await import("./sync/export.js");
+      const result = exportToPersona({ personaPath, db });
+      console.log(`Exported to ${personaPath}:`);
+      console.log(`  Agents:    ${result.agents}`);
+      console.log(`  Schedules: ${result.schedules}`);
+      console.log(`  Tools:     ${result.tools}`);
+      console.log(`  Projects:  ${result.projects}`);
+      console.log(`  Templates: ${result.templates}`);
+      sessions.close();
+    })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "sync":
+    (async () => {
+      const config = loadConfig();
+      const fromIdx = args.indexOf("--from");
+      const personaPath = fromIdx >= 0 ? args[fromIdx + 1] : config.claude.workingDirectory;
+      if (!personaPath) {
+        console.error("No persona path specified. Use --from <path> or set claude.workingDirectory in config.");
+        process.exit(1);
+      }
+
+      const { SessionStore } = await import("./session/store.js");
+      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
+      const db = sessions.getDb();
+
+      const { AgentCrudStore } = await import("./agents/agent-store.js");
+      const agentStore = new AgentCrudStore(db);
+      const { ScheduleStore } = await import("./schedules/store.js");
+      const scheduleStore = new ScheduleStore(db);
+      const { ToolStore } = await import("./tools/store.js");
+      const toolStore = new ToolStore(db);
+      const { ProjectStore } = await import("./projects/store.js");
+      const projectStore = new ProjectStore(db);
+      const { TemplateStore } = await import("./templates/store.js");
+      const templateStore = new TemplateStore(db);
+
+      const { importFromPersona } = await import("./sync/import.js");
+      const result = importFromPersona({
+        personaPath, db, agentStore, scheduleStore, toolStore, projectStore, templateStore,
+      });
+      console.log(`Synced from ${personaPath}:`);
+      console.log(`  Agents:    ${result.agents.total} (${result.agents.created} new, ${result.agents.updated} updated)`);
+      console.log(`  Schedules: ${result.schedules.total} (${result.schedules.created} new, ${result.schedules.updated} updated)`);
+      console.log(`  Tools:     ${result.tools.total} (${result.tools.created} new, ${result.tools.updated} updated)`);
+      console.log(`  Projects:  ${result.projects.total} (${result.projects.created} new, ${result.projects.updated} updated)`);
+      console.log(`  Templates: ${result.templates.total} (${result.templates.created} new, ${result.templates.updated} updated)`);
+      sessions.close();
+    })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "manifest":
+    (async () => {
+      const config = loadConfig();
+      const personaIdx = args.indexOf("--persona");
+      const personaPath = personaIdx >= 0 ? args[personaIdx + 1] : config.claude.workingDirectory;
+      if (!personaPath) {
+        console.error("No persona path specified. Use --persona <path> or set claude.workingDirectory in config.");
+        process.exit(1);
+      }
+
+      const { SessionStore } = await import("./session/store.js");
+      const sessions = new SessionStore(config.sessions.inactivityTimeout, config.sessions.rotateAfterMessages);
+      const db = sessions.getDb();
+
+      // Ensure entity tables exist
+      const { AgentCrudStore } = await import("./agents/agent-store.js");
+      new AgentCrudStore(db);
+      const { ScheduleStore } = await import("./schedules/store.js");
+      new ScheduleStore(db);
+      const { ToolStore } = await import("./tools/store.js");
+      new ToolStore(db);
+      const { ProjectStore } = await import("./projects/store.js");
+      new ProjectStore(db);
+
+      const { generateManifest } = await import("./manifest.js");
+      generateManifest({ personaPath, db, config });
+      console.log(`Generated SYSTEM.md at ${personaPath}/SYSTEM.md`);
+      sessions.close();
     })().catch((e) => {
       console.error("Error:", e instanceof Error ? e.message : e);
       process.exit(1);
