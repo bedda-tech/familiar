@@ -61,4 +61,6 @@ export interface CronRunResult {
   isError: boolean;
   startedAt: Date;
   finishedAt: Date;
+  /** Full conversation log -- structured events from the claude -p stream */
+  runLog?: string;
 }

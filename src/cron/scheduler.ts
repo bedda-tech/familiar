@@ -256,6 +256,13 @@ export class CronScheduler {
         created_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Additive migration: run_log column for full conversation logs
+    try {
+      this.db.exec("ALTER TABLE cron_runs ADD COLUMN run_log TEXT");
+    } catch {
+      // Column already exists
+    }
   }
 
   /** Get the agent workspace instance (for external access to agent state/memory). */
@@ -1193,8 +1200,8 @@ If no task is assigned, proceed with your default work below.
     // Insert run record
     const info = this.db
       .prepare(
-        `INSERT INTO cron_runs (job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cron_runs (job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text, run_log)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         result.jobId,
@@ -1205,6 +1212,7 @@ If no task is assigned, proceed with your default work below.
         result.numTurns,
         result.isError ? 1 : 0,
         result.text,
+        result.runLog ?? null,
       );
 
     // Update state

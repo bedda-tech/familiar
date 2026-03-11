@@ -48,8 +48,8 @@ export class TelegramChannel implements Channel {
       try {
         const msg = await ctx.reply(html, { parse_mode: "HTML" });
         return { messageId: msg.message_id, chatId };
-      } catch {
-        // Retry as plain text if HTML parse fails
+      } catch (htmlErr) {
+        log.warn({ err: htmlErr, htmlSnippet: html.slice(0, 300) }, "HTML send failed, falling back to plain text");
         try {
           const msg = await ctx.reply(stripHtml(html));
           return { messageId: msg.message_id, chatId };
@@ -69,12 +69,13 @@ export class TelegramChannel implements Channel {
         await this.bot.api.editMessageText(handle.chatId, handle.messageId!, html, {
           parse_mode: "HTML",
         });
-      } catch {
-        // Retry as plain text
+      } catch (htmlErr) {
+        const errMsg = htmlErr instanceof Error ? htmlErr.message : "";
+        if (errMsg.includes("message is not modified")) return;
+        log.warn({ err: htmlErr, htmlSnippet: html.slice(0, 300) }, "HTML edit failed, falling back to plain text");
         try {
           await this.bot.api.editMessageText(handle.chatId, handle.messageId!, stripHtml(html));
         } catch (e) {
-          // Telegram returns error if text hasn't changed -- ignore
           const msg = e instanceof Error ? e.message : "";
           if (!msg.includes("message is not modified")) {
             log.debug({ err: e }, "edit failed");
@@ -166,8 +167,8 @@ export class TelegramChannel implements Channel {
       await this.rateLimitedSend(chatId, async () => {
         try {
           await this.bot.api.sendMessage(Number(chatId), chunk, { parse_mode: "HTML" });
-        } catch {
-          // Retry as plain text; propagate failure so delivery queue can retry
+        } catch (htmlErr) {
+          log.warn({ err: htmlErr, htmlSnippet: chunk.slice(0, 300) }, "HTML direct message failed, falling back to plain text");
           await this.bot.api.sendMessage(Number(chatId), stripHtml(chunk));
         }
       });

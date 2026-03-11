@@ -37,6 +37,39 @@ import { DashboardChannel } from "./channels/dashboard.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/** Use haiku via claude -p to generate a one-line agent run summary */
+async function summarizeAgentRun(agentLabel: string, resultText: string): Promise<string> {
+  const truncated = resultText.length > 2000 ? resultText.slice(0, 2000) : resultText;
+  const sysPrompt = "You summarize agent run outputs. Output ONLY a single sentence, nothing else.";
+  const prompt = `Summarize what "${agentLabel}" did in ONE sentence (under 120 chars). No quotes, no filler. Just action and outcome.\n\n${truncated}`;
+  return new Promise<string>((resolve, reject) => {
+    let resolved = false;
+    const proc = spawn("claude", [
+      "-p", "--model", "haiku", "--max-turns", "1",
+      "--system-prompt", sysPrompt,
+      "--setting-sources", "user",
+    ], {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd: "/tmp",
+    });
+    let stdout = "";
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.on("error", (e) => { if (!resolved) { resolved = true; reject(e); } });
+    proc.on("close", (code) => {
+      if (resolved) return;
+      resolved = true;
+      if (code !== 0) { reject(new Error(`claude exited ${code}`)); return; }
+      const line = stdout.trim().split("\n")[0]?.trim() ?? "";
+      resolve(line.length > 200 ? line.slice(0, 197) + "..." : line);
+    });
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+    setTimeout(() => {
+      if (!resolved) { resolved = true; try { proc.kill(); } catch {} reject(new Error("summary timeout")); }
+    }, 30_000);
+  });
+}
+
 function printUsage(): void {
   console.log(`
 familiar — Your AI Familiar
@@ -400,10 +433,26 @@ async function cmdStart(configPath?: string): Promise<void> {
           : `${totalSec.toFixed(1)}s`;
       const costStr = `$${result.costUsd.toFixed(2)}`;
       const baseUrl = config.webhooks?.publicUrl ?? "";
-      const link = runId && baseUrl ? ` — ${baseUrl}/#/runs/${runId}` : "";
+      const link = runId && baseUrl ? `\n${baseUrl}/#/runs/${runId}` : "";
+
+      // Generate a one-line summary via haiku
+      let summary = "";
+      if (result.text) {
+        try {
+          summary = await summarizeAgentRun(label, result.text);
+          if (summary) summary = `\n${summary}`;
+        } catch (e) {
+          log.warn({ err: e }, "failed to generate agent summary, using fallback");
+          const firstLine = result.text.split("\n").find((l: string) => l.trim().length > 10);
+          if (firstLine) {
+            summary = `\n${firstLine.trim().slice(0, 200)}`;
+          }
+        }
+      }
+
       const text = result.isError
-        ? `${label} FAILED (${durStr})${link}`
-        : `${label} done (${durStr}, ${costStr})${link}`;
+        ? `${label} FAILED (${durStr})${summary}${link}`
+        : `${label} (${durStr}, ${costStr})${summary}${link}`;
       await deliveryQueue.deliver(chatId, text);
     });
 
@@ -501,6 +550,17 @@ async function cmdStart(configPath?: string): Promise<void> {
       log.info("dashboard channel wired");
     }
   }
+
+  // Send startup notification to Telegram
+  const startupChatId = String(config.telegram.allowedUsers[0]);
+  const agentCount = agentCrudStore?.count() ?? 0;
+  const scheduleCount = cron ? cron.listJobs().length : 0;
+  const publicUrl = config.webhooks?.publicUrl ?? "";
+  const dashboardLink = publicUrl ? ` | ${publicUrl}` : "";
+  await deliveryQueue.deliver(
+    startupChatId,
+    `Oliver online. ${agentCount} agents, ${scheduleCount} schedules.${dashboardLink}`,
+  );
 
   // Watch config for hot-reload
   const resolvedConfigPath = configPath ?? getConfigPath();

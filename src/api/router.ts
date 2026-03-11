@@ -1305,15 +1305,32 @@ When done, summarize what you did.`;
     // Run asynchronously -- respond immediately so the dashboard doesn't hang
     sendJson(res, 202, { status: "started", taskId: id, agentId, message: `Agent '${agentId}' spawned for task #${id}` });
 
-    // Fire and forget -- the scheduler handles recording/delivery
+    // Fire and forget -- spawn agent, record run, complete task
     const cronScheduler = this.cronScheduler;
     const taskStore = this.taskStore;
+    const runDb = (cronScheduler as any).db as import("better-sqlite3").Database;
     (async () => {
       try {
         const { runCronJob } = await import("../cron/runner.js");
         const workspace = (cronScheduler as any).workspace as any;
         const claudeConfig = (cronScheduler as any).claudeConfig as any;
         const result = await runCronJob(jobConfig as any, claudeConfig, { workspace });
+
+        // Record the run in cron_runs so it shows up in the Runs tab with full logs
+        runDb.prepare(
+          `INSERT INTO cron_runs (job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text, run_log)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          `task-${id}-${agentId}`,
+          result.startedAt.toISOString(),
+          result.finishedAt.toISOString(),
+          result.durationMs,
+          result.costUsd,
+          result.numTurns,
+          result.isError ? 1 : 0,
+          result.text,
+          result.runLog ?? null,
+        );
 
         // Complete the task with the result
         const resultText = result.isError
@@ -1461,7 +1478,7 @@ When done, summarize what you did.`;
     try {
       const row = db
         .prepare(
-          `SELECT id, job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text
+          `SELECT id, job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text, run_log
            FROM cron_runs WHERE id = ?`,
         )
         .get(id) as
@@ -1475,6 +1492,7 @@ When done, summarize what you did.`;
             num_turns: number;
             is_error: number;
             result_text: string | null;
+            run_log: string | null;
           }
         | undefined;
 
@@ -1494,6 +1512,8 @@ When done, summarize what you did.`;
           numTurns: row.num_turns,
           isError: row.is_error === 1,
           resultText: row.result_text ?? "",
+          hasLog: !!row.run_log,
+          runLog: row.run_log ?? null,
         },
       });
     } catch (e: any) {

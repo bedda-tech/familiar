@@ -23,6 +23,44 @@ const MAX_LABEL_LENGTH = 256; // max /spawn label length
 const MAX_SEARCH_QUERY_LENGTH = 1_000; // max /search query length;
 const RESPONSE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes -- kill hung interactive sessions
 
+/** Format a tool_use event into a rich display string for Telegram (Markdown) */
+function formatToolUse(name: string, input?: Record<string, unknown>): string {
+  if (!input) return `**${name}**`;
+  let detail = "";
+  switch (name) {
+    case "Bash":
+      detail = typeof input.command === "string" ? input.command : "";
+      break;
+    case "Read":
+      detail = typeof input.file_path === "string" ? input.file_path : "";
+      break;
+    case "Write":
+      detail = typeof input.file_path === "string" ? input.file_path : "";
+      break;
+    case "Edit":
+      detail = typeof input.file_path === "string" ? input.file_path : "";
+      break;
+    case "Grep":
+      detail = typeof input.pattern === "string" ? input.pattern : "";
+      if (input.path && typeof input.path === "string") detail += ` in ${input.path}`;
+      break;
+    case "Glob":
+      detail = typeof input.pattern === "string" ? input.pattern : "";
+      if (input.path && typeof input.path === "string") detail += ` in ${input.path}`;
+      break;
+    case "Agent":
+      detail = typeof input.description === "string" ? input.description : "";
+      break;
+    default: {
+      const first = Object.values(input).find((v) => typeof v === "string" && v.length > 0);
+      if (typeof first === "string") detail = first;
+    }
+  }
+  if (!detail) return `**${name}**`;
+  if (detail.length > 120) detail = detail.slice(0, 117) + "...";
+  return `**${name}**\n\`${detail}\``;
+}
+
 export class Bridge {
   private showThinking = true;
   private openai: OpenAIConfig | undefined;
@@ -602,7 +640,7 @@ export class Bridge {
     this.sessions.logMessage(msg.chatId, "user", prompt);
 
     // Set up draft streaming
-    const draft = createDraft();
+    let draft = createDraft();
     const draftCtx: DraftContext = {
       reply: async (text) => {
         const handle = await this.channelFor(msg.chatId).sendDraft(msg.chatId, text, msg.replyContext);
@@ -668,8 +706,15 @@ export class Bridge {
           case "tool_use":
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
-            // Show tool usage to the user
-            await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, `\`${event.name}\``);
+            // Finalize current draft so text before this tool call is sent as its own message
+            if (draft.text) {
+              const preChunks = chunkMessage(draft.text);
+              await finalizeDraft(draft, draftCtx, preChunks);
+              draft = createDraft();
+            }
+            // Show tool usage with brief input summary
+            const toolLabel = formatToolUse(event.name, event.input);
+            await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, toolLabel);
             // Restart typing during tool execution
             if (typingStopped) {
               stopTyping = this.channelFor(msg.chatId).startTyping(msg.chatId);
@@ -701,9 +746,14 @@ export class Bridge {
             // Log assistant response
             this.sessions.logMessage(msg.chatId, "assistant", responseText, result.costUsd);
 
-            // Finalize the draft
-            const chunks = chunkMessage(responseText);
-            await finalizeDraft(draft, draftCtx, chunks);
+            // Finalize only the current (unsent) draft.
+            // Earlier drafts were already finalized when tool_use events split them.
+            // Fall back to result.text only if we got nothing at all from streaming.
+            const draftText = draft.text || (!fullText ? result.text : "");
+            if (draftText) {
+              const chunks = chunkMessage(draftText);
+              await finalizeDraft(draft, draftCtx, chunks);
+            }
 
             if (result.isError) {
               log.warn(

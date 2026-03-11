@@ -91,6 +91,7 @@ export interface TextDelta {
 export interface ToolUseInfo {
   type: "tool_use";
   name: string;
+  input?: Record<string, unknown>;
 }
 
 export interface ThinkingDelta {

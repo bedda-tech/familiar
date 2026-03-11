@@ -418,6 +418,8 @@ export async function runCronJob(
   let accumulatedText = "";
   // Track tool names used during the session for fallback summary
   const toolsUsed = new Set<string>();
+  // Capture structured conversation log
+  const logEntries: string[] = [];
 
   for await (const line of rl) {
     if (!line.trim()) continue;
@@ -427,6 +429,11 @@ export async function runCronJob(
       event = JSON.parse(line) as StreamEvent;
     } catch {
       continue;
+    }
+
+    // Capture all events for the run log (skip raw deltas to keep size reasonable)
+    if (event.type !== "content_block_delta") {
+      logEntries.push(line);
     }
 
     switch (event.type) {
@@ -462,6 +469,8 @@ export async function runCronJob(
         break;
     }
   }
+
+  const runLog = logEntries.join("\n");
 
   // If spawn failed (ENOENT etc.), short-circuit with an error result
   if (spawnError !== null) {
@@ -591,6 +600,7 @@ export async function runCronJob(
     isError: result.isError,
     startedAt,
     finishedAt,
+    runLog,
   };
 }
 

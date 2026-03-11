@@ -267,6 +267,9 @@
       .data-table tbody tr:hover { background: var(--bg-hover); }
       .data-table tbody tr.clickable { cursor: pointer; }
 
+      .data-table thead th.th-sort { cursor: pointer; user-select: none; }
+      .data-table thead th.th-sort:hover { color: var(--text); }
+
       .data-table tbody td {
         padding: 9px 12px;
         vertical-align: middle;
@@ -1117,6 +1120,10 @@
           <select class="filter-select" id="activityProjectFilter" onchange="renderActivity()">
             <option value="">All projects</option>
           </select>
+          <select class="filter-select" id="activitySortDir" onchange="renderActivity()">
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
         </div>
         <div id="activityFeed" class="activity-feed">
           <div class="loading">Loading activity...</div>
@@ -1136,6 +1143,12 @@
         <div class="filter-row">
           <select class="filter-select" id="agentProjectFilter" onchange="renderAgents()">
             <option value="">All projects</option>
+          </select>
+          <select class="filter-select" id="agentSortSel" onchange="renderAgents()">
+            <option value="name_asc">Name A→Z</option>
+            <option value="name_desc">Name Z→A</option>
+            <option value="schedules_desc">Most schedules</option>
+            <option value="cost_desc">Highest cost</option>
           </select>
         </div>
         <div id="agentsGrid" class="card-grid">
@@ -1746,9 +1759,15 @@
         </div>
         <div class="modal-body">
           <div class="run-detail-meta" id="runDetailMeta"></div>
-          <div class="form-group">
-            <label>Output</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-sm" id="runTabSummary" onclick="showRunTab('summary')" style="font-weight:600">Summary</button>
+            <button class="btn btn-sm" id="runTabLog" onclick="showRunTab('log')" style="display:none">Full Log</button>
+          </div>
+          <div class="form-group" id="runSummaryPane">
             <pre class="run-detail-output" id="runDetailOutput">Loading…</pre>
+          </div>
+          <div class="form-group" id="runLogPane" style="display:none">
+            <pre class="run-detail-output" id="runDetailLog" style="max-height:60vh;overflow-y:auto;font-size:11px">No log available</pre>
           </div>
         </div>
         <div class="modal-footer">
@@ -1788,6 +1807,32 @@
       let tools = [];
       let templates = [];
       let confirmCallback = null;
+      let runsData = [];   // cache for client-side sort
+      let costsData = [];  // cache for client-side sort
+
+      // ── Sort helpers ──────────────────────────────────────────────────────
+      function _loadSort(tab) { try { return JSON.parse(localStorage.getItem('sort_' + tab) || 'null') || {}; } catch { return {}; } }
+      function _saveSort(tab, key, dir) { try { localStorage.setItem('sort_' + tab, JSON.stringify({key, dir})); } catch {} }
+      function _sortData(arr, key, dir) {
+        if (!key) return arr;
+        return [...arr].sort((a, b) => {
+          let va = a[key], vb = b[key];
+          if (va == null && vb == null) return 0;
+          if (va == null) return 1; if (vb == null) return -1;
+          if (typeof va === 'string') { va = va.toLowerCase(); vb = ('' + vb).toLowerCase(); }
+          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+          return dir === 'asc' ? cmp : -cmp;
+        });
+      }
+
+      // Per-table sort state (key=null means use default sort for that table)
+      let _sp;
+      _sp = _loadSort('schedules');
+      let schedSortKey = _sp.key !== undefined ? _sp.key : '_nextRun', schedSortDir = _sp.dir || 'asc';
+      _sp = _loadSort('runs');
+      let runsSortKey = _sp.key !== undefined ? _sp.key : 'startedAt', runsSortDir = _sp.dir || 'desc';
+      _sp = _loadSort('costs');
+      let costSortKey = _sp.key !== undefined ? _sp.key : 'totalCostUsd', costSortDir = _sp.dir || 'desc';
 
       // ── Init ──────────────────────────────────────────────────────────
       if (token) {
@@ -2133,14 +2178,16 @@
         const typeFilter = document.getElementById('activityTypeFilter').value;
         const agentFilter = document.getElementById('activityAgentFilter').value;
         const projectFilter = document.getElementById('activityProjectFilter').value;
+        const sortDir = (document.getElementById('activitySortDir') || {}).value || 'desc';
         const feed = document.getElementById('activityFeed');
 
-        const filtered = activityEntries.filter(e => {
+        let filtered = activityEntries.filter(e => {
           if (typeFilter && e.type !== typeFilter) return false;
           if (agentFilter && e.agent_id !== agentFilter) return false;
           if (projectFilter && e.project_id !== projectFilter) return false;
           return true;
         });
+        if (sortDir === 'asc') filtered = [...filtered].reverse();
 
         document.getElementById('activityCount').textContent = filtered.length;
 
@@ -2237,8 +2284,12 @@
       function renderAgents() {
         const grid = document.getElementById('agentsGrid');
         const projectFilter = document.getElementById('agentProjectFilter').value;
+        const sortSel = (document.getElementById('agentSortSel') || {}).value || 'name_asc';
 
-        const filtered = projectFilter ? agents.filter(a => a.project_id === projectFilter) : agents;
+        let filtered = projectFilter ? agents.filter(a => a.project_id === projectFilter) : [...agents];
+        const [aSortKey, aSortDir] = sortSel.split('_');
+        const aKey = aSortKey === 'name' ? 'name' : aSortKey === 'schedules' ? '_scheduleCount' : '_dailyCostUsd';
+        filtered = _sortData(filtered, aKey, aSortDir === 'desc' ? 'desc' : 'asc');
 
         if (filtered.length === 0) {
           grid.innerHTML = `
@@ -2441,11 +2492,27 @@
         }
       }
 
+      function setScheduleSort(key, intuDir) {
+        if (schedSortKey === key) {
+          if (schedSortDir === intuDir) { schedSortDir = intuDir === 'asc' ? 'desc' : 'asc'; }
+          else { schedSortKey = null; schedSortDir = null; }
+        } else { schedSortKey = key; schedSortDir = intuDir; }
+        _saveSort('schedules', schedSortKey, schedSortDir);
+        renderSchedules();
+      }
+      function schedSortArrow(key) {
+        if (schedSortKey !== key) return '';
+        return schedSortDir === 'asc' ? ' ▲' : ' ▼';
+      }
+
       function renderSchedules() {
         const container = document.getElementById('schedulesContainer');
         const projectFilter = document.getElementById('scheduleProjectFilter').value;
 
-        const filtered = projectFilter ? schedules.filter(s => s.project_id === projectFilter) : schedules;
+        let filtered = projectFilter ? schedules.filter(s => s.project_id === projectFilter) : schedules;
+        // Apply sort (default: next run asc)
+        const sk = schedSortKey || '_nextRun', sd = schedSortDir || 'asc';
+        filtered = _sortData(filtered, sk, sd);
 
         if (filtered.length === 0) {
           container.innerHTML = `
@@ -2468,14 +2535,14 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Name / ID</th>
-                <th>Agent</th>
+                <th class="th-sort" onclick="setScheduleSort('name','asc')">Name / ID${schedSortArrow('name')}</th>
+                <th class="th-sort" onclick="setScheduleSort('agent_id','asc')">Agent${schedSortArrow('agent_id')}</th>
                 <th class="hide-mobile">Project</th>
                 <th>Schedule</th>
-                <th class="hide-mobile">Next Run</th>
-                <th class="hide-mobile">Last Run</th>
-                <th class="hide-mobile">Runs</th>
-                <th>Status</th>
+                <th class="hide-mobile th-sort" onclick="setScheduleSort('_nextRun','asc')">Next Run${schedSortArrow('_nextRun')}</th>
+                <th class="hide-mobile th-sort" onclick="setScheduleSort('_lastRun','desc')">Last Run${schedSortArrow('_lastRun')}</th>
+                <th class="hide-mobile th-sort" onclick="setScheduleSort('_runCount','desc')">Runs${schedSortArrow('_runCount')}</th>
+                <th class="th-sort" onclick="setScheduleSort('enabled','desc')">Status${schedSortArrow('enabled')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -2634,8 +2701,9 @@
       }
 
       // ── Task UI state ──
-      let taskSortKey = 'priority';
-      let taskSortDir = 'asc';
+      const _tsp = _loadSort('tasks');
+      let taskSortKey = _tsp.key !== undefined ? _tsp.key : 'priority';
+      let taskSortDir = _tsp.dir || 'desc';
       let taskTagFilters = new Set();
       let taskChecked = new Set();
       let dragSrcId = null;
@@ -2756,13 +2824,15 @@
         });
       }
 
-      function setTaskSort(key) {
+      function setTaskSort(key, intuDir) {
         if (taskSortKey === key) {
-          taskSortDir = taskSortDir === 'asc' ? 'desc' : 'asc';
+          if (taskSortDir === intuDir) { taskSortDir = intuDir === 'asc' ? 'desc' : 'asc'; }
+          else { taskSortKey = null; taskSortDir = null; }
         } else {
           taskSortKey = key;
-          taskSortDir = 'asc';
+          taskSortDir = intuDir;
         }
+        _saveSort('tasks', taskSortKey, taskSortDir);
         renderTasks();
       }
 
@@ -3089,6 +3159,17 @@
             projects.map(p => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join('');
           sel.value = current;
         });
+      }
+
+      function populateProjectDropdowns() {
+        // Refresh project options in any form dropdowns that reference projects
+        const projSel = document.getElementById('taskFormProject');
+        if (projSel) {
+          const current = projSel.value;
+          projSel.innerHTML = '<option value="">No project</option>' +
+            projects.map(p => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join('');
+          projSel.value = current;
+        }
       }
 
       async function loadProjects() {
@@ -3835,6 +3916,9 @@
         document.getElementById('runDetailTitle').textContent = 'Run #' + id;
         document.getElementById('runDetailOutput').textContent = 'Loading…';
         document.getElementById('runDetailMeta').innerHTML = '';
+        document.getElementById('runTabLog').style.display = 'none';
+        document.getElementById('runDetailLog').textContent = 'No log available';
+        showRunTab('summary');
         document.getElementById('runDetailModal').classList.add('visible');
         try {
           const data = await api('GET', `/api/runs/${id}`);
@@ -3856,9 +3940,78 @@
             <div class="run-detail-meta-item"><div class="label">Cost</div><div class="value">${esc(cost)}</div></div>
           `;
           document.getElementById('runDetailOutput').textContent = r.resultText || '(no output)';
+
+          // Show log tab if log exists
+          if (r.hasLog && r.runLog) {
+            document.getElementById('runTabLog').style.display = '';
+            document.getElementById('runDetailLog').textContent = formatRunLog(r.runLog);
+          }
         } catch (e) {
           document.getElementById('runDetailOutput').textContent = 'Error loading run: ' + e.message;
         }
+      }
+
+      function showRunTab(tab) {
+        const summaryBtn = document.getElementById('runTabSummary');
+        const logBtn = document.getElementById('runTabLog');
+        const summaryPane = document.getElementById('runSummaryPane');
+        const logPane = document.getElementById('runLogPane');
+        if (tab === 'log') {
+          summaryPane.style.display = 'none';
+          logPane.style.display = '';
+          summaryBtn.style.fontWeight = '400';
+          logBtn.style.fontWeight = '600';
+        } else {
+          summaryPane.style.display = '';
+          logPane.style.display = 'none';
+          summaryBtn.style.fontWeight = '600';
+          logBtn.style.fontWeight = '400';
+        }
+      }
+
+      function formatRunLog(rawLog) {
+        // Parse NDJSON log into readable conversation format
+        const lines = rawLog.split('\n').filter(Boolean);
+        const parts = [];
+        for (const line of lines) {
+          try {
+            const ev = JSON.parse(line);
+            switch (ev.type) {
+              case 'assistant':
+                if (ev.message?.content) {
+                  for (const block of ev.message.content) {
+                    if (block.type === 'text' && block.text) {
+                      parts.push('--- Assistant ---\n' + block.text);
+                    } else if (block.type === 'tool_use') {
+                      const input = typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2);
+                      parts.push(`--- Tool: ${block.name} ---\n${input.slice(0, 2000)}`);
+                    } else if (block.type === 'thinking' && block.thinking) {
+                      parts.push('--- Thinking ---\n' + block.thinking.slice(0, 1000));
+                    }
+                  }
+                }
+                break;
+              case 'user':
+                if (ev.message?.content) {
+                  for (const block of ev.message.content) {
+                    if (block.type === 'tool_result') {
+                      const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2);
+                      parts.push(`--- Tool Result (${block.is_error ? 'ERROR' : 'ok'}) ---\n${content.slice(0, 2000)}`);
+                    }
+                  }
+                }
+                break;
+              case 'result':
+                if (ev.result) {
+                  parts.push(`--- Result ---\nCost: $${ev.result?.cost_usd?.toFixed(4) ?? '?'} | Turns: ${ev.result?.num_turns ?? '?'} | Duration: ${ev.result?.duration_ms ?? '?'}ms`);
+                } else if (ev.subtype === 'cost') {
+                  // skip cost events
+                }
+                break;
+            }
+          } catch { /* skip unparseable lines */ }
+        }
+        return parts.join('\n\n') || '(log could not be parsed)';
       }
 
       function closeRunDetail() {

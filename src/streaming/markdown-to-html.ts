@@ -54,8 +54,12 @@ export function markdownToTelegramHtml(md: string): string {
   // Bold: **text** -> <b>text</b>
   result = result.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 
-  // Italic: _text_ -> <i>text</i> (word-boundary aware to avoid matching snake_case)
+  // Italic: *text* or _text_ -> <i>text</i>
+  result = result.replace(/(?<!\w)\*([^*\n]+?)\*(?!\w)/g, "<i>$1</i>");
   result = result.replace(/(?<!\w)_([^_\n]+?)_(?!\w)/g, "<i>$1</i>");
+
+  // Blockquote: > text -> <blockquote>text</blockquote>
+  result = result.replace(/^&gt;\s+(.+)$/gm, "<blockquote>$1</blockquote>");
 
   // Links: [text](url) -> <a href="url">text</a>
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');

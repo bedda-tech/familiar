@@ -163,20 +163,20 @@ export class ClaudeCLI {
             break;
 
           case "assistant":
-            // Full assistant message — extract text and thinking from content blocks
+            // Full assistant message — extract text, thinking, and tool_use from content blocks
             if (event.message?.content) {
               for (const block of event.message.content) {
                 if (block.type === "thinking" && block.thinking) {
-                  // Only yield if we didn't already stream this thinking block
                   if (!yieldedThinking.has(block.thinking.slice(0, 100))) {
                     yield { type: "thinking", text: block.thinking };
                   }
                 } else if (block.type === "text" && block.text) {
-                  // Only yield if we haven't already streamed this text via deltas
                   if (!accumulatedText.includes(block.text)) {
                     accumulatedText += block.text;
                     yield { type: "text_delta", text: block.text };
                   }
+                } else if (block.type === "tool_use" && block.name) {
+                  yield { type: "tool_use", name: block.name, input: block.input as Record<string, unknown> | undefined };
                 }
               }
             }
