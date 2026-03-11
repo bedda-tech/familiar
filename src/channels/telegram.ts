@@ -213,10 +213,25 @@ export class TelegramChannel implements Channel {
 
   async start(): Promise<void> {
     log.info("starting Telegram bot");
-    this.bot.start({
-      onStart: (info) => {
-        log.info({ username: info.username }, "Telegram bot started");
-      },
+    const startWithRetry = async (attempt = 1): Promise<void> => {
+      try {
+        await this.bot.start({
+          onStart: (info) => {
+            log.info({ username: info.username }, "Telegram bot started");
+          },
+        });
+      } catch (err) {
+        if (err instanceof GrammyError && err.error_code === 409 && attempt <= 5) {
+          const delay = attempt * 5000;
+          log.warn({ attempt, delay }, "Telegram 409 conflict — retrying after delay");
+          await new Promise((r) => setTimeout(r, delay));
+          return startWithRetry(attempt + 1);
+        }
+        throw err;
+      }
+    };
+    startWithRetry().catch((err) => {
+      log.error({ err: err instanceof Error ? err.message : String(err) }, "Telegram bot failed to start");
     });
   }
 

@@ -4,6 +4,38 @@ All notable changes to Familiar are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-03-11
+
+### Added
+- **Projects as first-class entities** — Projects expanded from thin labels to self-contained folders with CLAUDE.md, project.yaml, docs/, and repos/. Each project gets auto-generated context files for Claude Code inheritance.
+  - New columns: status, priority, repos (JSON), issue_tracking (JSON), env_refs (JSON)
+  - RepoManager class for git repo lifecycle (clone, move, pull, status, list, remove)
+  - Per-project folder export: `projects/{id}/project.yaml` + auto-generated CLAUDE.md
+  - Import with fallback: scans subdirectories first, falls back to flat file format
+  - `--clone-repos` flag on sync command for fresh install repo setup
+  - Repo API endpoints: GET/POST/DELETE repos, pull, status
+- **Persona sync system** — Bidirectional YAML-based sync between persona repo and SQLite DB. `familiar export` writes to persona, `familiar sync --from` reads back. Round-trips cleanly.
+- **SYSTEM.md manifest generator** — Auto-generates system state doc from DB: agents, schedules, projects (with status/priority/repo counts), tools, API reference.
+- **Tools registry** — Catalog of all available CLIs, MCPs, scripts with metadata. Multi-account credential management. Full CRUD API + dashboard UI.
+- **Run details in dashboard** — Full cron run history with cost, duration, turns, result text. Short summary links in Telegram notifications.
+- **Templates CRUD** — Template store, API, and dashboard UI for reusable agent/project templates.
+- **Dashboard chat channel** — DashboardChannel for browser-based chat with the familiar.
+- **Fleet health metrics** — `/api/metrics` endpoint with agent success rates, costs, scheduling health. Dashboard section.
+- **Telegram 409 conflict resilience** — Bot retries on Telegram polling conflicts with exponential backoff instead of crashing the process.
+
+### Changed
+- **Project table in SYSTEM.md** — Now shows status, priority, repo count, and issue tracking type columns.
+- **Import is now async** — `importFromPersona()` changed from sync to async to support `--clone-repos` flag.
+- **Agent working directories** — All agents now point to `~/oliver/projects/{project}/` instead of `~/repos/X`.
+
+### Fixed
+- **Stale task rescue loop** — Per-task stale timeout prevents recurring tasks from permanent failure.
+- **Scheduler chained fires** — Prevents duplicate fires when long-running jobs exceed cron interval.
+- **Wall-clock duration** — Runner uses actual elapsed time instead of Claude's internal timer.
+- **Agent spawn path** — Resolved claude binary path in AgentManager to fix ENOENT errors.
+- **Delivery queue retry** — Fixed column aliases causing undefined values during retries.
+- **Bridge watchdog** — Added timer to kill stale processes and save session context.
+
 ## [0.6.0] — 2026-02-28
 
 ### Added
