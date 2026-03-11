@@ -20,6 +20,7 @@
  *   GET  /api/activity                  — list activity log entries
  *   POST /api/activity                  — insert an activity log entry
  *   GET  /api/runs                      — fleet-wide cron run history (agent_id, is_error, limit, offset)
+ *   GET  /api/runs/:id                  — get full details for a single run (includes full result_text)
  *   GET  /api/cost/summary              — per-agent cost totals for period
  *   GET  /api/cost/daily                — day-by-day fleet cost for period
  */
@@ -339,6 +340,13 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Single Run Details ──
+      const runIdMatch = path.match(/^\/api\/runs\/(\d+)$/);
+      if (runIdMatch) {
+        this.handleGetRun(parseInt(runIdMatch[1], 10), res);
+        return true;
+      }
+
       // ── Cost Summary ──
       if (path === "/api/cost/summary") {
         const params = new URLSearchParams(queryString ?? "");
@@ -537,6 +545,11 @@ export class ApiRouter {
       const completeMatch = path.match(/^\/api\/tasks\/(\d+)\/complete$/);
       if (completeMatch && body) {
         this.handleCompleteTask(parseInt(completeMatch[1], 10), body, res);
+        return true;
+      }
+      const taskRunMatch = path.match(/^\/api\/tasks\/(\d+)\/run$/);
+      if (taskRunMatch) {
+        await this.handleRunTask(parseInt(taskRunMatch[1], 10), res);
         return true;
       }
 
@@ -1214,6 +1227,108 @@ export class ApiRouter {
     sendJson(res, 200, { task });
   }
 
+  // ── Task Run Handler ─────────────────────────────────────────────
+
+  private async handleRunTask(id: number, res: ServerResponse): Promise<void> {
+    if (!this.taskStore) {
+      sendJson(res, 503, { error: "Task store not available" });
+      return;
+    }
+    if (!this.cronScheduler) {
+      sendJson(res, 503, { error: "Cron scheduler not available" });
+      return;
+    }
+
+    const task = this.taskStore.get(id);
+    if (!task) {
+      sendJson(res, 404, { error: `Task ${id} not found` });
+      return;
+    }
+
+    const agentId = task.assigned_agent;
+    if (!agentId) {
+      sendJson(res, 400, { error: "Task has no assigned agent" });
+      return;
+    }
+
+    // Look up the agent from DB
+    const db = (this.cronScheduler as any).sharedDb as import("better-sqlite3").Database | undefined;
+    if (!db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+
+    const agent = db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId) as Record<string, unknown> | undefined;
+    if (!agent) {
+      sendJson(res, 404, { error: `Agent '${agentId}' not found` });
+      return;
+    }
+
+    // Mark the task as in_progress
+    this.taskStore.update(id, { status: "in_progress" });
+    // Set claimed_by directly since UpdateTaskInput doesn't include it
+    db.prepare("UPDATE tasks SET claimed_by = ?, claimed_at = datetime('now') WHERE id = ?").run(agentId, id);
+
+    // Build a task-specific prompt
+    const taskPrompt = `You have been assigned task #${id}. Work on it and report your results.
+
+## Task: ${task.title}
+
+${task.description || "No additional description."}
+
+When done, summarize what you did.`;
+
+    // Build a job config for this agent + task prompt
+    const jobConfig = {
+      id: agentId,
+      label: `${agent.name || agentId}: Task #${id}`,
+      schedule: "manual",
+      timezone: "UTC",
+      prompt: taskPrompt,
+      model: (agent.model as string) ?? undefined,
+      maxTurns: (agent.max_turns as number) ?? 25,
+      workingDirectory: (agent.working_directory as string) ?? undefined,
+      announce: (agent.announce as number) === 1,
+      suppressPattern: (agent.suppress_pattern as string) ?? undefined,
+      deliverTo: (agent.deliver_to as string) ?? undefined,
+      enabled: true,
+      systemPrompt: (agent.system_prompt as string) ?? undefined,
+      chrome: (agent.chrome as number) !== 0,
+      maxRunBudgetUsd: (agent.max_run_budget_usd as number) ?? undefined,
+      worktreeIsolation: (agent.worktree_isolation as number) === 1,
+      preHook: (agent.pre_hook as string) ?? undefined,
+      postHook: (agent.post_hook as string) ?? undefined,
+    };
+
+    log.info({ taskId: id, agentId }, "spawning agent for task via API");
+
+    // Run asynchronously -- respond immediately so the dashboard doesn't hang
+    sendJson(res, 202, { status: "started", taskId: id, agentId, message: `Agent '${agentId}' spawned for task #${id}` });
+
+    // Fire and forget -- the scheduler handles recording/delivery
+    const cronScheduler = this.cronScheduler;
+    const taskStore = this.taskStore;
+    (async () => {
+      try {
+        const { runCronJob } = await import("../cron/runner.js");
+        const workspace = (cronScheduler as any).workspace as any;
+        const claudeConfig = (cronScheduler as any).claudeConfig as any;
+        const result = await runCronJob(jobConfig as any, claudeConfig, { workspace });
+
+        // Complete the task with the result
+        const resultText = result.isError
+          ? `Agent failed: ${result.text.slice(0, 500)}`
+          : result.text.slice(0, 2000);
+        taskStore.complete(id, resultText);
+        log.info({ taskId: id, agentId, isError: result.isError, durationMs: result.durationMs }, "task run completed");
+      } catch (e: any) {
+        log.error({ taskId: id, agentId, err: e }, "task run failed");
+        taskStore.update(id, { status: "ready" });
+        db.prepare("UPDATE tasks SET claimed_by = NULL, claimed_at = NULL WHERE id = ?").run(id);
+      }
+    })();
+  }
+
   // ── Activity Handler ──────────────────────────────────────────────
 
   private handleListActivity(queryString: string, res: ServerResponse): void {
@@ -1326,6 +1441,63 @@ export class ApiRouter {
       sendJson(res, 200, { runs, total });
     } catch (e: any) {
       log.error({ err: e }, "runs query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  /**
+   * GET /api/runs/:id
+   * Returns full details for a single run, including complete result_text.
+   */
+  private handleGetRun(id: number, res: ServerResponse): void {
+    const db = this.cronScheduler
+      ? ((this.cronScheduler as any).db as import("better-sqlite3").Database | undefined)
+      : this.db ?? undefined;
+    if (!db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+
+    try {
+      const row = db
+        .prepare(
+          `SELECT id, job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text
+           FROM cron_runs WHERE id = ?`,
+        )
+        .get(id) as
+        | {
+            id: number;
+            job_id: string;
+            started_at: string;
+            finished_at: string;
+            duration_ms: number;
+            cost_usd: number;
+            num_turns: number;
+            is_error: number;
+            result_text: string | null;
+          }
+        | undefined;
+
+      if (!row) {
+        sendJson(res, 404, { error: "Run not found" });
+        return;
+      }
+
+      sendJson(res, 200, {
+        run: {
+          id: row.id,
+          jobId: row.job_id,
+          startedAt: row.started_at,
+          finishedAt: row.finished_at,
+          durationMs: row.duration_ms,
+          costUsd: row.cost_usd,
+          numTurns: row.num_turns,
+          isError: row.is_error === 1,
+          resultText: row.result_text ?? "",
+        },
+      });
+    } catch (e: any) {
+      log.error({ err: e }, "run lookup failed");
       sendJson(res, 500, { error: "Query failed" });
     }
   }

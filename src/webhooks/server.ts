@@ -230,11 +230,15 @@ export class WebhookServer {
     }
 
     // Parse body for webhook endpoints
-    let body: Record<string, unknown>;
+    let body: Record<string, unknown> | undefined;
     try {
       body = await readJsonBody(req);
     } catch {
       sendJson(res, 400, { error: "Invalid JSON body" });
+      return;
+    }
+    if (!body) {
+      sendJson(res, 400, { error: "Missing JSON body" });
       return;
     }
 
@@ -406,7 +410,7 @@ export const MAX_MESSAGE_LENGTH = 64 * 1024;
 /** Maximum length for user-supplied prompt text (64 KB). */
 export const MAX_PROMPT_LENGTH = 64 * 1024;
 
-function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown> | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let totalBytes = 0;
@@ -421,8 +425,13 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
       chunks.push(chunk);
     });
     req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf-8").trim();
+      if (!raw) {
+        resolve(undefined);
+        return;
+      }
       try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")) as Record<string, unknown>);
+        resolve(JSON.parse(raw) as Record<string, unknown>);
       } catch (e) {
         reject(e);
       }

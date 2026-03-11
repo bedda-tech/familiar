@@ -12,7 +12,7 @@
     "templates/"
   ],
   "scripts": {
-    "build": "tsc && cp -r src/dashboard dist/dashboard",
+    "build": "tsc && rm -rf dist/dashboard && cp -r src/dashboard dist/dashboard",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",

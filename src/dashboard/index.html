@@ -945,6 +945,47 @@
         font-size: 10px;
       }
 
+      .modal-wide { max-width: 800px; }
+
+      .run-detail-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .run-detail-meta-item {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 8px;
+      }
+      .run-detail-meta-item .label {
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .run-detail-meta-item .value {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-bright);
+        margin-top: 2px;
+      }
+      .run-detail-output {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 420px;
+        overflow-y: auto;
+        color: var(--text);
+        margin: 0;
+      }
+
       /* ── Costs chart ── */
       .cost-bar-chart {
         display: flex;
@@ -1696,6 +1737,26 @@
       </div>
     </div>
 
+    <!-- ── Run Detail Modal ── -->
+    <div id="runDetailModal" class="modal-overlay">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3 id="runDetailTitle">Run Details</h3>
+          <button class="modal-close" onclick="closeRunDetail()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="run-detail-meta" id="runDetailMeta"></div>
+          <div class="form-group">
+            <label>Output</label>
+            <pre class="run-detail-output" id="runDetailOutput">Loading…</pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeRunDetail()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Confirm dialog ── -->
     <div id="confirmOverlay" class="modal-overlay">
       <div class="confirm-dialog">
@@ -1733,6 +1794,7 @@
         document.getElementById('tokenInput').value = token;
         connectWs();
         loadAll();
+        setTimeout(handleHashRoute, 100); // handle direct #/runs/ID links after data loads
       }
 
       // Tab switching
@@ -1761,7 +1823,11 @@
       // Escape key closes modals
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-          document.querySelectorAll('.modal-overlay.visible').forEach(m => m.classList.remove('visible'));
+          if (document.getElementById('runDetailModal').classList.contains('visible')) {
+            closeRunDetail();
+          } else {
+            document.querySelectorAll('.modal-overlay.visible').forEach(m => m.classList.remove('visible'));
+          }
         }
       });
 
@@ -2843,6 +2909,7 @@
               <td class="hide-mobile">${formatRelative(t.updated_at)}</td>
               <td>
                 <div style="display:flex;gap:4px;">
+                  ${t.assigned_agent && t.status === 'ready' ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); runTask(${t.id}, '${esc(t.assigned_agent)}')">Run</button>` : ''}
                   ${t.status === 'ready' ? `<button class="btn btn-sm" onclick="event.stopPropagation(); claimTask(${t.id})">Claim</button>` : ''}
                   ${t.status === 'in_progress' ? `<button class="btn btn-sm btn-success" onclick="event.stopPropagation(); completeTaskDialog(${t.id})">Done</button>` : ''}
                   <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteTaskDialog(${t.id})">Del</button>
@@ -2962,6 +3029,17 @@
         } finally {
           btn.disabled = false;
           btn.textContent = mode === 'edit' ? 'Save' : 'Create';
+        }
+      }
+
+      async function runTask(id, agentId) {
+        try {
+          toast(`Spawning ${agentId} for task #${id}...`, 'info');
+          await api('POST', `/api/tasks/${id}/run`);
+          toast(`Agent '${agentId}' spawned for task #${id}`, 'success');
+          await loadTasks();
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
         }
       }
 
@@ -3714,7 +3792,7 @@
           const preview = r.resultPreview ? esc(r.resultPreview.slice(0, 120)) : '<span style="color:var(--text-muted)">—</span>';
 
           html += `
-            <tr>
+            <tr onclick="openRunDetail(${r.id})" style="cursor:pointer" title="View full output">
               <td style="color:var(--text-muted);font-size:11px">#${r.id}</td>
               <td><code>${esc(r.jobId)}</code></td>
               <td style="color:var(--text-muted);font-size:11px">${esc(started)}</td>
@@ -3749,6 +3827,67 @@
         runsCurrentPage = Math.max(0, Math.min(totalPages - 1, runsCurrentPage + dir));
         loadRuns();
       }
+
+      // ── Run Detail modal ──────────────────────────────────────────────────
+
+      async function openRunDetail(id) {
+        location.hash = '#/runs/' + id;
+        document.getElementById('runDetailTitle').textContent = 'Run #' + id;
+        document.getElementById('runDetailOutput').textContent = 'Loading…';
+        document.getElementById('runDetailMeta').innerHTML = '';
+        document.getElementById('runDetailModal').classList.add('visible');
+        try {
+          const data = await api('GET', `/api/runs/${id}`);
+          const r = data.run;
+          const dur = formatDuration(r.durationMs);
+          const cost = r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—';
+          const started = r.startedAt ? r.startedAt.slice(0, 19).replace('T', ' ') : '—';
+          const finished = r.finishedAt ? r.finishedAt.slice(0, 19).replace('T', ' ') : '—';
+          const statusBadge = r.isError
+            ? `<span class="badge badge-red">error</span>`
+            : `<span class="badge badge-green">ok</span>`;
+          document.getElementById('runDetailTitle').textContent = `Run #${r.id} — ${r.jobId}`;
+          document.getElementById('runDetailMeta').innerHTML = `
+            <div class="run-detail-meta-item"><div class="label">Status</div><div class="value">${statusBadge}</div></div>
+            <div class="run-detail-meta-item"><div class="label">Started</div><div class="value" style="font-size:11px">${esc(started)}</div></div>
+            <div class="run-detail-meta-item"><div class="label">Finished</div><div class="value" style="font-size:11px">${esc(finished)}</div></div>
+            <div class="run-detail-meta-item"><div class="label">Duration</div><div class="value">${esc(dur)}</div></div>
+            <div class="run-detail-meta-item"><div class="label">Turns</div><div class="value">${r.numTurns ?? '—'}</div></div>
+            <div class="run-detail-meta-item"><div class="label">Cost</div><div class="value">${esc(cost)}</div></div>
+          `;
+          document.getElementById('runDetailOutput').textContent = r.resultText || '(no output)';
+        } catch (e) {
+          document.getElementById('runDetailOutput').textContent = 'Error loading run: ' + e.message;
+        }
+      }
+
+      function closeRunDetail() {
+        document.getElementById('runDetailModal').classList.remove('visible');
+        if (location.hash.startsWith('#/runs/')) history.pushState('', '', location.pathname);
+      }
+
+      function handleHashRoute() {
+        const m = location.hash.match(/^#\/runs\/(\d+)$/);
+        if (m && token) {
+          // Switch to runs tab
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+          const runsBtn = document.querySelector('.tab-btn[data-tab="runs"]');
+          if (runsBtn) runsBtn.classList.add('active');
+          const runsPanel = document.getElementById('tab-runs');
+          if (runsPanel) runsPanel.classList.add('active');
+          activeTab = 'runs';
+          loadRuns();
+          openRunDetail(parseInt(m[1], 10));
+        }
+      }
+
+      window.addEventListener('hashchange', handleHashRoute);
+
+      // Override overlay click for runDetailModal to clear hash
+      document.getElementById('runDetailModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('runDetailModal')) closeRunDetail();
+      });
 
       // ── Costs tab ─────────────────────────────────────────────────────────
 

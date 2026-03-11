@@ -21,7 +21,7 @@ const log = getLogger("cron-scheduler");
 const SKIP_TASK_PREFIX_AGENTS = new Set(["heartbeat", "cron-doctor", "pipeline-monitor"]);
 
 export interface CronDeliveryHandler {
-  (jobId: string, result: CronRunResult, config: CronJobConfig): Promise<void>;
+  (jobId: string, result: CronRunResult, config: CronJobConfig, runId?: number): Promise<void>;
 }
 
 export class CronScheduler {
@@ -1010,7 +1010,7 @@ If no task is assigned, proceed with your default work below.
 
       // Record with schedule ID
       const resultForRecording = { ...result, jobId: scheduleId };
-      this.recordRun(resultForRecording);
+      const runId = this.recordRun(resultForRecording);
 
       // Post-run validation (only if run succeeded or made commits despite errors)
       if (!result.isError) {
@@ -1057,7 +1057,7 @@ If no task is assigned, proceed with your default work below.
           log.info({ jobId: scheduleId }, "delivery suppressed by pattern match");
         } else {
           try {
-            await this.deliveryHandler(config.id, result, config);
+            await this.deliveryHandler(config.id, result, config, runId);
           } catch (e) {
             log.error({ jobId: scheduleId, err: e }, "delivery failed");
           }
@@ -1125,7 +1125,7 @@ If no task is assigned, proceed with your default work below.
       log.info({ jobId: config.id, concurrent: this.concurrentCount }, "executing job");
       const effectiveConfig = this.injectTaskPrefix(config);
       const result = await runCronJob(effectiveConfig, this.claudeConfig, { workspace: this.workspace });
-      this.recordRun(result);
+      const runId = this.recordRun(result);
 
       // Post-run validation (only if run succeeded or made commits despite errors)
       if (!result.isError) {
@@ -1175,7 +1175,7 @@ If no task is assigned, proceed with your default work below.
           log.info({ jobId: config.id }, "delivery suppressed by pattern match");
         } else {
           try {
-            await this.deliveryHandler(config.id, result, config);
+            await this.deliveryHandler(config.id, result, config, runId);
           } catch (e) {
             log.error({ jobId: config.id, err: e }, "delivery failed");
           }
@@ -1189,9 +1189,9 @@ If no task is assigned, proceed with your default work below.
     }
   }
 
-  private recordRun(result: CronRunResult): void {
+  private recordRun(result: CronRunResult): number {
     // Insert run record
-    this.db
+    const info = this.db
       .prepare(
         `INSERT INTO cron_runs (job_id, started_at, finished_at, duration_ms, cost_usd, num_turns, is_error, result_text)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1204,7 +1204,7 @@ If no task is assigned, proceed with your default work below.
         result.costUsd,
         result.numTurns,
         result.isError ? 1 : 0,
-        result.text.slice(0, 10000),
+        result.text,
       );
 
     // Update state
@@ -1226,6 +1226,7 @@ If no task is assigned, proceed with your default work below.
         result.durationMs,
         result.costUsd,
       );
+    return info.lastInsertRowid as number;
   }
 
   private updateNextRun(jobId: string, nextRunAt: string): void {

@@ -183,7 +183,7 @@ WantedBy=default.target
   console.log("  journalctl --user -u familiar -f");
 }
 
-function cmdTui(): void {
+function cmdTui(subArgs: string[] = []): void {
   const config = loadConfig();
   const chatId = String(config.telegram.allowedUsers[0]);
 
@@ -192,7 +192,16 @@ function cmdTui(): void {
     config.sessions.rotateAfterMessages,
   );
 
-  const sessionId = sessions.getSession(chatId);
+  // Accept explicit session ID: familiar tui <sessionId>
+  const explicitSessionId = subArgs[0] || null;
+  const sessionId = explicitSessionId ?? sessions.getSession(chatId);
+
+  // If explicit session ID provided, update the session store so Telegram follows along
+  if (explicitSessionId) {
+    sessions.upsertSession(chatId, explicitSessionId);
+    console.log(`Switching to session ${explicitSessionId.slice(0, 8)}… (Telegram will follow)`);
+  }
+
   sessions.close();
 
   const args: string[] = [];
@@ -205,9 +214,9 @@ function cmdTui(): void {
   args.push("--dangerously-skip-permissions");
   args.push("--chrome");
 
-  if (sessionId) {
+  if (sessionId && !explicitSessionId) {
     console.log(`Resuming session ${sessionId.slice(0, 8)}…`);
-  } else {
+  } else if (!sessionId) {
     console.log("No active session found — starting fresh.");
   }
 
@@ -381,12 +390,20 @@ async function cmdStart(configPath?: string): Promise<void> {
     cron = new CronScheduler(configJobs, config.claude);
     cron.setSharedDb(db);
 
-    cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig) => {
+    cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig, runId?: number) => {
       const chatId = jobConfig.deliverTo ?? defaultChatId;
       const label = jobConfig.label ?? jobConfig.id;
-      const prefix = result.isError ? `**Cron Error -- ${label}**` : `**Cron -- ${label}**`;
-      const meta = `_${result.durationMs}ms | $${result.costUsd.toFixed(4)} | ${result.numTurns} turns_`;
-      const text = `${prefix}\n${meta}\n\n${result.text}`;
+      const totalSec = result.durationMs / 1000;
+      const durStr =
+        totalSec >= 60
+          ? `${Math.floor(totalSec / 60)}m${Math.round(totalSec % 60)}s`
+          : `${totalSec.toFixed(1)}s`;
+      const costStr = `$${result.costUsd.toFixed(2)}`;
+      const baseUrl = config.webhooks?.publicUrl ?? "";
+      const link = runId && baseUrl ? ` — ${baseUrl}/#/runs/${runId}` : "";
+      const text = result.isError
+        ? `${label} FAILED (${durStr})${link}`
+        : `${label} done (${durStr}, ${costStr})${link}`;
       await deliveryQueue.deliver(chatId, text);
     });
 
@@ -629,7 +646,7 @@ switch (command) {
     break;
 
   case "tui":
-    cmdTui();
+    cmdTui(args.slice(1));
     break;
 
   case "install-service":

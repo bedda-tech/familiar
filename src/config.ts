@@ -76,6 +76,8 @@ export interface WebhookServerConfig {
   bind?: string;
   /** Bearer token for authentication */
   token: string;
+  /** Public base URL for dashboard links (e.g. "https://example.com:8443"). Used in Telegram notifications. */
+  publicUrl?: string;
 }
 
 export interface FamiliarConfig {
