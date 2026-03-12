@@ -21,7 +21,7 @@ export interface Task {
   recurrence_schedule: string | null;
   last_completed_at: string | null;
   result: string | null;
-  tags: string | null;
+  tags: string[] | null;
   model_hint: string | null;
   project_id: string | null;
   created_at: string;
@@ -67,6 +67,41 @@ export class TaskStore {
 
   constructor(private db: Database.Database) {}
 
+  /** Parse the raw tags string from SQLite into a string array.
+   *  Handles: null, JSON array, double-encoded JSON, comma-separated plain string. */
+  private parseTags(raw: string | null): string[] | null {
+    if (raw == null) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as string[];
+      if (typeof parsed === "string") {
+        // Double-encoded: the inner value is another JSON string
+        try {
+          const inner = JSON.parse(parsed);
+          if (Array.isArray(inner)) return inner as string[];
+        } catch {
+          // Inner value is a plain comma-separated string
+          return parsed
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+        }
+      }
+    } catch {
+      // Not valid JSON at all — treat as comma-separated
+      return raw
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+    }
+    return null;
+  }
+
+  /** Normalize a raw DB row into a Task (parses tags JSON string to array). */
+  private normalize(row: Record<string, unknown>): Task {
+    return { ...(row as unknown as Task), tags: this.parseTags(row.tags as string | null) };
+  }
+
   /** Register a callback fired after any task mutation (create/update/claim/complete). */
   onUpdate(handler: (task: Task) => void): void {
     this.updateHandler = handler;
@@ -98,11 +133,16 @@ export class TaskStore {
     }
 
     sql += " ORDER BY priority ASC, created_at ASC";
-    return this.db.prepare(sql).all(...params) as Task[];
+    return (this.db.prepare(sql).all(...params) as Record<string, unknown>[]).map((r) =>
+      this.normalize(r),
+    );
   }
 
   get(id: number): Task | undefined {
-    return this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task | undefined;
+    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.normalize(row) : undefined;
   }
 
   create(input: CreateTaskInput): Task {
@@ -215,19 +255,20 @@ export class TaskStore {
    *  Returns any in_progress task already claimed by this agent first (continuity). */
   claim(agentId: string): Task | undefined {
     // Continuity: if this agent already has an in_progress task, return it
-    const existing = this.db
+    const existingRow = this.db
       .prepare(
         `SELECT * FROM tasks
          WHERE status = 'in_progress' AND claimed_by = ?
          ORDER BY priority ASC LIMIT 1`,
       )
-      .get(agentId) as Task | undefined;
-    if (existing) {
+      .get(agentId) as Record<string, unknown> | undefined;
+    if (existingRow) {
+      const existing = this.normalize(existingRow);
       log.info({ taskId: existing.id, agent: agentId }, "returning existing in_progress task");
       return existing;
     }
 
-    const task = this.db
+    const taskRow = this.db
       .prepare(
         `SELECT * FROM tasks
          WHERE status = 'ready'
@@ -238,7 +279,8 @@ export class TaskStore {
            created_at ASC
          LIMIT 1`,
       )
-      .get(agentId, agentId) as Task | undefined;
+      .get(agentId, agentId) as Record<string, unknown> | undefined;
+    const task = taskRow ? this.normalize(taskRow) : undefined;
 
     if (!task) return undefined;
 
