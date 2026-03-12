@@ -2,6 +2,7 @@
 
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, cpSync } from "node:fs";
 import { join, dirname } from "node:path";
+import Database from "better-sqlite3";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
@@ -273,29 +274,107 @@ async function cmdCron(subArgs: string[]): Promise<void> {
   const subcommand = subArgs[0];
   const jobs = (config.cron?.jobs ?? []) as CronJobConfig[];
 
+  /** Open familiar.db read-only. Returns null if the DB doesn't exist. */
+  function openDb(): Database.Database | null {
+    const dbPath = join(getConfigDir(), "familiar.db");
+    if (!existsSync(dbPath)) return null;
+    const db = new Database(dbPath, { readonly: true });
+    db.pragma("journal_mode = WAL");
+    return db;
+  }
+
+  /** Build a CronJobConfig from a joined schedules+agents DB row. */
+  function rowToJobConfig(row: Record<string, unknown>): CronJobConfig {
+    let allowedTools: string[] | undefined;
+    const toolsStr = row.agent_tools as string | null;
+    if (toolsStr) {
+      try { allowedTools = JSON.parse(toolsStr) as string[]; } catch { /* ignore */ }
+    }
+    return {
+      id: row.agent_id as string,
+      label: (row.agent_name as string) || (row.schedule_name as string) || (row.agent_id as string),
+      schedule: row.schedule as string,
+      timezone: (row.timezone as string) ?? "UTC",
+      prompt: row.prompt as string,
+      model: (row.model as string) ?? undefined,
+      maxTurns: (row.max_turns as number) ?? 25,
+      workingDirectory: (row.working_directory as string) ?? undefined,
+      announce: (row.announce as number) === 1,
+      suppressPattern: (row.suppress_pattern as string) ?? undefined,
+      deliverTo: (row.deliver_to as string) ?? undefined,
+      enabled: (row.agent_enabled as number) === 1 && (row.schedule_enabled as number) === 1,
+      systemPrompt: (row.system_prompt as string) ?? undefined,
+      worktreeIsolation: (row.worktree_isolation as number) === 1,
+      preHook: (row.pre_hook as string) ?? undefined,
+      postHook: (row.post_hook as string) ?? undefined,
+      allowedTools,
+      mcpConfig: (row.mcp_config as string) ?? undefined,
+    };
+  }
+
   if (!subcommand || subcommand === "list") {
-    if (jobs.length === 0) {
-      console.log("No cron jobs configured. Add jobs to the 'cron.jobs' array in config.json.");
-      return;
+    // Config-based jobs
+    if (jobs.length > 0) {
+      const scheduler = new CronScheduler(jobs, config.claude);
+      const list = scheduler.listJobs();
+      scheduler.stop();
+
+      console.log(`\n  Config Cron Jobs (${list.length})\n`);
+      for (const job of list) {
+        const enabled = job.enabled !== false ? "ON" : "OFF";
+        const model = job.model ?? config.claude.model ?? "default";
+        console.log(`  ${enabled === "OFF" ? "  " : "* "}${job.id}`);
+        console.log(`    Label:    ${job.label ?? "-"}`);
+        console.log(`    Schedule: ${job.schedule} (${job.timezone ?? "UTC"})`);
+        console.log(`    Model:    ${model}`);
+        console.log(`    Runs:     ${job.runCount}`);
+        console.log(`    Last run: ${job.lastRun ?? "never"}`);
+        console.log(`    Next run: ${job.nextRun ?? "N/A"}`);
+        console.log(`    Enabled:  ${enabled}`);
+        console.log();
+      }
     }
 
-    const scheduler = new CronScheduler(jobs, config.claude);
-    const list = scheduler.listJobs();
-    scheduler.stop();
+    // DB-backed jobs
+    const db = openDb();
+    if (db) {
+      try {
+        const rows = db
+          .prepare(
+            `SELECT s.id as schedule_id, s.agent_id, s.name as schedule_name,
+                    s.schedule, s.timezone, s.enabled as schedule_enabled,
+                    a.name as agent_name, a.model, a.max_turns,
+                    a.working_directory, a.enabled as agent_enabled
+             FROM schedules s
+             JOIN agents a ON s.agent_id = a.id
+             ORDER BY a.name ASC`,
+          )
+          .all() as Array<Record<string, unknown>>;
 
-    console.log(`\n  Cron Jobs (${list.length})\n`);
-    for (const job of list) {
-      const enabled = job.enabled !== false ? "ON" : "OFF";
-      const model = job.model ?? config.claude.model ?? "default";
-      console.log(`  ${enabled === "OFF" ? "  " : "* "}${job.id}`);
-      console.log(`    Label:    ${job.label ?? "-"}`);
-      console.log(`    Schedule: ${job.schedule} (${job.timezone ?? "UTC"})`);
-      console.log(`    Model:    ${model}`);
-      console.log(`    Runs:     ${job.runCount}`);
-      console.log(`    Last run: ${job.lastRun ?? "never"}`);
-      console.log(`    Next run: ${job.nextRun ?? "N/A"}`);
-      console.log(`    Enabled:  ${enabled}`);
-      console.log();
+        if (rows.length > 0) {
+          console.log(`\n  DB Cron Jobs (${rows.length})\n`);
+          for (const row of rows) {
+            const enabled =
+              (row.agent_enabled as number) === 1 && (row.schedule_enabled as number) === 1;
+            const agentId = row.agent_id as string;
+            const scheduleId = row.schedule_id as string;
+            console.log(`  ${enabled ? "* " : "  "}${agentId}  (schedule: ${scheduleId})`);
+            console.log(`    Label:    ${(row.agent_name as string) ?? "-"}`);
+            console.log(`    Schedule: ${row.schedule} (${(row.timezone as string) ?? "UTC"})`);
+            console.log(`    Model:    ${(row.model as string) ?? config.claude.model ?? "default"}`);
+            console.log(`    MaxTurns: ${(row.max_turns as number) ?? 25}`);
+            console.log(`    WorkDir:  ${(row.working_directory as string) ?? config.claude.workingDirectory}`);
+            console.log(`    Enabled:  ${enabled ? "ON" : "OFF"}`);
+            console.log();
+          }
+        }
+      } finally {
+        db.close();
+      }
+    }
+
+    if (jobs.length === 0 && !openDb()) {
+      console.log("No cron jobs configured.");
     }
     return;
   }
@@ -307,10 +386,45 @@ async function cmdCron(subArgs: string[]): Promise<void> {
       process.exit(1);
     }
 
-    const jobConfig = jobs.find((j) => j.id === jobId);
+    // Check config first (backward compat)
+    let jobConfig: CronJobConfig | undefined = jobs.find((j) => j.id === jobId);
+
+    // Fall back to DB: match by agent_id or schedule_id
+    if (!jobConfig) {
+      const db = openDb();
+      if (db) {
+        try {
+          const row = db
+            .prepare(
+              `SELECT s.id as schedule_id, s.agent_id, s.name as schedule_name,
+                      s.schedule, s.timezone, s.prompt, s.enabled as schedule_enabled,
+                      a.name as agent_name, a.model, a.system_prompt, a.max_turns,
+                      a.working_directory, a.tools as agent_tools, a.announce,
+                      a.suppress_pattern, a.deliver_to, a.mcp_config, a.enabled as agent_enabled,
+                      a.worktree_isolation, a.pre_hook, a.post_hook
+               FROM schedules s
+               JOIN agents a ON s.agent_id = a.id
+               WHERE s.id = ? OR a.id = ?
+               LIMIT 1`,
+            )
+            .get(jobId, jobId) as Record<string, unknown> | undefined;
+
+          if (row) {
+            jobConfig = rowToJobConfig(row);
+          }
+        } finally {
+          db.close();
+        }
+      }
+    }
+
     if (!jobConfig) {
       console.error(`Job not found: ${jobId}`);
-      console.error(`Available jobs: ${jobs.map((j) => j.id).join(", ")}`);
+      const configIds = jobs.map((j) => j.id);
+      if (configIds.length > 0) {
+        console.error(`Available config jobs: ${configIds.join(", ")}`);
+      }
+      console.error("Tip: use 'familiar cron list' to see all available jobs.");
       process.exit(1);
     }
 
