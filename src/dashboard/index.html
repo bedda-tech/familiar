@@ -1189,6 +1189,7 @@
         <div class="filter-row">
           <select class="filter-select" id="taskStatusFilter" onchange="renderTasks()">
             <option value="">All statuses</option>
+            <option value="not_ready">Not Ready</option>
             <option value="ready">Ready</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
@@ -1209,6 +1210,7 @@
           <span id="taskBulkCount" style="font-size:11px;font-weight:600;color:var(--text-bright)">0 selected</span>
           <select class="filter-select" id="taskBulkStatus" style="font-size:10px">
             <option value="">Set status...</option>
+            <option value="not_ready">Not Ready</option>
             <option value="ready">Ready</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
@@ -1523,6 +1525,7 @@
             <div class="form-group">
               <label>Status</label>
               <select class="form-control" id="taskFormStatus">
+                <option value="not_ready">Not Ready</option>
                 <option value="ready">Ready</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>
@@ -1833,6 +1836,8 @@
       let runsSortKey = _sp.key !== undefined ? _sp.key : 'startedAt', runsSortDir = _sp.dir || 'desc';
       _sp = _loadSort('costs');
       let costSortKey = _sp.key !== undefined ? _sp.key : 'totalCostUsd', costSortDir = _sp.dir || 'desc';
+      _sp = _loadSort('templates');
+      let templateSortKey = _sp.key !== undefined ? _sp.key : 'name', templateSortDir = _sp.dir || 'asc';
 
       // ── Init ──────────────────────────────────────────────────────────
       if (token) {
@@ -2924,10 +2929,13 @@
         }
 
         const statusColors = {
+          not_ready: 'badge-gray',
           ready: 'badge-blue',
           in_progress: 'badge-yellow',
           completed: 'badge-green',
           failed: 'badge-red',
+          blocked: 'badge-gray',
+          cancelled: 'badge-gray',
         };
 
         const thStyle = 'cursor:pointer;user-select:none';
@@ -3683,6 +3691,19 @@
         }
       }
 
+      function setTemplateSort(key, intuDir) {
+        if (templateSortKey === key) {
+          if (templateSortDir === intuDir) { templateSortDir = intuDir === 'asc' ? 'desc' : 'asc'; }
+          else { templateSortKey = null; templateSortDir = null; }
+        } else { templateSortKey = key; templateSortDir = intuDir; }
+        _saveSort('templates', templateSortKey, templateSortDir);
+        renderTemplates();
+      }
+      function templateSortArrow(key) {
+        if (templateSortKey !== key) return '';
+        return templateSortDir === 'asc' ? ' ▲' : ' ▼';
+      }
+
       function renderTemplates() {
         const container = document.getElementById('templatesContainer');
 
@@ -3697,21 +3718,22 @@
         }
 
         const catColors = { 'agent-prompt': 'badge-blue', 'system-prompt': 'badge-purple', 'task-description': 'badge-orange', 'other': 'badge-gray' };
+        const sorted = _sortData(templates, templateSortKey || 'name', templateSortDir || 'asc');
 
         let html = `
           <table class="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Category</th>
+                <th class="th-sort" onclick="setTemplateSort('name','asc')">Name${templateSortArrow('name')}</th>
+                <th class="th-sort" onclick="setTemplateSort('category','asc')">Category${templateSortArrow('category')}</th>
                 <th>Description</th>
-                <th>Updated</th>
+                <th class="th-sort" onclick="setTemplateSort('updated_at','desc')">Updated${templateSortArrow('updated_at')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>`;
 
-        for (const t of templates) {
+        for (const t of sorted) {
           const catBadge = `<span class="badge ${catColors[t.category] || 'badge-gray'}">${esc(t.category)}</span>`;
           const updatedAt = t.updated_at ? t.updated_at.slice(0, 16).replace('T', ' ') : '—';
           html += `
@@ -3833,7 +3855,22 @@
         }
       }
 
+      function setRunsSort(key, intuDir) {
+        if (runsSortKey === key) {
+          if (runsSortDir === intuDir) { runsSortDir = intuDir === 'asc' ? 'desc' : 'asc'; }
+          else { runsSortKey = null; runsSortDir = null; }
+        } else { runsSortKey = key; runsSortDir = intuDir; }
+        _saveSort('runs', runsSortKey, runsSortDir);
+        const limit = parseInt(document.getElementById('runsLimitSelect').value || '50', 10);
+        renderRuns(runsData, limit);
+      }
+      function runsSortArrow(key) {
+        if (runsSortKey !== key) return '';
+        return runsSortDir === 'asc' ? ' ▲' : ' ▼';
+      }
+
       function renderRuns(runs, limit) {
+        runsData = runs; // cache for re-sort
         const container = document.getElementById('runsContainer');
 
         if (runs.length === 0) {
@@ -3847,23 +3884,25 @@
           return;
         }
 
+        const sorted = _sortData(runs, runsSortKey || 'startedAt', runsSortDir || 'desc');
+
         let html = `
           <table class="data-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Agent</th>
-                <th>Started</th>
-                <th>Duration</th>
-                <th>Turns</th>
-                <th>Cost</th>
-                <th>Status</th>
+                <th class="th-sort" onclick="setRunsSort('id','desc')">#${runsSortArrow('id')}</th>
+                <th class="th-sort" onclick="setRunsSort('jobId','asc')">Agent${runsSortArrow('jobId')}</th>
+                <th class="th-sort" onclick="setRunsSort('startedAt','desc')">Started${runsSortArrow('startedAt')}</th>
+                <th class="th-sort" onclick="setRunsSort('durationMs','desc')">Duration${runsSortArrow('durationMs')}</th>
+                <th class="th-sort" onclick="setRunsSort('numTurns','desc')">Turns${runsSortArrow('numTurns')}</th>
+                <th class="th-sort" onclick="setRunsSort('costUsd','desc')">Cost${runsSortArrow('costUsd')}</th>
+                <th class="th-sort" onclick="setRunsSort('isError','asc')">Status${runsSortArrow('isError')}</th>
                 <th>Output</th>
               </tr>
             </thead>
             <tbody>`;
 
-        for (const r of runs) {
+        for (const r of sorted) {
           const statusBadge = r.isError
             ? `<span class="badge badge-red">error</span>`
             : `<span class="badge badge-green">ok</span>`;
@@ -4113,30 +4152,47 @@
           <div class="cost-bar-chart">${cols}</div>`;
       }
 
+      function setCostSort(key, intuDir) {
+        if (costSortKey === key) {
+          if (costSortDir === intuDir) { costSortDir = intuDir === 'asc' ? 'desc' : 'asc'; }
+          else { costSortKey = null; costSortDir = null; }
+        } else { costSortKey = key; costSortDir = intuDir; }
+        _saveSort('costs', costSortKey, costSortDir);
+        renderCostTable(costsData);
+      }
+      function costSortArrow(key) {
+        if (costSortKey !== key) return '';
+        return costSortDir === 'asc' ? ' ▲' : ' ▼';
+      }
+
       function renderCostTable(agentRows) {
+        // compute avg cost and cache for re-sort
+        costsData = agentRows.map(a => ({ ...a, _avgCostUsd: a.runCount > 0 ? a.totalCostUsd / a.runCount : 0 }));
         const container = document.getElementById('costsTable');
-        if (!agentRows.length) {
+        if (!costsData.length) {
           container.innerHTML = '<div class="loading" style="color:var(--text-muted)">No runs in this period.</div>';
           return;
         }
+
+        const sorted = _sortData(costsData, costSortKey || 'totalCostUsd', costSortDir || 'desc');
 
         let html = `
           <table class="data-table">
             <thead>
               <tr>
-                <th>Agent</th>
-                <th>Runs</th>
-                <th>Errors</th>
-                <th>Total Cost</th>
-                <th>Avg Cost/Run</th>
+                <th class="th-sort" onclick="setCostSort('agentId','asc')">Agent${costSortArrow('agentId')}</th>
+                <th class="th-sort" onclick="setCostSort('runCount','desc')">Runs${costSortArrow('runCount')}</th>
+                <th class="th-sort" onclick="setCostSort('errorCount','desc')">Errors${costSortArrow('errorCount')}</th>
+                <th class="th-sort" onclick="setCostSort('totalCostUsd','desc')">Total Cost${costSortArrow('totalCostUsd')}</th>
+                <th class="th-sort" onclick="setCostSort('_avgCostUsd','desc')">Avg Cost/Run${costSortArrow('_avgCostUsd')}</th>
                 <th>Daily Budget</th>
-                <th>Last Run</th>
+                <th class="th-sort" onclick="setCostSort('lastRunAt','desc')">Last Run${costSortArrow('lastRunAt')}</th>
               </tr>
             </thead>
             <tbody>`;
 
-        for (const a of agentRows) {
-          const avgCost = a.runCount > 0 ? a.totalCostUsd / a.runCount : 0;
+        for (const a of sorted) {
+          const avgCost = a._avgCostUsd;
           const lastRun = a.lastRunAt ? a.lastRunAt.slice(0, 16).replace('T', ' ') : '—';
           const srPct = a.runCount > 0 ? Math.round(((a.runCount - a.errorCount) / a.runCount) * 100) : 100;
           const srClass = srPct >= 90 ? 'badge-green' : srPct >= 70 ? 'badge-yellow' : 'badge-red';
