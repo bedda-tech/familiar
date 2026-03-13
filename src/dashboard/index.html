@@ -2041,6 +2041,7 @@
         const panel = document.getElementById('tab-' + tab);
         if (panel) panel.classList.add('active');
         activeTab = tab;
+        updateSidebarBadges();
         if (tab === 'runs') loadRuns();
         if (tab === 'costs') loadCosts();
       }
@@ -2058,6 +2059,17 @@
           document.getElementById('sidebar').classList.add('collapsed');
         }
       })();
+
+      // Update sidebar notification badges
+      function updateSidebarBadges() {
+        const hasErrors = activityEntries.some(e => e.type === 'error');
+        const actBadge = document.getElementById('badge-activity');
+        if (actBadge) actBadge.classList.toggle('visible', hasErrors && activeTab !== 'activity');
+
+        const readyCount = tasks.filter(t => t.status === 'ready').length;
+        const taskBadge = document.getElementById('badge-tasks');
+        if (taskBadge) taskBadge.classList.toggle('visible', readyCount > 0 && activeTab !== 'tasks');
+      }
 
       // Modal overlay click-to-close
       document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -2393,6 +2405,7 @@
         if (sortDir === 'asc') filtered = [...filtered].reverse();
 
         document.getElementById('activityCount').textContent = filtered.length;
+        updateSidebarBadges();
 
         if (filtered.length === 0) {
           feed.innerHTML = `
@@ -3114,6 +3127,7 @@
         populateTagDropdown();
 
         document.getElementById('taskCount').textContent = filtered.length;
+        updateSidebarBadges();
 
         if (filtered.length === 0) {
           container.innerHTML = `
