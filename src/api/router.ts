@@ -38,6 +38,7 @@ import type { RepoManager } from "../projects/repo-manager.js";
 import type { ToolStore } from "../tools/store.js";
 import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
+import { TOOL_PROFILES, getProfile } from "../tools/profiles.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("api-router");
@@ -282,6 +283,19 @@ export class ApiRouter {
           if (!a) sendJson(res, 404, { error: "Tool account not found" });
           else sendJson(res, 200, { account: a });
         }
+        return true;
+      }
+
+      // ── Tool Profiles ──
+      if (path === "/api/tools/profiles") {
+        sendJson(res, 200, { profiles: TOOL_PROFILES });
+        return true;
+      }
+      const profileMatch = path.match(/^\/api\/tools\/profiles\/([^/]+)$/);
+      if (profileMatch) {
+        const profile = getProfile(decodeURIComponent(profileMatch[1]));
+        if (!profile) sendJson(res, 404, { error: "Profile not found" });
+        else sendJson(res, 200, { profile });
         return true;
       }
 
@@ -569,6 +583,35 @@ export class ApiRouter {
           const result = this.repoManager.pullRepo(projectId, repoName);
           sendJson(res, result.success ? 200 : 500, { result });
         }
+        return true;
+      }
+
+      // ── Apply tool profile to an agent ──
+      // POST /api/tools/profiles/:id/apply  body: { agentId: string }
+      const profileApplyMatch = path.match(/^\/api\/tools\/profiles\/([^/]+)\/apply$/);
+      if (profileApplyMatch && body) {
+        const profile = getProfile(decodeURIComponent(profileApplyMatch[1]));
+        if (!profile) {
+          sendJson(res, 404, { error: "Profile not found" });
+          return true;
+        }
+        if (!this.agentCrudStore) {
+          sendJson(res, 503, { error: "Agent store not available" });
+          return true;
+        }
+        const { agentId } = body as { agentId?: string };
+        if (!agentId) {
+          sendJson(res, 400, { error: "Missing required field: agentId" });
+          return true;
+        }
+        const agent = this.agentCrudStore.get(agentId);
+        if (!agent) {
+          sendJson(res, 404, { error: `Agent '${agentId}' not found` });
+          return true;
+        }
+        const updated = this.agentCrudStore.update(agentId, { tools: profile.allowedTools });
+        log.info({ agentId, profileId: profile.id, tools: profile.allowedTools }, "profile applied to agent");
+        sendJson(res, 200, { agent: updated, profile: profile.id, appliedTools: profile.allowedTools });
         return true;
       }
 

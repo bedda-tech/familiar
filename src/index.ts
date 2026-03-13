@@ -481,6 +481,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const scheduleStore = new ScheduleStore(db);
   const projectStore = new ProjectStore(db);
   const toolStore = new ToolStore(db);
+  toolStore.seed(); // populate registry on first run (INSERT OR IGNORE)
   const toolAccountStore = new ToolAccountStore(db);
 
   const claude = new ClaudeCLI(config.claude);

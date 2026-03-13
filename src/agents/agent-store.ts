@@ -8,6 +8,7 @@
 
 import type Database from "better-sqlite3";
 import type { Agent, CreateAgentInput, UpdateAgentInput } from "./types.js";
+import { TOOL_PROFILES } from "../tools/profiles.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("agent-crud-store");
@@ -73,6 +74,17 @@ export class AgentCrudStore {
         UPDATE agents SET project_id = 'job-hunt'  WHERE project_id IS NULL AND id IN ('greenhouse','lever','ashby','linkedin');
         UPDATE agents SET project_id = 'job-hunt'  WHERE project_id IS NULL AND id LIKE 'job-%';
       `);
+    }
+
+    // Backfill tools (allowedTools) from profiles for agents that have none set.
+    // Only sets tools where currently NULL — never overwrites custom overrides.
+    const backfillTools = this.db.prepare(
+      "UPDATE agents SET tools = ? WHERE id = ? AND tools IS NULL",
+    );
+    for (const profile of TOOL_PROFILES) {
+      for (const agentId of profile.defaultAgents ?? []) {
+        backfillTools.run(JSON.stringify(profile.allowedTools), agentId);
+      }
     }
   }
 

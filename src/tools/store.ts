@@ -6,6 +6,7 @@
 
 import type Database from "better-sqlite3";
 import type { Tool, CreateToolInput, UpdateToolInput } from "./types.js";
+import { TOOL_REGISTRY } from "./registry.js";
 import { getLogger } from "../util/logger.js";
 
 const log = getLogger("tool-store");
@@ -158,5 +159,37 @@ export class ToolStore {
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as count FROM tools").get() as { count: number };
     return row.count;
+  }
+
+  /**
+   * Seed the tools table from the built-in registry.
+   * Skips entries that already exist (INSERT OR IGNORE).
+   * Call once at startup to ensure the registry is populated.
+   */
+  seed(): number {
+    let seeded = 0;
+    for (const entry of TOOL_REGISTRY) {
+      const result = this.db
+        .prepare(
+          `INSERT OR IGNORE INTO tools (id, name, type, description, config, cli_command, binary_path, version, enabled)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          entry.id,
+          entry.name,
+          entry.type,
+          entry.description ?? null,
+          entry.config ? JSON.stringify(entry.config) : null,
+          entry.cli_command ?? null,
+          entry.binary_path ?? null,
+          entry.version ?? null,
+          entry.enabled !== false ? 1 : 0,
+        );
+      if (result.changes > 0) seeded++;
+    }
+    if (seeded > 0) {
+      log.info({ seeded }, "tool registry seeded");
+    }
+    return seeded;
   }
 }

@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { ToolStore } from "./store.js";
 import { ToolAccountStore } from "./account-store.js";
+import { TOOL_PROFILES, getProfile, profileForAgent } from "./profiles.js";
+import { TOOL_REGISTRY } from "./registry.js";
 
 function makeDb(): Database.Database {
   const db = new Database(":memory:");
@@ -230,5 +232,84 @@ describe("ToolAccountStore", () => {
     const accounts = accountStore.list("bird");
     expect(accounts[0].account_name).toBe("aaa"); // default comes first
     expect(accounts[1].account_name).toBe("zzz");
+  });
+});
+
+describe("ToolStore.seed()", () => {
+  it("seeds all registry tools on first call", () => {
+    const db = makeDb();
+    const store = new ToolStore(db);
+    const seeded = store.seed();
+    expect(seeded).toBe(TOOL_REGISTRY.length);
+    expect(store.count()).toBe(TOOL_REGISTRY.length);
+  });
+
+  it("seed is idempotent — second call adds nothing", () => {
+    const db = makeDb();
+    const store = new ToolStore(db);
+    store.seed();
+    const seededAgain = store.seed();
+    expect(seededAgain).toBe(0);
+    expect(store.count()).toBe(TOOL_REGISTRY.length);
+  });
+
+  it("seed does not overwrite manually updated tools", () => {
+    const db = makeDb();
+    const store = new ToolStore(db);
+    store.seed();
+    store.update("gh", { description: "Custom description" });
+    store.seed(); // second seed should not reset the description
+    expect(store.get("gh")?.description).toBe("Custom description");
+  });
+});
+
+describe("Tool Profiles", () => {
+  it("all profiles have required fields", () => {
+    for (const p of TOOL_PROFILES) {
+      expect(p.id).toBeTruthy();
+      expect(p.name).toBeTruthy();
+      expect(p.allowedTools.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("getProfile returns profile by ID", () => {
+    const p = getProfile("engineering");
+    expect(p).toBeDefined();
+    expect(p!.allowedTools).toContain("Bash");
+    expect(p!.allowedTools).toContain("Edit");
+  });
+
+  it("getProfile returns undefined for unknown ID", () => {
+    expect(getProfile("no-such-profile")).toBeUndefined();
+  });
+
+  it("infra profile has no Write or Edit (read-only)", () => {
+    const p = getProfile("infra");
+    expect(p).toBeDefined();
+    expect(p!.allowedTools).not.toContain("Write");
+    expect(p!.allowedTools).not.toContain("Edit");
+  });
+
+  it("profileForAgent returns correct profile for known agent", () => {
+    expect(profileForAgent("familiar-engineering")).toBe("engineering");
+    expect(profileForAgent("infra-agent")).toBe("infra");
+    expect(profileForAgent("greenhouse-pipeline")).toBe("job-hunt");
+    expect(profileForAgent("content")).toBe("content");
+  });
+
+  it("profileForAgent returns undefined for unknown agent", () => {
+    expect(profileForAgent("unknown-agent-xyz")).toBeUndefined();
+  });
+
+  it("each agent appears in at most one profile", () => {
+    const seen = new Map<string, string>();
+    for (const profile of TOOL_PROFILES) {
+      for (const agentId of profile.defaultAgents ?? []) {
+        if (seen.has(agentId)) {
+          throw new Error(`Agent '${agentId}' appears in profiles '${seen.get(agentId)}' and '${profile.id}'`);
+        }
+        seen.set(agentId, profile.id);
+      }
+    }
   });
 });

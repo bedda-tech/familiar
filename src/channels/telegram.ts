@@ -21,10 +21,17 @@ export class TelegramChannel implements Channel {
   private commandHandlers = new Map<string, (msg: IncomingMessage) => Promise<void>>();
   private queues = new Map<string, PQueue>();
   private sendQueues = new Map<string, PQueue>();
+  private running = false;
 
   constructor(private config: TelegramConfig) {
     this.bot = new Bot(config.botToken);
     this.allowedUsers = new Set(config.allowedUsers);
+    this.setupHandlers();
+  }
+
+  /** Create a fresh Bot instance and re-wire all handlers. */
+  private recreateBot(): void {
+    this.bot = new Bot(this.config.botToken);
     this.setupHandlers();
   }
 
@@ -213,31 +220,72 @@ export class TelegramChannel implements Channel {
 
   async start(): Promise<void> {
     log.info("starting Telegram bot");
-    const startWithRetry = async (attempt = 1): Promise<void> => {
+    this.running = true;
+    this.pollingLoop();
+  }
+
+  /**
+   * Force-terminate any stale polling session from a previous process.
+   * A getUpdates call with timeout=0 makes Telegram drop the old long-poll
+   * connection. The 409 we might get here IS the old session being killed.
+   */
+  private async killStaleSession(): Promise<void> {
+    try {
+      await this.bot.api.deleteWebhook();
+      await this.bot.api.getUpdates({ offset: -1, limit: 1, timeout: 0 });
+    } catch (err) {
+      if (err instanceof GrammyError && err.error_code === 409) {
+        // Expected — we just terminated the old session
+        log.info("terminated stale polling session");
+      } else {
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, "killStaleSession warning");
+      }
+    }
+  }
+
+  /**
+   * Persistent polling loop — never gives up. On any error (409 conflict,
+   * network failure, etc.) it kills stale sessions, backs off, and retries
+   * with a fresh Bot instance.
+   * Backoff: 5s, 10s, 15s, … capped at 60s. Resets on successful connection.
+   */
+  private async pollingLoop(): Promise<void> {
+    let failures = 0;
+
+    while (this.running) {
       try {
         await this.bot.start({
           onStart: (info) => {
-            log.info({ username: info.username }, "Telegram bot started");
+            log.info({ username: info.username }, "Telegram bot connected");
+            failures = 0;
           },
         });
+        // bot.start() resolved normally (stop() was called)
+        break;
       } catch (err) {
-        if (err instanceof GrammyError && err.error_code === 409 && attempt <= 5) {
-          const delay = attempt * 5000;
-          log.warn({ attempt, delay }, "Telegram 409 conflict — retrying after delay");
-          await new Promise((r) => setTimeout(r, delay));
-          return startWithRetry(attempt + 1);
-        }
-        throw err;
+        if (!this.running) break;
+        failures++;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const delay = Math.min(failures * 5000, 60_000);
+        log.warn(
+          { attempt: failures, delayMs: delay, err: errMsg },
+          "Telegram bot error — reconnecting",
+        );
+        // Fresh bot instance to avoid stale grammY internal state
+        this.recreateBot();
+        // Kill any lingering polling session from the old process
+        await this.killStaleSession();
+        // Brief pause for Telegram to fully release the session
+        await new Promise((r) => setTimeout(r, delay));
+        if (!this.running) break;
       }
-    };
-    startWithRetry().catch((err) => {
-      log.error({ err: err instanceof Error ? err.message : String(err) }, "Telegram bot failed to start");
-    });
+    }
   }
 
   async stop(): Promise<void> {
     log.info("stopping Telegram bot");
-    this.bot.stop();
+    this.running = false;
+    try { this.bot.stop(); } catch { /* may not be running */ }
   }
 
   private getQueue(chatId: string): PQueue {

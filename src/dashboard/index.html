@@ -2730,7 +2730,8 @@
         if (!sel) return;
         const allTags = new Set();
         tasks.forEach(t => {
-          try { let tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); tags.forEach(tag => allTags.add(tag)); } catch {}
+          const tags = Array.isArray(t.tags) ? t.tags : [];
+          tags.forEach(tag => allTags.add(tag));
         });
         const current = sel.value;
         sel.innerHTML = '<option value="">Filter by tag...</option>' +
@@ -2894,8 +2895,7 @@
             if (!haystack.includes(searchFilter)) return false;
           }
           if (taskTagFilters.size > 0) {
-            let tags = [];
-            try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
+            const tags = Array.isArray(t.tags) ? t.tags : [];
             for (const tf of taskTagFilters) { if (!tags.includes(tf)) return false; }
           }
           return true;
@@ -2956,8 +2956,7 @@
             <tbody>`;
 
         for (const t of filtered) {
-          let tags = [];
-          try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
+          const tags = Array.isArray(t.tags) ? t.tags : [];
 
           const tagsHtml = tags.length
             ? tags.map(tag => `<span style="font-size:9px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 3px;margin-right:2px">${esc(tag)}</span>`).join('')
@@ -3044,8 +3043,7 @@
           document.getElementById('taskFormStatus').value = t.status || 'ready';
           document.getElementById('taskFormRecurring').checked = !!t.recurring;
           document.getElementById('taskFormRecurrenceSchedule').value = t.recurrence_schedule || '';
-          let tags = [];
-          try { tags = t.tags ? JSON.parse(t.tags) : []; if (typeof tags === 'string') tags = JSON.parse(tags); } catch {}
+          const tags = Array.isArray(t.tags) ? t.tags : [];
           document.getElementById('taskFormTags').value = tags.join(', ');
           toggleRecurrenceField();
         } else {
@@ -3217,8 +3215,7 @@
         schedules.forEach(s => { if (s.project_id) projSchedCount[s.project_id] = (projSchedCount[s.project_id] || 0) + 1; });
 
         grid.innerHTML = projects.map(p => {
-          let tags = [];
-          try { tags = p.tags ? JSON.parse(p.tags) : []; } catch {}
+          const tags = Array.isArray(p.tags) ? p.tags : [];
           const tagsHtml = tags.length
             ? tags.map(t => `<span class="badge badge-gray">${esc(t)}</span>`).join('')
             : '';
@@ -3263,8 +3260,7 @@
           document.getElementById('projectFormDescription').value = p.description || '';
           document.getElementById('projectFormPath').value = p.path || '';
           document.getElementById('projectFormContextFile').value = p.context_file || '';
-          let tags = [];
-          try { tags = p.tags ? JSON.parse(p.tags) : []; } catch {}
+          const tags = Array.isArray(p.tags) ? p.tags : [];
           document.getElementById('projectFormTags').value = tags.join(', ');
           document.getElementById('projectFormEnabled').checked = !!p.enabled;
         } else {
