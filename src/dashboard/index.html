@@ -127,44 +127,167 @@
         50% { opacity: 0.4; }
       }
 
-      /* ── Tab bar ── */
-      .tab-bar {
-        background: var(--bg-card);
-        border-bottom: 1px solid var(--border);
-        padding: 0 24px;
+      /* ── Sidebar layout ── */
+      .layout {
         display: flex;
-        gap: 0;
-        overflow-x: auto;
+        height: calc(100vh - 49px);
+        overflow: hidden;
       }
 
-      .tab-btn {
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid transparent;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-weight: 600;
-        padding: 10px 18px;
+      .sidebar {
+        width: 200px;
+        min-width: 200px;
+        background: var(--bg-card);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        overflow-x: hidden;
+        transition: width 0.2s ease, min-width 0.2s ease;
+        flex-shrink: 0;
+      }
+
+      .sidebar.collapsed {
+        width: 52px;
+        min-width: 52px;
+      }
+
+      .sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
         cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        white-space: nowrap;
-        transition: color 0.15s, border-color 0.15s;
+        color: var(--text-muted);
+        font-size: 16px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        transition: color 0.15s;
+        user-select: none;
       }
 
-      .tab-btn:hover { color: var(--text); }
-      .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+      .sidebar-toggle:hover { color: var(--text); background: var(--bg-hover); }
+
+      .sidebar-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        padding: 8px 0;
+      }
+
+      .sidebar-spacer { flex: 1; }
+
+      .sidebar-group {
+        margin-bottom: 4px;
+      }
+
+      .sidebar-group-label {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--text-muted);
+        padding: 6px 14px 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        opacity: 1;
+        transition: opacity 0.15s;
+      }
+
+      .sidebar.collapsed .sidebar-group-label { opacity: 0; }
+
+      .sidebar-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        cursor: pointer;
+        color: var(--text-muted);
+        transition: color 0.15s, background 0.1s;
+        border-left: 2px solid transparent;
+        white-space: nowrap;
+        position: relative;
+      }
+
+      .sidebar-item:hover { color: var(--text); background: var(--bg-hover); }
+
+      .sidebar-item.active {
+        color: var(--accent);
+        border-left-color: var(--accent);
+        background: rgba(88, 166, 255, 0.06);
+      }
+
+      .sidebar-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      .sidebar-label {
+        font-size: 12px;
+        font-weight: 500;
+        overflow: hidden;
+        transition: opacity 0.15s, width 0.2s;
+        opacity: 1;
+      }
+
+      .sidebar.collapsed .sidebar-label { opacity: 0; width: 0; }
+
+      .sidebar-badge {
+        margin-left: auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--red);
+        flex-shrink: 0;
+        display: none;
+      }
+
+      .sidebar-badge.visible { display: block; }
+      .sidebar.collapsed .sidebar-badge { display: none !important; }
+
+      /* Tooltip when collapsed */
+      .sidebar.collapsed .sidebar-item::after {
+        content: attr(data-label);
+        position: absolute;
+        left: 54px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s;
+        z-index: 200;
+      }
+
+      .sidebar.collapsed .sidebar-item:hover::after { opacity: 1; }
 
       /* ── Main layout ── */
       main {
+        flex: 1;
+        overflow-y: auto;
         max-width: 1200px;
-        margin: 0 auto;
         padding: 24px;
       }
 
       .tab-panel { display: none; }
       .tab-panel.active { display: block; }
+
+      @media (max-width: 900px) {
+        .sidebar { width: 52px; min-width: 52px; }
+        .sidebar .sidebar-label { opacity: 0; width: 0; }
+        .sidebar .sidebar-group-label { opacity: 0; }
+        .sidebar .sidebar-badge { display: none !important; }
+      }
 
       /* ── Section header ── */
       .section-header {
@@ -841,7 +964,7 @@
       #tab-chat.active {
         display: flex !important;
         flex-direction: column;
-        height: calc(100vh - 136px); /* header + tabbar + 2×24px main padding */
+        height: calc(100vh - 49px - 48px); /* 100% of main scroll area minus 48px main padding */
       }
 
       .chat-messages {
@@ -1040,11 +1163,12 @@
       @media (max-width: 600px) {
         main { padding: 12px; }
         header { padding: 10px 12px; gap: 8px; }
-        .tab-bar { padding: 0 12px; }
+        .sidebar { width: 44px; min-width: 44px; }
+        .sidebar .sidebar-label, .sidebar .sidebar-group-label { opacity: 0; width: 0; overflow: hidden; }
         .form-row { grid-template-columns: 1fr; }
         .card-grid { grid-template-columns: 1fr; }
         .hide-mobile { display: none; }
-        #tab-chat.active { height: calc(100vh - 112px); }
+        #tab-chat.active { height: calc(100vh - 49px - 24px); }
       }
     </style>
   </head>
@@ -1063,19 +1187,79 @@
       </div>
     </header>
 
-    <!-- Tab bar -->
-    <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="activity">Activity</button>
-      <button class="tab-btn" data-tab="agents">Agents</button>
-      <button class="tab-btn" data-tab="schedules">Schedules</button>
-      <button class="tab-btn" data-tab="tasks">Tasks</button>
-      <button class="tab-btn" data-tab="projects">Projects</button>
-      <button class="tab-btn" data-tab="tools">Tools</button>
-      <button class="tab-btn" data-tab="templates">Templates</button>
-      <button class="tab-btn" data-tab="runs">Runs</button>
-      <button class="tab-btn" data-tab="costs">Costs</button>
-      <button class="tab-btn" data-tab="chat">Chat</button>
-    </nav>
+    <!-- Layout: sidebar + main -->
+    <div class="layout">
+      <nav class="sidebar" id="sidebar">
+        <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</div>
+        <div class="sidebar-content">
+          <!-- Activity -->
+          <div class="sidebar-group">
+            <div class="sidebar-item active" data-tab="activity" data-label="Activity" onclick="showTab('activity')">
+              <span class="sidebar-icon">⊹</span>
+              <span class="sidebar-label">Activity</span>
+              <span class="sidebar-badge" id="badge-activity"></span>
+            </div>
+          </div>
+          <!-- Fleet -->
+          <div class="sidebar-group">
+            <div class="sidebar-group-label">Fleet</div>
+            <div class="sidebar-item" data-tab="agents" data-label="Agents" onclick="showTab('agents')">
+              <span class="sidebar-icon">◎</span>
+              <span class="sidebar-label">Agents</span>
+            </div>
+            <div class="sidebar-item" data-tab="schedules" data-label="Schedules" onclick="showTab('schedules')">
+              <span class="sidebar-icon">⊛</span>
+              <span class="sidebar-label">Schedules</span>
+            </div>
+            <div class="sidebar-item" data-tab="runs" data-label="Runs" onclick="showTab('runs')">
+              <span class="sidebar-icon">▷</span>
+              <span class="sidebar-label">Runs</span>
+            </div>
+          </div>
+          <!-- Work -->
+          <div class="sidebar-group">
+            <div class="sidebar-group-label">Work</div>
+            <div class="sidebar-item" data-tab="tasks" data-label="Tasks" onclick="showTab('tasks')">
+              <span class="sidebar-icon">☑</span>
+              <span class="sidebar-label">Tasks</span>
+              <span class="sidebar-badge" id="badge-tasks"></span>
+            </div>
+            <div class="sidebar-item" data-tab="projects" data-label="Projects" onclick="showTab('projects')">
+              <span class="sidebar-icon">⊡</span>
+              <span class="sidebar-label">Projects</span>
+            </div>
+          </div>
+          <!-- System -->
+          <div class="sidebar-group">
+            <div class="sidebar-group-label">System</div>
+            <div class="sidebar-item" data-tab="tools" data-label="Tools" onclick="showTab('tools')">
+              <span class="sidebar-icon">⚙</span>
+              <span class="sidebar-label">Tools</span>
+            </div>
+            <div class="sidebar-item" data-tab="templates" data-label="Templates" onclick="showTab('templates')">
+              <span class="sidebar-icon">▤</span>
+              <span class="sidebar-label">Templates</span>
+            </div>
+          </div>
+          <!-- Analytics -->
+          <div class="sidebar-group">
+            <div class="sidebar-group-label">Analytics</div>
+            <div class="sidebar-item" data-tab="costs" data-label="Costs" onclick="showTab('costs')">
+              <span class="sidebar-icon">◑</span>
+              <span class="sidebar-label">Costs</span>
+            </div>
+          </div>
+          <!-- Spacer pushes Chat to bottom -->
+          <div class="sidebar-spacer"></div>
+          <!-- Chat -->
+          <div class="sidebar-group">
+            <div class="sidebar-item" data-tab="chat" data-label="Chat" onclick="showTab('chat')">
+              <span class="sidebar-icon">✉</span>
+              <span class="sidebar-label">Chat</span>
+            </div>
+          </div>
+        </div>
+      </nav>
 
     <!-- Tab panels -->
     <main>
@@ -1344,6 +1528,7 @@
         </div>
       </div>
     </main>
+    </div><!-- /.layout -->
 
     <!-- ── Agent Modal ── -->
     <div id="agentModal" class="modal-overlay">
@@ -1847,19 +2032,32 @@
         setTimeout(handleHashRoute, 100); // handle direct #/runs/ID links after data loads
       }
 
-      // Tab switching
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const tab = btn.dataset.tab;
-          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-          btn.classList.add('active');
-          document.getElementById('tab-' + tab).classList.add('active');
-          activeTab = tab;
-          if (tab === 'runs') loadRuns();
-          if (tab === 'costs') loadCosts();
-        });
-      });
+      // Sidebar tab switching
+      function showTab(tab) {
+        document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        const item = document.querySelector(`.sidebar-item[data-tab="${tab}"]`);
+        if (item) item.classList.add('active');
+        const panel = document.getElementById('tab-' + tab);
+        if (panel) panel.classList.add('active');
+        activeTab = tab;
+        if (tab === 'runs') loadRuns();
+        if (tab === 'costs') loadCosts();
+      }
+
+      // Sidebar collapse toggle
+      function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const collapsed = sb.classList.toggle('collapsed');
+        localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+      }
+
+      // Restore sidebar state
+      (function() {
+        if (localStorage.getItem('sidebarCollapsed') === '1') {
+          document.getElementById('sidebar').classList.add('collapsed');
+        }
+      })();
 
       // Modal overlay click-to-close
       document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -4057,14 +4255,7 @@
       function handleHashRoute() {
         const m = location.hash.match(/^#\/runs\/(\d+)$/);
         if (m && token) {
-          // Switch to runs tab
-          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-          const runsBtn = document.querySelector('.tab-btn[data-tab="runs"]');
-          if (runsBtn) runsBtn.classList.add('active');
-          const runsPanel = document.getElementById('tab-runs');
-          if (runsPanel) runsPanel.classList.add('active');
-          activeTab = 'runs';
+          showTab('runs');
           loadRuns();
           openRunDetail(parseInt(m[1], 10));
         }
