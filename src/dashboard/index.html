@@ -1159,6 +1159,80 @@
       .budget-bar { height: 4px; border-radius: 2px; background: var(--green); }
       .budget-bar.over { background: var(--red); }
 
+      /* ── Overview tab ── */
+      .ov-stat-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      @media (max-width: 900px) { .ov-stat-bar { grid-template-columns: repeat(2, 1fr); } }
+      .ov-stat {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      .ov-stat-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+      .ov-stat-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-bright);
+        line-height: 1;
+      }
+      .ov-stat-sub { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+      .ov-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 900px) { .ov-grid { grid-template-columns: 1fr; } }
+
+      .ov-section {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .ov-section-title {
+        padding: 9px 14px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .ov-title-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--text-muted); flex-shrink: 0;
+      }
+      .ov-title-dot.running { background: var(--green); animation: pulse 2s ease-in-out infinite; }
+
+      .ov-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: 12px;
+      }
+      .ov-row:last-child { border-bottom: none; }
+      .ov-row:hover { background: var(--bg-hover); }
+      .ov-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ov-row-meta { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+      .ov-empty { padding: 24px 14px; text-align: center; color: var(--text-muted); font-size: 11px; }
+      .ov-empty-ok { color: var(--green); }
+      .ov-section-full { grid-column: 1 / -1; }
+      .ov-feed-scroll { max-height: 280px; overflow-y: auto; }
+
       /* ── Responsive ── */
       @media (max-width: 600px) {
         main { padding: 12px; }
@@ -1192,9 +1266,16 @@
       <nav class="sidebar" id="sidebar">
         <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</div>
         <div class="sidebar-content">
+          <!-- Overview -->
+          <div class="sidebar-group">
+            <div class="sidebar-item active" data-tab="overview" data-label="Overview" onclick="showTab('overview')">
+              <span class="sidebar-icon">⊞</span>
+              <span class="sidebar-label">Overview</span>
+            </div>
+          </div>
           <!-- Activity -->
           <div class="sidebar-group">
-            <div class="sidebar-item active" data-tab="activity" data-label="Activity" onclick="showTab('activity')">
+            <div class="sidebar-item" data-tab="activity" data-label="Activity" onclick="showTab('activity')">
               <span class="sidebar-icon">⊹</span>
               <span class="sidebar-label">Activity</span>
               <span class="sidebar-badge" id="badge-activity"></span>
@@ -1263,8 +1344,92 @@
 
     <!-- Tab panels -->
     <main>
+      <!-- ── Overview ── -->
+      <div id="tab-overview" class="tab-panel active">
+        <div class="section-header">
+          <h2>Overview</h2>
+        </div>
+        <!-- Status bar -->
+        <div class="ov-stat-bar">
+          <div class="ov-stat" id="ovStatRunning">
+            <div class="ov-stat-label">Now Running</div>
+            <div class="ov-stat-value">0</div>
+            <div class="ov-stat-sub">active agents</div>
+          </div>
+          <div class="ov-stat" id="ovStatErrors">
+            <div class="ov-stat-label">Errors (24h)</div>
+            <div class="ov-stat-value">—</div>
+            <div class="ov-stat-sub">loading…</div>
+          </div>
+          <div class="ov-stat" id="ovStatRuns">
+            <div class="ov-stat-label">Total Runs (7d)</div>
+            <div class="ov-stat-value">—</div>
+            <div class="ov-stat-sub">loading…</div>
+          </div>
+          <div class="ov-stat" id="ovStatCost">
+            <div class="ov-stat-label">Total Cost (7d)</div>
+            <div class="ov-stat-value">—</div>
+            <div class="ov-stat-sub">loading…</div>
+          </div>
+        </div>
+        <!-- Grid: 2 columns -->
+        <div class="ov-grid">
+          <!-- Now Running -->
+          <div class="ov-section">
+            <div class="ov-section-title">
+              <span class="ov-title-dot running" id="ovRunningDot"></span>
+              Now Running
+            </div>
+            <div id="ovNowRunning">
+              <div class="ov-empty">No agents running</div>
+            </div>
+          </div>
+          <!-- Recent Errors -->
+          <div class="ov-section">
+            <div class="ov-section-title">
+              <span style="color:var(--red)">✗</span>
+              Recent Errors
+            </div>
+            <div id="ovRecentErrors">
+              <div class="ov-empty">Loading…</div>
+            </div>
+          </div>
+          <!-- Next Up -->
+          <div class="ov-section">
+            <div class="ov-section-title">
+              <span>◷</span>
+              Next Up
+            </div>
+            <div id="ovNextUp">
+              <div class="ov-empty">Loading…</div>
+            </div>
+          </div>
+          <!-- Cost Sparkline -->
+          <div class="ov-section">
+            <div class="ov-section-title">
+              <span>◑</span>
+              Cost (7d)
+            </div>
+            <div style="padding:12px 14px 10px" id="ovSparkline">
+              <div class="ov-empty">Loading…</div>
+            </div>
+          </div>
+          <!-- Activity Feed (full width) -->
+          <div class="ov-section ov-section-full">
+            <div class="ov-section-title">
+              <span>⊹</span>
+              Activity Feed
+              <button class="btn btn-sm" style="margin-left:auto" onclick="loadActivity();renderOvFeed()">Refresh</button>
+            </div>
+            <div class="ov-feed-scroll" id="ovFeed">
+              <div class="ov-empty">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Activity ── -->
-      <div id="tab-activity" class="tab-panel active">
+      <div id="tab-activity" class="tab-panel">
         <div class="section-header">
           <h2>Activity</h2>
           <span id="activityCount" class="count-badge">0</span>
@@ -1984,7 +2149,7 @@
       // ── State ─────────────────────────────────────────────────────────
       let token = localStorage.getItem('familiarToken') || '';
       let ws = null;
-      let activeTab = 'activity';
+      let activeTab = 'overview';
       let activeProjectFilter = '';
       let activityEntries = [];
       let agents = [];
@@ -1997,6 +2162,8 @@
       let confirmCallback = null;
       let runsData = [];   // cache for client-side sort
       let costsData = [];  // cache for client-side sort
+      let nowRunning = new Map(); // scheduleId -> { agentId, scheduleId, startedAt }
+      let _ovTimer = null;
 
       // ── Sort helpers ──────────────────────────────────────────────────────
       function _loadSort(tab) { try { return JSON.parse(localStorage.getItem('sort_' + tab) || 'null') || {}; } catch { return {}; } }
@@ -2042,6 +2209,8 @@
         if (panel) panel.classList.add('active');
         activeTab = tab;
         updateSidebarBadges();
+        if (tab === 'overview') { loadOverview(); }
+        else { if (_ovTimer) { clearInterval(_ovTimer); _ovTimer = null; } }
         if (tab === 'runs') loadRuns();
         if (tab === 'costs') loadCosts();
       }
@@ -2159,6 +2328,21 @@
           };
           prependActivity(entry, true);
 
+          // Track now-running for Overview tab
+          if (msg.type === 'schedule:started') {
+            nowRunning.set(msg.scheduleId, { agentId: msg.agentId, scheduleId: msg.scheduleId, startedAt: Date.now() });
+          } else if (msg.type === 'schedule:completed') {
+            nowRunning.delete(msg.scheduleId);
+          }
+          if (activeTab === 'overview') {
+            renderOvNowRunning();
+            renderOvFeed();
+            if (msg.type === 'schedule:completed' && msg.isError) {
+              api('GET', '/api/runs?limit=5&is_error=1').catch(() => ({ runs: [] }))
+                .then(d => renderOvRecentErrors(d.runs || []));
+            }
+          }
+
           if (msg.type === 'schedule:completed' && activeTab === 'schedules') {
             loadSchedules();
           }
@@ -2194,6 +2378,7 @@
         loadProjects();
         loadTools();
         loadTemplates();
+        loadOverview();
       }
 
       // ── API helpers ───────────────────────────────────────────────────
@@ -2387,6 +2572,7 @@
         activityEntries.unshift(entry);
         if (activityEntries.length > 200) activityEntries.pop();
         if (activeTab === 'activity') renderActivity(isNew ? entry : null);
+        if (activeTab === 'overview') renderOvFeed();
       }
 
       function renderActivity(newEntry = null) {
@@ -4281,6 +4467,161 @@
       document.getElementById('runDetailModal').addEventListener('click', e => {
         if (e.target === document.getElementById('runDetailModal')) closeRunDetail();
       });
+
+      // ── Overview tab ──────────────────────────────────────────────────────
+
+      async function loadOverview() {
+        if (!token) return;
+        try {
+          const [m1d, m7d, errRuns, dailyCosts] = await Promise.all([
+            api('GET', '/api/metrics?period=1d').catch(() => ({ summary: {} })),
+            api('GET', '/api/metrics?period=7d').catch(() => ({ summary: {} })),
+            api('GET', '/api/runs?limit=5&is_error=1').catch(() => ({ runs: [] })),
+            api('GET', '/api/cost/daily?period=7d').catch(() => ({ days: [], totalCostUsd: 0 })),
+          ]);
+          renderOvStatBar(m1d.summary || {}, m7d.summary || {});
+          renderOvRecentErrors(errRuns.runs || []);
+          renderOvNextUp();
+          renderOvSparkline(dailyCosts.days || [], dailyCosts.totalCostUsd || 0);
+          renderOvFeed();
+          renderOvNowRunning();
+          // start countdown ticker
+          if (_ovTimer) clearInterval(_ovTimer);
+          _ovTimer = setInterval(() => {
+            if (activeTab !== 'overview') { clearInterval(_ovTimer); _ovTimer = null; return; }
+            renderOvNowRunning();
+            renderOvNextUp();
+          }, 5000);
+        } catch (e) {
+          console.error('loadOverview', e);
+        }
+      }
+
+      function renderOvStatBar(s1d, s7d) {
+        const total1d = s1d.totalRuns || 0;
+        const errs24 = total1d - Math.round((s1d.successRate || 1) * total1d);
+        const errColor = errs24 > 0 ? 'var(--red)' : 'var(--green)';
+        const cost7 = s7d.totalCostUsd || 0;
+        document.getElementById('ovStatErrors').innerHTML = `
+          <div class="ov-stat-label">Errors (24h)</div>
+          <div class="ov-stat-value" style="color:${errColor}">${errs24}</div>
+          <div class="ov-stat-sub">${total1d} runs today</div>`;
+        document.getElementById('ovStatRuns').innerHTML = `
+          <div class="ov-stat-label">Total Runs (7d)</div>
+          <div class="ov-stat-value">${s7d.totalRuns || 0}</div>
+          <div class="ov-stat-sub">${s7d.activeAgents || 0} active agents</div>`;
+        document.getElementById('ovStatCost').innerHTML = `
+          <div class="ov-stat-label">Total Cost (7d)</div>
+          <div class="ov-stat-value">$${cost7.toFixed(2)}</div>
+          <div class="ov-stat-sub">$${(cost7 / 7).toFixed(2)}/day avg</div>`;
+      }
+
+      function renderOvNowRunning() {
+        const el = document.getElementById('ovNowRunning');
+        if (!el) return;
+        const jobs = [...nowRunning.values()].sort((a, b) => a.startedAt - b.startedAt);
+        const sv = document.getElementById('ovStatRunning');
+        if (sv) sv.innerHTML = `
+          <div class="ov-stat-label">Now Running</div>
+          <div class="ov-stat-value">${jobs.length}</div>
+          <div class="ov-stat-sub">active agents</div>`;
+        if (!jobs.length) {
+          el.innerHTML = '<div class="ov-empty">No agents running</div>';
+          return;
+        }
+        el.innerHTML = jobs.map(j => `
+          <div class="ov-row">
+            <span class="ov-title-dot running" style="flex-shrink:0"></span>
+            <span class="ov-row-name"><code>${esc(j.agentId || j.scheduleId)}</code></span>
+            <span class="ov-row-meta">${formatDuration(Date.now() - j.startedAt)}</span>
+          </div>`).join('');
+      }
+
+      function renderOvRecentErrors(runs) {
+        const el = document.getElementById('ovRecentErrors');
+        if (!el) return;
+        if (!runs.length) {
+          el.innerHTML = '<div class="ov-empty ov-empty-ok">All clear</div>';
+          return;
+        }
+        el.innerHTML = runs.map(r => {
+          const name = r.jobId || r.job_id || '?';
+          return `
+            <div class="ov-row" onclick="openRunDetail(${r.id})" style="cursor:pointer">
+              <span class="ov-row-name" style="color:var(--red)"><code>${esc(name)}</code></span>
+              <span class="ov-row-meta">${esc(formatRelative(r.startedAt || r.started_at))} · ${esc(formatDuration(r.durationMs || r.duration_ms))}</span>
+            </div>`;
+        }).join('');
+      }
+
+      function renderOvNextUp() {
+        const el = document.getElementById('ovNextUp');
+        if (!el) return;
+        const agentNames = {};
+        agents.forEach(a => { agentNames[a.id] = a.name || a.id; });
+        const upcoming = schedules
+          .filter(s => s.enabled && s._nextRun)
+          .sort((a, b) => new Date(a._nextRun) - new Date(b._nextRun))
+          .slice(0, 5);
+        if (!upcoming.length) {
+          el.innerHTML = '<div class="ov-empty">No upcoming runs</div>';
+          return;
+        }
+        el.innerHTML = upcoming.map(s => `
+          <div class="ov-row">
+            <span class="ov-row-name"><code>${esc(agentNames[s.agent_id] || s.agent_id)}</code></span>
+            <span class="ov-row-meta">${esc(formatRelative(s._nextRun))}</span>
+          </div>`).join('');
+      }
+
+      function renderOvSparkline(days, totalCostUsd) {
+        const el = document.getElementById('ovSparkline');
+        if (!el) return;
+        if (!days.length) { el.innerHTML = '<div class="ov-empty">No cost data</div>'; return; }
+        const w = 280, h = 52;
+        const maxVal = Math.max(...days.map(d => d.totalCostUsd || 0), 0.0001);
+        const pts = days.map((d, i) => {
+          const x = days.length > 1 ? (i / (days.length - 1)) * (w - 8) + 4 : w / 2;
+          const y = h - 6 - ((d.totalCostUsd || 0) / maxVal) * (h - 14);
+          return [x, y];
+        });
+        const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+        const fillPts = [...pts, [pts[pts.length-1][0], h-2], [pts[0][0], h-2]];
+        const fillPath = fillPts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ') + 'Z';
+        const circles = pts.map(([x, y], i) => {
+          const d = days[i];
+          const hasError = d.errorCount > 0;
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${hasError ? 'var(--red)' : 'var(--accent)'}" title="${esc(d.day)}: $${(d.totalCostUsd||0).toFixed(4)}"/>`;
+        }).join('');
+        el.innerHTML = `
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">7-day total: $${totalCostUsd.toFixed(2)}</div>
+          <svg viewBox="0 0 ${w} ${h}" height="${h}" style="width:100%;overflow:visible">
+            <path d="${fillPath}" fill="rgba(88,166,255,0.08)"/>
+            <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+            ${circles}
+          </svg>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:4px">
+            <span>${esc(days[0]?.day?.slice(5) || '')}</span>
+            <span>${esc(days[days.length-1]?.day?.slice(5) || '')}</span>
+          </div>`;
+      }
+
+      function renderOvFeed() {
+        const el = document.getElementById('ovFeed');
+        if (!el) return;
+        const entries = activityEntries.slice(0, 20);
+        if (!entries.length) { el.innerHTML = '<div class="ov-empty">No activity yet</div>'; return; }
+        const icons = { schedule_run: '⚙', task_change: '✓', agent_spawn: '◎', chat: '✉', error: '✗' };
+        el.innerHTML = entries.map(e => {
+          const isErr = e.type === 'error';
+          return `
+            <div class="ov-row">
+              <span style="flex-shrink:0;color:${isErr ? 'var(--red)' : 'var(--text-muted)'}">${icons[e.type] || '·'}</span>
+              <span class="ov-row-name" style="${isErr ? 'color:var(--red)' : ''}">${esc(e.summary || '')}</span>
+              <span class="ov-row-meta">${formatRelative(e.created_at)}</span>
+            </div>`;
+        }).join('');
+      }
 
       // ── Costs tab ─────────────────────────────────────────────────────────
 
