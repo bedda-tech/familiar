@@ -221,6 +221,38 @@ export class SessionStore {
       .run(chatId, role, content.slice(0, 10000), costUsd);
   }
 
+  /** Get messages for a chat, ordered newest-first, with optional cursor-based pagination */
+  getMessages(chatId: string, limit: number, before?: string): MessageRecord[] {
+    if (before) {
+      return this.db
+        .prepare(
+          `SELECT id, chat_id, role, content, cost_usd, created_at
+           FROM message_log
+           WHERE chat_id = ? AND created_at < ?
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .all(chatId, before, limit) as MessageRecord[];
+    }
+    return this.db
+      .prepare(
+        `SELECT id, chat_id, role, content, cost_usd, created_at
+         FROM message_log
+         WHERE chat_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(chatId, limit) as MessageRecord[];
+  }
+
+  /** Get total message count for a chat */
+  getMessageCount(chatId: string): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) as count FROM message_log WHERE chat_id = ?")
+      .get(chatId) as { count: number };
+    return row.count;
+  }
+
   /** Get cost summary for a chat */
   getCostSummary(chatId: string): CostSummary {
     const sessionCost = this.db
@@ -272,4 +304,13 @@ export interface CostSummary {
   today: { cost: number; messages: number };
   last24h: number;
   allTime: { cost: number; messages: number };
+}
+
+export interface MessageRecord {
+  id: number;
+  chat_id: string;
+  role: string;
+  content: string;
+  cost_usd: number;
+  created_at: string;
 }

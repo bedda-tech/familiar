@@ -23,6 +23,8 @@
  *   GET  /api/runs/:id                  — get full details for a single run (includes full result_text)
  *   GET  /api/cost/summary              — per-agent cost totals for period
  *   GET  /api/cost/daily                — day-by-day fleet cost for period
+ *   GET  /api/chat/messages             — paginated message history for a chat (chat_id, limit, before?)
+ *   GET  /api/chat/messages/count       — total message count for a chat (chat_id)
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -417,6 +419,31 @@ export class ApiRouter {
         const params = new URLSearchParams(queryString ?? "");
         const limit = parseInt(params.get("limit") ?? "30", 10);
         this.handleAgentCostHistory(decodeURIComponent(agentCostMatch[1]), Math.min(Math.max(limit, 1), 100), res);
+        return true;
+      }
+
+      // ── Chat Messages ──
+      if (path === "/api/chat/messages") {
+        const params = new URLSearchParams(queryString ?? "");
+        const chatId = params.get("chat_id");
+        if (!chatId) {
+          sendJson(res, 400, { error: "Missing required 'chat_id' query parameter" });
+          return true;
+        }
+        const limit = Math.min(Math.max(parseInt(params.get("limit") ?? "50", 10), 1), 200);
+        const before = params.get("before") ?? undefined;
+        this.handleChatMessages(chatId, limit, before, res);
+        return true;
+      }
+
+      if (path === "/api/chat/messages/count") {
+        const params = new URLSearchParams(queryString ?? "");
+        const chatId = params.get("chat_id");
+        if (!chatId) {
+          sendJson(res, 400, { error: "Missing required 'chat_id' query parameter" });
+          return true;
+        }
+        this.handleChatMessageCount(chatId, res);
         return true;
       }
 
@@ -1916,6 +1943,73 @@ When done, summarize what you did.`;
       sendJson(res, 200, { period, summary, agents });
     } catch (e: any) {
       log.error({ err: e }, "metrics query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  // ── Chat Message Handlers ────────────────────────────────────────────
+
+  private handleChatMessages(
+    chatId: string,
+    limit: number,
+    before: string | undefined,
+    res: ServerResponse,
+  ): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    try {
+      let rows: Array<{
+        id: number;
+        chat_id: string;
+        role: string;
+        content: string;
+        cost_usd: number;
+        created_at: string;
+      }>;
+      if (before) {
+        rows = this.db
+          .prepare(
+            `SELECT id, chat_id, role, content, cost_usd, created_at
+             FROM message_log
+             WHERE chat_id = ? AND created_at < ?
+             ORDER BY created_at DESC
+             LIMIT ?`,
+          )
+          .all(chatId, before, limit + 1) as typeof rows;
+      } else {
+        rows = this.db
+          .prepare(
+            `SELECT id, chat_id, role, content, cost_usd, created_at
+             FROM message_log
+             WHERE chat_id = ?
+             ORDER BY created_at DESC
+             LIMIT ?`,
+          )
+          .all(chatId, limit + 1) as typeof rows;
+      }
+      const has_more = rows.length > limit;
+      const messages = rows.slice(0, limit);
+      sendJson(res, 200, { messages, has_more });
+    } catch (e) {
+      log.error({ err: e }, "chat messages query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  private handleChatMessageCount(chatId: string, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    try {
+      const row = this.db
+        .prepare("SELECT COUNT(*) as count FROM message_log WHERE chat_id = ?")
+        .get(chatId) as { count: number };
+      sendJson(res, 200, { chat_id: chatId, count: row.count });
+    } catch (e) {
+      log.error({ err: e }, "chat message count query failed");
       sendJson(res, 500, { error: "Query failed" });
     }
   }
