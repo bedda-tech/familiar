@@ -146,7 +146,7 @@ export class Bridge {
       this.chatChannelMap.set(msg.chatId, ch);
       const requested = msg.text.trim().toLowerCase();
       if (requested) {
-        const valid = ["opus", "sonnet", "haiku"];
+        const valid = ["opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]"];
         if (valid.includes(requested)) {
           this.claude.setModel(requested);
           await this.channelFor(msg.chatId).sendText(
@@ -164,14 +164,14 @@ export class Bridge {
         } else {
           await this.channelFor(msg.chatId).sendText(
             msg.chatId,
-            `Unknown model: ${requested}\nAvailable: opus, sonnet, haiku\nUse \`/model reset\` to revert to config default.`,
+            `Unknown model: ${requested}\nAvailable: opus, sonnet, haiku, opus[1m], sonnet[1m]\nUse \`/model reset\` to revert to config default.`,
             msg.replyContext,
           );
         }
       } else {
         await this.channelFor(msg.chatId).sendText(
           msg.chatId,
-          `Current model: **${this.claude.getModel()}**\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model reset\``,
+          `Current model: **${this.claude.getModel()}**\nUsage: \`/model opus\`, \`/model sonnet\`, \`/model haiku\`, \`/model opus[1m]\`, \`/model reset\``,
           msg.replyContext,
         );
       }

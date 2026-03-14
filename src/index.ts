@@ -42,7 +42,7 @@ const __dirname = dirname(__filename);
 async function summarizeAgentRun(agentLabel: string, resultText: string): Promise<string> {
   const truncated = resultText.length > 2000 ? resultText.slice(0, 2000) : resultText;
   const sysPrompt = "You summarize agent run outputs. Output ONLY a single sentence, nothing else.";
-  const prompt = `Summarize what "${agentLabel}" did in ONE sentence (under 120 chars). No quotes, no filler. Just action and outcome.\n\n${truncated}`;
+  const prompt = `This is the output from an agent called "${agentLabel}". Summarize what was accomplished in ONE sentence (under 120 chars). No quotes, no filler. Just action and outcome.\n\n${truncated}`;
   return new Promise<string>((resolve, reject) => {
     let resolved = false;
     const proc = spawn("claude", [
