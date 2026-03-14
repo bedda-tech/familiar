@@ -1344,10 +1344,15 @@
     <header>
       <button class="mobile-menu-btn" onclick="toggleSidebar()">&#9776;</button>
       <h1>familiar<span>.</span></h1>
-      <div class="header-token">
-        <label>Token</label>
-        <input id="tokenInput" type="password" placeholder="x-familiar-token" autocomplete="off" />
-        <button onclick="applyToken()">Connect</button>
+      <div class="header-token" id="headerToken">
+        <div class="token-form" id="tokenForm">
+          <label>Token</label>
+          <input id="tokenInput" type="password" placeholder="x-familiar-token" autocomplete="off" />
+          <button onclick="applyToken()">Connect</button>
+        </div>
+        <div class="token-connected-badge" id="tokenConnectedBadge">
+          <button class="token-lock-btn" onclick="toggleTokenEdit()" title="Click to edit token">🔒 connected</button>
+        </div>
       </div>
       <div class="ws-status">
         <div id="wsDot" class="ws-dot"></div>
@@ -2406,6 +2411,17 @@
         const label = document.getElementById('wsLabel');
         dot.className = 'ws-dot' + (state === 'connected' ? ' connected' : state === 'error' ? ' error' : '');
         label.textContent = state;
+        const headerToken = document.getElementById('headerToken');
+        if (state === 'connected') {
+          headerToken.classList.add('token-is-connected');
+        } else {
+          headerToken.classList.remove('token-is-connected');
+        }
+      }
+
+      function toggleTokenEdit() {
+        document.getElementById('headerToken').classList.remove('token-is-connected');
+        document.getElementById('tokenInput').focus();
       }
 
       function handleWsEvent(msg) {
