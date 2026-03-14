@@ -2551,6 +2551,94 @@
         return `${m}m ${s}s`;
       }
 
+      // ── Cron expression parser ─────────────────────────────────────────
+      function humanCron(expr) {
+        if (!expr) return expr;
+        try {
+          const parts = expr.trim().split(/\s+/);
+          if (parts.length !== 5) return expr;
+          const [min, hour, dom, month, dow] = parts;
+
+          const isWild = v => v === '*';
+          const isNum  = v => /^\d+$/.test(v);
+          const isEvery = v => /^\*\/(\d+)$/.test(v);
+          const everyN  = v => parseInt(v.split('/')[1], 10);
+          const isComma = v => /^[\d,]+$/.test(v) && v.includes(',');
+
+          function fmtTime(h, m) {
+            const hh = parseInt(h, 10), mm = parseInt(m, 10);
+            const period = hh < 12 ? 'am' : 'pm';
+            const hd = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+            if (mm === 0) return `${hd}${period}`;
+            return `${hd}:${String(mm).padStart(2,'0')}${period}`;
+          }
+
+          // Every minute
+          if ([min,hour,dom,month,dow].every(isWild)) return 'Every minute';
+
+          // Every N minutes: */N * * * *
+          if (isEvery(min) && [hour,dom,month,dow].every(isWild)) {
+            const n = everyN(min);
+            return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+          }
+
+          // Every N hours at :MM: M */N * * *
+          if (isNum(min) && isEvery(hour) && [dom,month,dow].every(isWild)) {
+            const n = everyN(hour), mm = parseInt(min, 10);
+            const suffix = mm === 0 ? '' : ` at :${String(mm).padStart(2,'0')}`;
+            return n === 1 ? `Every hour${suffix}` : `Every ${n} hours${suffix}`;
+          }
+
+          // Every hour at :MM: M * * * *
+          if (isNum(min) && [hour,dom,month,dow].every(isWild)) {
+            const mm = parseInt(min, 10);
+            return mm === 0 ? 'Every hour' : `Every hour at :${String(mm).padStart(2,'0')}`;
+          }
+
+          // At comma-listed hours: M H,H,... * * *
+          if (isNum(min) && isComma(hour) && [dom,month,dow].every(isWild)) {
+            const times = hour.split(',').map(h => fmtTime(h, min));
+            return `At ${times.join(', ')}`;
+          }
+
+          // Daily at specific time: M H * * *
+          if (isNum(min) && isNum(hour) && [dom,month,dow].every(isWild)) {
+            return `Daily at ${fmtTime(hour, min)}`;
+          }
+
+          // Weekly on DOW: M H * * DOW
+          if (isNum(min) && isNum(hour) && isWild(dom) && isWild(month) && isNum(dow)) {
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const day = days[parseInt(dow, 10)] || `day ${dow}`;
+            return `Weekly on ${day} at ${fmtTime(hour, min)}`;
+          }
+
+          // Monthly on day D: M H D * *
+          if (isNum(min) && isNum(hour) && isNum(dom) && isWild(month) && isWild(dow)) {
+            const d = parseInt(dom, 10);
+            const sfx = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
+            return `Monthly on the ${d}${sfx} at ${fmtTime(hour, min)}`;
+          }
+
+          return expr;
+        } catch { return expr; }
+      }
+
+      function tzWithOffset(tz) {
+        if (!tz || tz === 'UTC') return 'UTC';
+        try {
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, timeZoneName: 'shortOffset'
+          }).formatToParts(new Date());
+          const tzName = parts.find(p => p.type === 'timeZoneName');
+          if (tzName) {
+            const offset = tzName.value.replace('GMT', 'UTC');
+            return offset === 'UTC' ? tz : `${tz} (${offset})`;
+          }
+          return tz;
+        } catch { return tz; }
+      }
+
       // ── Toast ─────────────────────────────────────────────────────────
       function toast(msg, type = 'info') {
         const el = document.createElement('div');
@@ -3083,7 +3171,11 @@
               </td>
               <td>${esc(agentNames[s.agent_id] || s.agent_id)}</td>
               <td class="hide-mobile">${projectBadge}</td>
-              <td><code>${esc(s.schedule)}</code></td>
+              <td>
+                <div style="font-weight:500">${esc(humanCron(s.schedule))}</div>
+                <code style="font-size:10px;color:var(--text-muted)">${esc(s.schedule)}</code>
+                <div style="font-size:10px;color:var(--text-muted)">${esc(tzWithOffset(s.timezone || 'UTC'))}</div>
+              </td>
               <td class="hide-mobile">${formatRelative(s._nextRun)}</td>
               <td class="hide-mobile">${formatRelative(s._lastRun)}</td>
               <td class="hide-mobile">${s._runCount ?? 0}</td>
