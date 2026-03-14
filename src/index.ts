@@ -38,17 +38,59 @@ import { DashboardChannel } from "./channels/dashboard.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/** Extract tool result snippets from a structured runLog to supplement thin assistant text */
+function extractToolSnippets(runLog: string, maxLen = 1500): string {
+  const snippets: string[] = [];
+  let used = 0;
+  for (const line of runLog.split("\n")) {
+    try {
+      const ev = JSON.parse(line);
+      // Tool results come inside "user" events as content blocks with type "tool_result"
+      if (ev.type === "user" && ev.message?.content) {
+        const blocks = Array.isArray(ev.message.content) ? ev.message.content : [];
+        for (const block of blocks) {
+          if (block.type === "tool_result" && block.content) {
+            const text = typeof block.content === "string"
+              ? block.content
+              : Array.isArray(block.content)
+                ? block.content.map((b: { text?: string }) => b.text ?? "").join("")
+                : "";
+            if (text.length > 10) {
+              const snippet = text.slice(0, 300);
+              if (used + snippet.length > maxLen) break;
+              snippets.push(snippet);
+              used += snippet.length;
+            }
+          }
+        }
+      }
+    } catch { /* skip non-JSON lines */ }
+  }
+  return snippets.join("\n---\n");
+}
+
 /** Use haiku via claude -p to generate a one-line agent run summary */
-async function summarizeAgentRun(agentLabel: string, resultText: string): Promise<string> {
-  const truncated = resultText.length > 2000 ? resultText.slice(0, 2000) : resultText;
-  const sysPrompt = "You summarize agent run outputs. Output ONLY a single sentence, nothing else.";
-  const prompt = `This is the output from an agent called "${agentLabel}". Summarize what was accomplished in ONE sentence (under 120 chars). No quotes, no filler. Just action and outcome.\n\n${truncated}`;
+async function summarizeAgentRun(agentLabel: string, resultText: string, runLog?: string): Promise<string> {
+  // If assistant text is mostly filler ("Let me check...", "I'll run..."),
+  // supplement with actual tool result snippets from the run log
+  let content = resultText;
+  const stripped = resultText.replace(/\b(Let me|I'll|Now let me|Looking at|Checking)[^.]*[.:]/gi, "").trim();
+  if (stripped.length < 50 && runLog) {
+    const snippets = extractToolSnippets(runLog);
+    if (snippets) {
+      content = `${resultText}\n\n[Tool outputs]\n${snippets}`;
+    }
+  }
+  const truncated = content.length > 3000 ? content.slice(0, 3000) : content;
+  const sysPrompt = "You summarize agent run outputs. Output ONLY a single sentence. NEVER ask for more information. NEVER say you don't see output. Work with whatever text is provided.";
+  const prompt = `Summarize what the "${agentLabel}" agent did in ONE sentence (under 120 chars). If the text is sparse, infer from tool outputs and context. No quotes, no filler, no questions.\n\n${truncated}`;
   return new Promise<string>((resolve, reject) => {
     let resolved = false;
     const proc = spawn("claude", [
       "-p", "--model", "haiku", "--max-turns", "1",
       "--system-prompt", sysPrompt,
       "--setting-sources", "user",
+      "--allowedTools", "",
     ], {
       stdio: ["pipe", "pipe", "pipe"],
       cwd: "/tmp",
@@ -555,15 +597,22 @@ async function cmdStart(configPath?: string): Promise<void> {
 
       // Generate a one-line summary via haiku
       let summary = "";
-      if (result.text) {
+      const hasText = result.text && result.text.trim().length > 0;
+      const hasLog = result.runLog && result.runLog.trim().length > 0;
+      if (hasText || hasLog) {
         try {
-          summary = await summarizeAgentRun(label, result.text);
+          const textForSummary = hasText ? result.text : `[Tool-only session for ${label}]`;
+          summary = await summarizeAgentRun(label, textForSummary, result.runLog);
           if (summary) summary = `\n${summary}`;
         } catch (e) {
           log.warn({ err: e }, "failed to generate agent summary, using fallback");
-          const firstLine = result.text.split("\n").find((l: string) => l.trim().length > 10);
-          if (firstLine) {
-            summary = `\n${firstLine.trim().slice(0, 200)}`;
+          if (hasText) {
+            const firstLine = result.text.split("\n").find((l: string) => l.trim().length > 10);
+            if (firstLine) {
+              summary = `\n${firstLine.trim().slice(0, 200)}`;
+            }
+          } else {
+            summary = `\nCompleted ${result.numTurns} turns`;
           }
         }
       }

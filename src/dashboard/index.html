@@ -1841,9 +1841,16 @@
             <input class="form-control" id="agentFormWorkingDirectory" placeholder="~/workspace" />
           </div>
           <div class="form-group">
+            <label>Tool Profile</label>
+            <select class="form-control" id="agentFormProfile" onchange="applyToolProfile(this.value)">
+              <option value="">Custom / None</option>
+            </select>
+            <div class="form-hint">Select a profile to auto-fill the tools list below</div>
+          </div>
+          <div class="form-group">
             <label>Tools (comma-separated)</label>
             <input class="form-control" id="agentFormTools" placeholder="Bash,Read,Write,Edit,Glob,Grep" />
-            <div class="form-hint">Available: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch</div>
+            <div class="form-hint">Available: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, Agent</div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -2257,6 +2264,7 @@
       let tasks = [];
       let projects = [];
       let tools = [];
+      let toolProfiles = [];
       let templates = [];
       let confirmCallback = null;
       let runsData = [];   // cache for client-side sort
@@ -2494,6 +2502,7 @@
         loadTasks();
         loadProjects();
         loadTools();
+        loadToolProfiles();
         loadTemplates();
         loadOverview();
       }
@@ -2970,6 +2979,7 @@
         document.getElementById('agentModalTitle').textContent = isEdit ? 'Edit Agent' : 'New Agent';
         document.getElementById('agentModalSave').textContent = isEdit ? 'Save' : 'Create';
         document.getElementById('agentFormId').value = agentId || '';
+        populateProfileSelector();
 
         if (isEdit) {
           const a = agents.find(x => x.id === agentId);
@@ -2982,7 +2992,9 @@
           document.getElementById('agentFormMaxTurns').value = a.max_turns ?? 25;
           document.getElementById('agentFormSystemPrompt').value = a.system_prompt || '';
           document.getElementById('agentFormWorkingDirectory').value = a.working_directory || '';
-          document.getElementById('agentFormTools').value = a.tools ? JSON.parse(a.tools || '[]').join(', ') : '';
+          const agentTools = a.tools ? JSON.parse(a.tools || '[]') : [];
+          document.getElementById('agentFormTools').value = agentTools.join(', ');
+          document.getElementById('agentFormProfile').value = detectAgentProfile(agentTools);
           document.getElementById('agentFormSuppressPattern').value = a.suppress_pattern || '';
           document.getElementById('agentFormDeliverTo').value = a.deliver_to || '';
           document.getElementById('agentFormBudget').value = a.daily_budget_usd !== null && a.daily_budget_usd !== undefined ? a.daily_budget_usd : '';
@@ -2997,6 +3009,7 @@
           document.getElementById('agentFormSystemPrompt').value = '';
           document.getElementById('agentFormWorkingDirectory').value = '';
           document.getElementById('agentFormTools').value = 'Bash,Read,Write,Edit,Glob,Grep';
+          document.getElementById('agentFormProfile').value = '';
           document.getElementById('agentFormSuppressPattern').value = '';
           document.getElementById('agentFormDeliverTo').value = '';
           document.getElementById('agentFormBudget').value = '';
@@ -3938,6 +3951,40 @@
             toast(`Failed: ${e.message}`, 'error');
           }
         });
+      }
+
+      // ── Tool Profiles ──────────────────────────────────────────────────
+      async function loadToolProfiles() {
+        if (!token) return;
+        try {
+          const data = await api('GET', '/api/tools/profiles');
+          toolProfiles = data.profiles || [];
+        } catch (e) {
+          toolProfiles = [];
+        }
+      }
+
+      function populateProfileSelector() {
+        const sel = document.getElementById('agentFormProfile');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Custom / None</option>' +
+          toolProfiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+      }
+
+      function applyToolProfile(profileId) {
+        if (!profileId) return;
+        const profile = toolProfiles.find(p => p.id === profileId);
+        if (!profile) return;
+        document.getElementById('agentFormTools').value = profile.allowedTools.join(', ');
+      }
+
+      function detectAgentProfile(toolsArray) {
+        if (!toolsArray || !toolsArray.length) return '';
+        const toolSet = toolsArray.slice().sort().join(',');
+        for (const p of toolProfiles) {
+          if (p.allowedTools.slice().sort().join(',') === toolSet) return p.id;
+        }
+        return '';
       }
 
       // ── Tools tab ──────────────────────────────────────────────────────

@@ -81,7 +81,7 @@ export const TOOL_PROFILES: ToolProfile[] = [
       "Content creation and social media agents: write blog posts, social content, " +
       "fetch web sources. Includes bird CLI access for Twitter/X.",
     allowedTools: ["Bash", "Read", "Write", "WebFetch", "WebSearch"],
-    defaultAgents: ["content", "bedda-marketing-engineering"],
+    defaultAgents: ["content", "bedda-marketing-engineering", "krain-marketing"],
   },
   {
     id: "research",
@@ -109,6 +109,15 @@ export const TOOL_PROFILES: ToolProfile[] = [
       "clean download queues. Full read/write/edit for remediation work.",
     allowedTools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent"],
     defaultAgents: ["media-monitor", "media-server"],
+  },
+  {
+    id: "krain",
+    name: "KRAIN",
+    description:
+      "KRAIN app agents: handle Discord tickets, review submissions, implement features. " +
+      "Full code editing plus web fetch for external lookups.",
+    allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch"],
+    defaultAgents: ["krain-discord-triage", "krain-engineering", "krain-app-review"],
   },
 ];
 
