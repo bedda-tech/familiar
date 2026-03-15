@@ -18,6 +18,9 @@ export interface DraftHandle {
 
 /** Interface that all channel adapters must implement */
 export interface Channel {
+  /** Optional stable identifier for this channel type (e.g. "dashboard", "telegram") */
+  readonly id?: string;
+
   /** Register a handler for incoming messages */
   onMessage(handler: (msg: IncomingMessage) => Promise<void>): void;
 

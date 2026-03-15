@@ -7,6 +7,7 @@ import type { MemoryStore } from "./memory/store.js";
 import type { DeliveryQueue } from "./delivery/queue.js";
 import type { CronScheduler } from "./cron/scheduler.js";
 import type { ProcessTracker } from "./claude/process-tracker.js";
+import type { WsServer } from "./ws/server.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
@@ -74,6 +75,11 @@ export class Bridge {
   private channels: Channel[];
   /** Maps chatId → the channel that most recently sent a message from that chatId */
   private chatChannelMap = new Map<string, Channel>();
+  /** WebSocket server for cross-channel broadcasting */
+  private wsServer: WsServer | undefined;
+  /** Mirror channel: receives a copy of responses when the originating channel is not this one */
+  private mirrorChannel: Channel | undefined;
+  private mirrorChatId: string | undefined;
 
   constructor(
     channel: Channel | Channel[],
@@ -546,6 +552,24 @@ export class Bridge {
     this.registerChannelHandlers(ch);
   }
 
+  /**
+   * Attach a WebSocket server so Bridge can broadcast user messages and assistant responses
+   * to all dashboard clients whenever a non-WS channel (e.g. Telegram) is active.
+   */
+  setWsServer(wsServer: WsServer): void {
+    this.wsServer = wsServer;
+  }
+
+  /**
+   * Set a "mirror" channel that always receives a copy of the final assistant response,
+   * even when the originating channel was different. Used to forward dashboard-initiated
+   * Claude responses back to Telegram.
+   */
+  setMirrorChannel(channel: Channel, chatId: string): void {
+    this.mirrorChannel = channel;
+    this.mirrorChatId = chatId;
+  }
+
   private async handleMessage(msg: IncomingMessage): Promise<void> {
     if (!msg.text && (!msg.filePaths || msg.filePaths.length === 0)) {
       return;
@@ -559,6 +583,9 @@ export class Bridge {
       );
       return;
     }
+
+    // Capture originating channel before any async ops (chatChannelMap was updated by onMessage handler)
+    const origCh = this.channelFor(msg.chatId);
 
     log.info(
       {
@@ -639,6 +666,12 @@ export class Bridge {
     // Log the user message
     this.sessions.logMessage(msg.chatId, "user", prompt);
 
+    // Broadcast user message to dashboard when originating from a non-WS channel (e.g. Telegram)
+    // (DashboardChannel already echoes its own user messages; skip to avoid duplicates)
+    if (this.wsServer && origCh.id !== "dashboard") {
+      this.wsServer.broadcast({ type: "chat:message", role: "user", text: prompt });
+    }
+
     // Set up draft streaming
     let draft = createDraft();
     const draftCtx: DraftContext = {
@@ -688,6 +721,10 @@ export class Bridge {
             }
             fullText += event.text;
             await appendToDraft(draft, draftCtx, event.text);
+            // Stream draft updates to dashboard for Telegram-originated messages
+            if (this.wsServer && origCh.id !== "dashboard") {
+              this.wsServer.broadcast({ type: "chat:draft", text: draft.text, done: false });
+            }
             break;
 
           case "thinking":
@@ -703,11 +740,18 @@ export class Bridge {
             log.info({ subtype: event.subtype, message: event.message }, "claude system event");
             break;
 
-          case "tool_use":
+          case "tool_use": {
             toolsUsed.push(event.name);
             log.debug({ tool: event.name }, "tool use");
             // Finalize current draft so text before this tool call is sent as its own message
             if (draft.text) {
+              // Finalize the WS draft segment before clearing
+              if (this.wsServer && origCh.id !== "dashboard") {
+                for (const chunk of chunkMessage(draft.text)) {
+                  this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: chunk });
+                }
+                this.wsServer.broadcast({ type: "chat:draft", text: "", done: true });
+              }
               const preChunks = chunkMessage(draft.text);
               await finalizeDraft(draft, draftCtx, preChunks);
               draft = createDraft();
@@ -715,12 +759,17 @@ export class Bridge {
             // Show tool usage with brief input summary
             const toolLabel = formatToolUse(event.name, event.input);
             await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, toolLabel);
+            // Mirror tool label to dashboard for Telegram messages
+            if (this.wsServer && origCh.id !== "dashboard") {
+              this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: toolLabel });
+            }
             // Restart typing during tool execution
             if (typingStopped) {
               stopTyping = this.channelFor(msg.chatId).startTyping(msg.chatId);
               typingStopped = false;
             }
             break;
+          }
 
           case "done": {
             clearInterval(watchdog);
@@ -752,7 +801,19 @@ export class Bridge {
             const draftText = draft.text || (!fullText ? result.text : "");
             if (draftText) {
               const chunks = chunkMessage(draftText);
+              // Broadcast final segment to dashboard for Telegram-originated messages
+              if (this.wsServer && origCh.id !== "dashboard" && draftText) {
+                for (const chunk of chunks) {
+                  this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: chunk });
+                }
+                this.wsServer.broadcast({ type: "chat:draft", text: "", done: true });
+              }
               await finalizeDraft(draft, draftCtx, chunks);
+            }
+
+            // Mirror final response to Telegram when originating from dashboard
+            if (this.mirrorChannel && this.mirrorChatId && origCh.id === "dashboard" && responseText) {
+              await this.mirrorChannel.sendDirectMessage(this.mirrorChatId, responseText);
             }
 
             if (result.isError) {

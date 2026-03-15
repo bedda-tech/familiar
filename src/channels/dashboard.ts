@@ -15,19 +15,27 @@ import { getLogger } from "../util/logger.js";
 const log = getLogger("dashboard-channel");
 
 export class DashboardChannel implements Channel {
+  readonly id = "dashboard";
+
   private messageHandlers: Array<(msg: IncomingMessage) => Promise<void>> = [];
   private commandHandlers = new Map<string, (msg: IncomingMessage) => Promise<void>>();
 
   // Timer to auto-finalize single-chunk responses (finalizeDraft calls updateDraft, not sendChunks)
   private doneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  constructor(private wsServer: WsServer) {
+  /**
+   * @param wsServer  The WebSocket server to send/receive on
+   * @param primaryChatId  When set, all dashboard messages use this chatId so they share the
+   *                       same Claude session as the primary Telegram channel.
+   */
+  constructor(private wsServer: WsServer, private primaryChatId?: string) {
     // Wire incoming WebSocket messages from dashboard clients
     wsServer.onMessage((clientId, raw) => {
       if (raw.type !== "chat:send" || typeof raw.text !== "string" || !raw.text.trim()) return;
 
       const text = raw.text.trim();
-      const chatId = `dash:${clientId}`;
+      // Use primary chatId (Telegram's chatId) to share session, falling back to per-client chatId
+      const chatId = this.primaryChatId ?? `dash:${clientId}`;
 
       // Echo user message to all dashboard clients so multiple tabs stay in sync
       wsServer.broadcast({ type: "chat:message", role: "user", text });

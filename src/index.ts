@@ -736,10 +736,16 @@ async function cmdStart(configPath?: string): Promise<void> {
       });
 
       // Wire dashboard chat channel
-      const dashboardChannel = new DashboardChannel(wsServer);
+      // primaryChatId unifies dashboard sessions with Telegram (shared Claude context)
+      const primaryChatId = String(config.telegram.allowedUsers[0]);
+      const dashboardChannel = new DashboardChannel(wsServer, primaryChatId);
       bridge.addChannel(dashboardChannel);
       await dashboardChannel.start();
-      log.info("dashboard channel wired");
+
+      // Bridge: broadcast Telegram messages to dashboard, mirror dashboard responses to Telegram
+      bridge.setWsServer(wsServer);
+      bridge.setMirrorChannel(telegram, primaryChatId);
+      log.info("dashboard channel wired (cross-channel sync enabled)");
     }
   }
 
