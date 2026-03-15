@@ -19,15 +19,23 @@
  *   GET  /api/config                    — get sanitized config
  *   GET  /api/activity                  — list activity log entries
  *   POST /api/activity                  — insert an activity log entry
- *   GET  /api/runs                      — fleet-wide cron run history (agent_id, is_error, limit, offset)
+ *   GET  /api/runs                      — fleet-wide cron run history (agent_id, project_id, is_error, limit, offset)
+ *   GET  /api/projects/:id/docs         — list doc files in ~/.familiar/projects/:id/
  *   GET  /api/runs/:id                  — get full details for a single run (includes full result_text)
  *   GET  /api/cost/summary              — per-agent cost totals for period
  *   GET  /api/cost/daily                — day-by-day fleet cost for period
  *   GET  /api/chat/messages             — paginated message history for a chat (chat_id, limit, before?)
  *   GET  /api/chat/messages/count       — total message count for a chat (chat_id)
+ *   GET  /api/chat/messages/all         — paginated history across all dashboard sessions (limit, before?)
+ *   GET  /api/chat/search               — full-text search over chat messages (q, limit)
+ *   GET  /api/documents                 — hierarchical tree of oliver project documents
+ *   GET  /api/documents/read?path=X     — read a specific document file
+ *   PUT  /api/documents/write           — write/update a document file (body: {path, content})
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, copyFileSync } from "node:fs";
+import { join, basename, resolve } from "node:path";
+import { homedir } from "node:os";
 import type { ServerResponse } from "node:http";
 import type Database from "better-sqlite3";
 import type { CronScheduler } from "../cron/scheduler.js";
@@ -60,6 +68,7 @@ export class ApiRouter {
   private onConfigChange: (() => Promise<void>) | null = null;
   private memoryStore: import("../memory/store.js").MemoryStore | null = null;
   private repoManager: RepoManager | null = null;
+  private onTaskCreated: ((task: Record<string, unknown>) => void) | null = null;
 
   setCronScheduler(scheduler: CronScheduler): void {
     this.cronScheduler = scheduler;
@@ -91,6 +100,10 @@ export class ApiRouter {
 
   setRepoManager(manager: RepoManager): void {
     this.repoManager = manager;
+  }
+
+  setTaskCreatedHandler(handler: (task: Record<string, unknown>) => void): void {
+    this.onTaskCreated = handler;
   }
 
   setToolStore(store: ToolStore): void {
@@ -226,6 +239,31 @@ export class ApiRouter {
           if (!status) sendJson(res, 404, { error: "Repo not found" });
           else sendJson(res, 200, { status });
         }
+        return true;
+      }
+
+      // ── Project Docs ──
+      const projectDocsMatch = path.match(/^\/api\/projects\/([^/]+)\/docs$/);
+      if (projectDocsMatch) {
+        const projectId = decodeURIComponent(projectDocsMatch[1]);
+        const docsDir = join(homedir(), ".familiar", "projects", projectId);
+        const docs: Array<{ name: string; size: number; modified: string }> = [];
+        if (existsSync(docsDir)) {
+          try {
+            const entries = readdirSync(docsDir);
+            for (const entry of entries) {
+              const fullPath = join(docsDir, entry);
+              const stat = statSync(fullPath);
+              if (stat.isFile()) {
+                docs.push({ name: entry, size: stat.size, modified: stat.mtime.toISOString() });
+              }
+            }
+            docs.sort((a, b) => a.name.localeCompare(b.name));
+          } catch {
+            /* ignore read errors */
+          }
+        }
+        sendJson(res, 200, { docs });
         return true;
       }
 
@@ -447,6 +485,28 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Chat History (all dashboard sessions) ──
+      if (path === "/api/chat/messages/all") {
+        const params = new URLSearchParams(queryString ?? "");
+        const limit = Math.min(Math.max(parseInt(params.get("limit") ?? "50", 10), 1), 200);
+        const before = params.get("before") ?? undefined;
+        this.handleChatMessagesAll(limit, before, res);
+        return true;
+      }
+
+      // ── Chat Search (FTS5) ──
+      if (path === "/api/chat/search") {
+        const params = new URLSearchParams(queryString ?? "");
+        const query = params.get("q") ?? "";
+        if (!query) {
+          sendJson(res, 400, { error: "Missing required 'q' query parameter" });
+          return true;
+        }
+        const limit = Math.min(Math.max(parseInt(params.get("limit") ?? "20", 10), 1), 100);
+        this.handleChatSearch(query, limit, res);
+        return true;
+      }
+
       // ── Memory Search ──
       if (path === "/api/memory/search") {
         const params = new URLSearchParams(queryString ?? "");
@@ -466,6 +526,47 @@ export class ApiRouter {
         } catch (e) {
           log.error({ err: e }, "memory search failed");
           sendJson(res, 500, { error: "Memory search failed" });
+        }
+        return true;
+      }
+
+      // ── Documents ──
+      if (path === "/api/documents") {
+        try {
+          const tree = this.buildDocumentTree();
+          sendJson(res, 200, { tree });
+        } catch (e: any) {
+          log.error({ err: e }, "documents tree failed");
+          sendJson(res, 500, { error: e.message ?? "Failed to build document tree" });
+        }
+        return true;
+      }
+
+      if (path === "/api/documents/read") {
+        const params = new URLSearchParams(queryString ?? "");
+        const filePath = params.get("path") ?? "";
+        const ALLOWED_ROOT = "/home/mwhit/oliver/";
+        const resolved = resolve(filePath);
+        if (!resolved.startsWith(ALLOWED_ROOT)) {
+          sendJson(res, 403, { error: "Path outside allowed directory" });
+          return true;
+        }
+        if (!existsSync(resolved)) {
+          sendJson(res, 404, { error: "File not found" });
+          return true;
+        }
+        try {
+          const stat = statSync(resolved);
+          const content = readFileSync(resolved, "utf-8");
+          sendJson(res, 200, {
+            path: resolved,
+            name: basename(resolved),
+            content,
+            size: stat.size,
+            mtime: stat.mtime.toISOString(),
+          });
+        } catch (e: any) {
+          sendJson(res, 500, { error: e.message ?? "Failed to read file" });
         }
         return true;
       }
@@ -823,6 +924,46 @@ export class ApiRouter {
       const taskUpdateMatch = path.match(/^\/api\/tasks\/(\d+)$/);
       if (taskUpdateMatch && body) {
         this.handleUpdateTask(parseInt(taskUpdateMatch[1], 10), body, res);
+        return true;
+      }
+
+      // ── Document write ──
+      if (path === "/api/documents/write" && body) {
+        const { path: filePath, content } = body as { path?: string; content?: string };
+        if (!filePath || content === undefined || content === null) {
+          sendJson(res, 400, { error: "Missing required fields: path, content" });
+          return true;
+        }
+        const ALLOWED_ROOT = "/home/mwhit/oliver/";
+        const resolved = resolve(filePath);
+        if (!resolved.startsWith(ALLOWED_ROOT)) {
+          sendJson(res, 403, { error: "Path outside allowed directory" });
+          return true;
+        }
+        const ext = resolved.split(".").pop()?.toLowerCase();
+        if (!ext || !["md", "yaml", "yml"].includes(ext)) {
+          sendJson(res, 400, { error: "Only .md and .yaml files can be edited" });
+          return true;
+        }
+        if (!existsSync(resolved)) {
+          sendJson(res, 404, { error: "File not found" });
+          return true;
+        }
+        try {
+          // Create backup before writing
+          copyFileSync(resolved, resolved + ".bak");
+          writeFileSync(resolved, content, "utf-8");
+          const stat = statSync(resolved);
+          sendJson(res, 200, {
+            success: true,
+            path: resolved,
+            size: stat.size,
+            mtime: stat.mtime.toISOString(),
+          });
+        } catch (e: any) {
+          log.error({ err: e }, "document write failed");
+          sendJson(res, 500, { error: e.message ?? "Failed to write file" });
+        }
         return true;
       }
 
@@ -1305,6 +1446,9 @@ export class ApiRouter {
         typeof body.stale_timeout_hours === "number" ? body.stale_timeout_hours : undefined,
     });
     sendJson(res, 201, { task });
+    if (this.onTaskCreated) {
+      try { this.onTaskCreated(task as unknown as Record<string, unknown>); } catch { /* best effort */ }
+    }
   }
 
   private handleUpdateTask(id: number, body: Record<string, unknown>, res: ServerResponse): void {
@@ -1575,7 +1719,7 @@ When done, summarize what you did.`;
   // ── Runs Handler ────────────────────────────────────────────────────
 
   /**
-   * GET /api/runs?agent_id=&is_error=&limit=50&offset=0
+   * GET /api/runs?agent_id=&project_id=&is_error=&limit=50&offset=0
    * Returns paginated fleet-wide cron run history.
    */
   private handleListRuns(params: URLSearchParams, res: ServerResponse): void {
@@ -1588,6 +1732,7 @@ When done, summarize what you did.`;
     }
 
     const agentId = params.get("agent_id") ?? undefined;
+    const projectId = params.get("project_id") ?? undefined;
     const isErrorParam = params.get("is_error") ?? "";
     const limit = Math.min(parseInt(params.get("limit") ?? "50", 10), 200);
     const offset = Math.max(parseInt(params.get("offset") ?? "0", 10), 0);
@@ -1598,6 +1743,17 @@ When done, summarize what you did.`;
     if (agentId) {
       conditions.push("job_id = ?");
       sqlParams.push(agentId);
+    } else if (projectId && this.agentCrudStore) {
+      // Filter runs to agents belonging to this project
+      const projectAgents = this.agentCrudStore.list({ project_id: projectId });
+      const agentIds = projectAgents.map((a) => a.id);
+      if (agentIds.length === 0) {
+        sendJson(res, 200, { runs: [], total: 0 });
+        return;
+      }
+      const placeholders = agentIds.map(() => "?").join(", ");
+      conditions.push(`job_id IN (${placeholders})`);
+      sqlParams.push(...agentIds);
     }
     if (isErrorParam === "0") {
       conditions.push("is_error = 0");
@@ -2014,6 +2170,133 @@ When done, summarize what you did.`;
     }
   }
 
+  // ── Chat History (All Dashboard Sessions) ──────────────────────────
+
+  private handleChatMessagesAll(
+    limit: number,
+    before: string | undefined,
+    res: ServerResponse,
+  ): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    try {
+      let rows: Array<{
+        id: number;
+        chat_id: string;
+        role: string;
+        content: string;
+        cost_usd: number;
+        created_at: string;
+      }>;
+      if (before) {
+        rows = this.db
+          .prepare(
+            `SELECT id, chat_id, role, content, cost_usd, created_at
+             FROM message_log
+             WHERE id < ?
+             ORDER BY id DESC
+             LIMIT ?`,
+          )
+          .all(parseInt(before, 10), limit + 1) as typeof rows;
+      } else {
+        rows = this.db
+          .prepare(
+            `SELECT id, chat_id, role, content, cost_usd, created_at
+             FROM message_log
+             ORDER BY id DESC
+             LIMIT ?`,
+          )
+          .all(limit + 1) as typeof rows;
+      }
+      const has_more = rows.length > limit;
+      const messages = rows.slice(0, limit);
+      sendJson(res, 200, { messages, has_more });
+    } catch (e) {
+      log.error({ err: e }, "chat messages/all query failed");
+      sendJson(res, 500, { error: "Query failed" });
+    }
+  }
+
+  // ── Chat Search (FTS5) ────────────────────────────────────────────
+
+  private handleChatSearch(query: string, limit: number, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    try {
+      // Ensure FTS5 table exists
+      this.ensureChatFts();
+
+      const rows = this.db
+        .prepare(
+          `SELECT m.id, m.chat_id, m.role, m.content, m.cost_usd, m.created_at,
+                  snippet(message_log_fts, 0, '<mark>', '</mark>', '...', 48) AS snippet
+           FROM message_log_fts fts
+           JOIN message_log m ON m.id = fts.rowid
+           WHERE message_log_fts MATCH ?
+           ORDER BY rank
+           LIMIT ?`,
+        )
+        .all(query, limit) as Array<{
+          id: number;
+          chat_id: string;
+          role: string;
+          content: string;
+          cost_usd: number;
+          created_at: string;
+          snippet: string;
+        }>;
+      sendJson(res, 200, { results: rows, query, count: rows.length });
+    } catch (e) {
+      log.error({ err: e }, "chat search query failed");
+      sendJson(res, 500, { error: "Chat search failed" });
+    }
+  }
+
+  private _chatFtsReady = false;
+
+  private ensureChatFts(): void {
+    if (this._chatFtsReady || !this.db) return;
+
+    // Create the FTS5 virtual table if it doesn't exist
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS message_log_fts
+      USING fts5(content, content=message_log, content_rowid=id);
+    `);
+
+    // Create triggers to keep FTS synced with the main table
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS message_log_fts_ai AFTER INSERT ON message_log BEGIN
+        INSERT INTO message_log_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+    `);
+
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS message_log_fts_ad AFTER DELETE ON message_log BEGIN
+        INSERT INTO message_log_fts(message_log_fts, rowid, content) VALUES('delete', old.id, old.content);
+      END;
+    `);
+
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS message_log_fts_au AFTER UPDATE ON message_log BEGIN
+        INSERT INTO message_log_fts(message_log_fts, rowid, content) VALUES('delete', old.id, old.content);
+        INSERT INTO message_log_fts(rowid, content) VALUES (new.id, new.content);
+      END;
+    `);
+
+    // Backfill: rebuild the FTS index from existing data
+    // Use 'rebuild' command which is idempotent and handles content sync
+    this.db.exec(`
+      INSERT INTO message_log_fts(message_log_fts) VALUES('rebuild');
+    `);
+
+    this._chatFtsReady = true;
+    log.info("Chat FTS5 index initialized");
+  }
+
   // ── Config Handler ──────────────────────────────────────────────────
 
   private handleGetConfig(res: ServerResponse): void {
@@ -2047,6 +2330,110 @@ When done, summarize what you did.`;
     }
 
     sendJson(res, 200, { config: sanitized });
+  }
+
+  /**
+   * Build a hierarchical tree of oliver project documents.
+   */
+  private buildDocumentTree(): Array<Record<string, unknown>> {
+    const OLIVER = "/home/mwhit/oliver";
+    const tree: Array<Record<string, unknown>> = [];
+
+    const fileMeta = (p: string): Record<string, unknown> => {
+      const st = statSync(p);
+      return { name: basename(p), type: "file", path: p, size: st.size, mtime: st.mtime.toISOString() };
+    };
+
+    const safeReadDir = (dir: string, ext?: string): string[] => {
+      if (!existsSync(dir)) return [];
+      return readdirSync(dir)
+        .filter(f => ext ? f.endsWith(ext) : true)
+        .sort()
+        .map(f => join(dir, f));
+    };
+
+    // 1. System folder: CLAUDE.md, SYSTEM.md, identity/*.md
+    const systemChildren: Array<Record<string, unknown>> = [];
+    for (const f of ["CLAUDE.md", "SYSTEM.md"]) {
+      const p = join(OLIVER, f);
+      if (existsSync(p)) systemChildren.push(fileMeta(p));
+    }
+    const identityDir = join(OLIVER, "identity");
+    if (existsSync(identityDir)) {
+      const idChildren = safeReadDir(identityDir, ".md").map(fileMeta);
+      if (idChildren.length > 0) {
+        systemChildren.push({ name: "identity", type: "folder", path: identityDir, children: idChildren });
+      }
+    }
+    if (systemChildren.length > 0) {
+      tree.push({ name: "System", type: "folder", path: OLIVER, children: systemChildren });
+    }
+
+    // 2. Projects
+    const projectsDir = join(OLIVER, "projects");
+    if (existsSync(projectsDir)) {
+      const projectDirs = readdirSync(projectsDir)
+        .filter(d => {
+          const p = join(projectsDir, d);
+          try { return statSync(p).isDirectory(); } catch { return false; }
+        })
+        .sort();
+
+      for (const projName of projectDirs) {
+        const projPath = join(projectsDir, projName);
+        const projChildren: Array<Record<string, unknown>> = [];
+
+        // CLAUDE.md
+        const claudeMd = join(projPath, "CLAUDE.md");
+        if (existsSync(claudeMd)) projChildren.push(fileMeta(claudeMd));
+
+        // project.yaml
+        const projYaml = join(projPath, "project.yaml");
+        if (existsSync(projYaml)) projChildren.push(fileMeta(projYaml));
+
+        // docs/ (recursive -- handles subfolders like docs/gdrive-originals/)
+        const docsDir = join(projPath, "docs");
+        if (existsSync(docsDir)) {
+          const scanDocsDir = (dir: string): Array<Record<string, unknown>> => {
+            const items: Array<Record<string, unknown>> = [];
+            for (const entry of readdirSync(dir).sort()) {
+              const full = join(dir, entry);
+              try {
+                const st = statSync(full);
+                if (st.isDirectory()) {
+                  const subItems = scanDocsDir(full);
+                  if (subItems.length > 0) {
+                    items.push({ name: entry, type: "folder", path: full, children: subItems });
+                  }
+                } else if (st.isFile() && (entry.endsWith(".md") || entry.endsWith(".yaml") || entry.endsWith(".yml"))) {
+                  items.push(fileMeta(full));
+                }
+              } catch { /* skip unreadable */ }
+            }
+            return items;
+          };
+          const docItems = scanDocsDir(docsDir);
+          if (docItems.length > 0) {
+            projChildren.push({ name: "docs", type: "folder", path: docsDir, children: docItems });
+          }
+        }
+
+        if (projChildren.length > 0) {
+          tree.push({ name: projName, type: "project", path: projPath, children: projChildren });
+        }
+      }
+    }
+
+    // 3. Memory folder
+    const memoryDir = join(OLIVER, "memory");
+    if (existsSync(memoryDir)) {
+      const memFiles = safeReadDir(memoryDir, ".md").map(fileMeta);
+      if (memFiles.length > 0) {
+        tree.push({ name: "Memory", type: "folder", path: memoryDir, children: memFiles });
+      }
+    }
+
+    return tree;
   }
 }
 

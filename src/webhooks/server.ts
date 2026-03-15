@@ -93,6 +93,11 @@ export class WebhookServer {
     this.apiRouter.setTaskStore(store);
   }
 
+  /** Register a callback for newly created tasks (e.g. to notify via Telegram). */
+  onTaskCreated(handler: (task: Record<string, unknown>) => void): void {
+    this.apiRouter.setTaskCreatedHandler(handler);
+  }
+
   /** Attach the persistent agent CRUD store. */
   setAgentCrudStore(store: AgentCrudStore): void {
     this.apiRouter.setAgentCrudStore(store);

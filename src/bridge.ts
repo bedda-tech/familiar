@@ -816,7 +816,7 @@ export class Bridge {
 
       // Reverse to chronological order, summarize recent exchange
       for (const row of rows.reverse()) {
-        const prefix = row.role === "user" ? "**User**" : "**Oliver**";
+        const prefix = row.role === "user" ? "**User**" : "**Assistant**";
         const snippet = row.content.slice(0, 300).replace(/\n/g, " ");
         lines.push(`- ${prefix}: ${snippet}`);
       }

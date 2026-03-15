@@ -65,8 +65,13 @@ export class CronScheduler {
    */
   private lastFinishedAt = new Map<string, number>();
 
-  constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string) {
+  private webhookToken: string;
+  private webhookPort: number;
+
+  constructor(jobConfigs: CronJobConfig[], claudeConfig: ClaudeConfig, dbPath?: string, webhookToken?: string, webhookPort?: number) {
     this.claudeConfig = claudeConfig;
+    this.webhookToken = webhookToken ?? "";
+    this.webhookPort = webhookPort ?? 3002;
     this.workspace = new AgentWorkspace();
 
     const dir = getConfigDir();
@@ -911,8 +916,8 @@ export class CronScheduler {
   /** Build the task-awareness prefix that gets injected into agent prompts at runtime.
    *  This standardizes task claim/complete behavior across all non-infrastructure agents. */
   private buildTaskPrefix(agentId: string): string {
-    const token = "80655efdf7d81d113e20cff1d3d98c432c035c48b1046441b65b95c541e2d8e5";
-    const base = "http://127.0.0.1:3002";
+    const token = this.webhookToken;
+    const base = `http://127.0.0.1:${this.webhookPort}`;
     return `## Task Queue Check (auto-injected)
 Before starting your default work, check for assigned tasks:
 curl -s -H 'x-familiar-token: ${token}' '${base}/api/tasks/next?agent=${agentId}'

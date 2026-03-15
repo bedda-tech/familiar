@@ -80,7 +80,23 @@ export interface WebhookServerConfig {
   publicUrl?: string;
 }
 
+export interface OwnerConfig {
+  /** Short name used for task assignment and notifications (e.g. "matt") */
+  name: string;
+  /** Display name shown in the dashboard (e.g. "Matt Whitney") */
+  displayName?: string;
+}
+
+export interface ServiceLink {
+  name: string;
+  description?: string;
+  icon?: string;
+  url: string;
+  category?: string;
+}
+
 export interface FamiliarConfig {
+  owner?: OwnerConfig;
   telegram: TelegramConfig;
   claude: ClaudeConfig;
   sessions: SessionConfig;
@@ -88,6 +104,7 @@ export interface FamiliarConfig {
   webhooks?: WebhookServerConfig;
   openai?: OpenAIConfig;
   log: LogConfig;
+  services?: ServiceLink[];
 }
 
 const CONFIG_DIR = join(homedir(), ".familiar");

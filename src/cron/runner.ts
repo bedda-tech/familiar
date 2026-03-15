@@ -336,7 +336,7 @@ export async function runCronJob(
   }
 
   // Cron jobs are task-focused executors — do NOT inject the main session's
-  // personality prompt. The Oliver persona causes cron agents to waste turns
+  // personality prompt. The main session persona causes cron agents to waste turns
   // reading governing docs (SOUL.md, IDENTITY.md, etc.) instead of executing
   // their actual task. Each cron job's prompt IS the system prompt.
   // Only pass the system prompt if the job explicitly opts in via systemPrompt field.

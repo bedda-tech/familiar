@@ -357,7 +357,7 @@ async function cmdCron(subArgs: string[]): Promise<void> {
   if (!subcommand || subcommand === "list") {
     // Config-based jobs
     if (jobs.length > 0) {
-      const scheduler = new CronScheduler(jobs, config.claude);
+      const scheduler = new CronScheduler(jobs, config.claude, undefined, config.webhooks?.token, config.webhooks?.port);
       const list = scheduler.listJobs();
       scheduler.stop();
 
@@ -580,7 +580,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   // Always create scheduler if we have DB agents or config jobs
   const hasDbAgents = agentCrudStore.count() > 0;
   if (configJobs.length > 0 || hasDbAgents) {
-    cron = new CronScheduler(configJobs, config.claude);
+    cron = new CronScheduler(configJobs, config.claude, undefined, config.webhooks?.token, config.webhooks?.port);
     cron.setSharedDb(db);
 
     cron.onDelivery(async (_jobId: string, result: CronRunResult, jobConfig: CronJobConfig, runId?: number) => {
@@ -683,6 +683,21 @@ async function cmdStart(configPath?: string): Promise<void> {
     const taskStore = new TaskStore(db);
     webhooks.setTaskStore(taskStore);
 
+    // Notify the owner via Telegram when a task is assigned to them
+    const ownerName = config.owner?.name ?? "owner";
+    webhooks.onTaskCreated((task: Record<string, unknown>) => {
+      const agent = task.assigned_agent as string | undefined;
+      if (agent === ownerName) {
+        const title = task.title as string;
+        const project = task.project_id as string | undefined;
+        const priority = task.priority as number | undefined;
+        const id = task.id as number;
+        const desc = (task.description as string | undefined)?.slice(0, 200) ?? "";
+        const msg = `New task for you: #${id}\n${title}${project ? ` [${project}]` : ""}${priority ? ` P${priority}` : ""}\n${desc}`;
+        deliveryQueue.deliver(defaultChatId, msg).catch(() => {});
+      }
+    });
+
     // Wire task store into scheduler so validation failures can create follow-up tasks
     if (cron) {
       cron.setTaskStore(taskStore);
@@ -745,7 +760,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const dashboardLink = publicUrl ? ` | ${publicUrl}` : "";
   await deliveryQueue.deliver(
     startupChatId,
-    `Oliver online. ${agentCount} agents, ${scheduleCount} schedules.${dashboardLink}`,
+    `${config.owner?.displayName ?? "Familiar"} online. ${agentCount} agents, ${scheduleCount} schedules.${dashboardLink}`,
   );
 
   // Watch config for hot-reload

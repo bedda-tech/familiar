@@ -356,6 +356,7 @@
 
       .tab-panel { display: none; }
       .tab-panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-lg); }
+      #tab-documents.tab-panel.active { padding: 0 !important; overflow: hidden; }
 
       @media (max-width: 900px) {
         .sidebar:not(.expanded) { width: 0; min-width: 0; border-right: none; }
@@ -1041,11 +1042,13 @@
       .run-bar.error { background: var(--red); }
 
       /* ── Chat ── */
-      #tab-chat.active {
+      #tab-chat.tab-panel.active {
         display: flex !important;
         flex-direction: column;
         flex: 1;
         min-height: 0;
+        overflow: hidden;
+        height: 100%;
       }
 
       .chat-messages {
@@ -1054,7 +1057,8 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-        padding: 16px 0;
+        padding: 16px;
+        min-height: 0;
       }
 
       .chat-msg {
@@ -1140,6 +1144,112 @@
         color: var(--text-muted);
         font-size: 12px;
         text-align: center;
+      }
+
+      .chat-date-separator {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 8px 0;
+        position: relative;
+      }
+      .chat-date-separator::before,
+      .chat-date-separator::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 30%;
+        border-top: 1px solid var(--border);
+      }
+      .chat-date-separator::before { left: 5%; }
+      .chat-date-separator::after { right: 5%; }
+
+      .chat-loading-more {
+        text-align: center;
+        padding: 12px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .chat-header-bar {
+        display: flex;
+        gap: 8px;
+        padding: 0 0 8px;
+        border-bottom: 1px solid var(--border);
+        align-items: center;
+      }
+
+      .chat-search-input {
+        flex: 1;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 6px 10px;
+        outline: none;
+      }
+      .chat-search-input:focus { border-color: var(--border-focus); }
+      .chat-search-input::placeholder { color: var(--text-muted); }
+
+      .chat-search-results {
+        position: absolute;
+        top: 38px;
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 100;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: none;
+      }
+      .chat-search-results.visible { display: block; }
+
+      .chat-search-result {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .chat-search-result:last-child { border-bottom: none; }
+      .chat-search-result:hover { background: var(--bg-hover); }
+
+      .chat-search-result .search-meta {
+        font-size: 10px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+      }
+
+      .chat-search-result .search-snippet {
+        color: var(--text);
+        word-break: break-word;
+      }
+      .chat-search-result .search-snippet mark {
+        background: var(--accent);
+        color: var(--bg);
+        border-radius: 2px;
+        padding: 0 2px;
+      }
+
+      .chat-search-wrapper {
+        position: relative;
+        flex: 1;
+      }
+
+      .chat-msg[data-msg-id].highlight .chat-bubble {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .chat-history-timestamp {
+        font-size: 9px;
+        color: var(--text-muted);
+        margin-top: 2px;
       }
 
       /* ── Runs table ── */
@@ -1274,12 +1384,12 @@
       .ov-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr 1fr auto;
+        grid-auto-rows: minmax(180px, auto);
         gap: var(--space-md);
         flex: 1;
         min-height: 0;
       }
-      @media (max-width: 900px) { .ov-grid { grid-template-columns: 1fr; grid-template-rows: auto; } }
+      @media (max-width: 900px) { .ov-grid { grid-template-columns: 1fr; grid-auto-rows: minmax(140px, auto); } }
 
       .ov-section {
         background: var(--bg-card);
@@ -1287,9 +1397,11 @@
         border-radius: var(--radius-lg);
         display: flex;
         flex-direction: column;
-        min-height: 0;
+        min-height: 180px;
+        max-height: 360px;
         overflow: hidden;
       }
+      .ov-section.ov-section-full { max-height: 320px; }
       .ov-section > div:not(.ov-section-title) {
         flex: 1;
         overflow-y: auto;
@@ -1326,6 +1438,68 @@
       .ov-section-full { grid-column: 1 / -1; }
       .ov-feed-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 
+      /* ── Documents Tab ── */
+      .docs-container { display: flex; height: 100%; gap: 0; }
+      .docs-tree { width: 300px; min-width: 250px; overflow-y: auto; border-right: 1px solid var(--border); padding: var(--space-md); flex-shrink: 0; }
+      .docs-content { flex: 1; overflow-y: auto; padding: var(--space-lg) var(--space-xl); }
+      .docs-search { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); font-family: var(--font-mono); font-size: var(--text-sm); padding: var(--space-xs) var(--space-sm); margin-bottom: var(--space-md); outline: none; }
+      .docs-search:focus { border-color: var(--border-focus); }
+      .docs-tree-item { padding: 3px var(--space-sm); cursor: pointer; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 6px; font-size: var(--text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+      .docs-tree-item:hover { background: var(--bg-hover); }
+      .docs-tree-item.active { background: rgba(88,166,255,0.12); color: var(--accent); }
+      .docs-tree-folder > .docs-tree-children { padding-left: 16px; }
+      .docs-tree-folder.collapsed > .docs-tree-children { display: none; }
+      .docs-tree-arrow { font-size: 10px; width: 12px; text-align: center; color: var(--text-muted); flex-shrink: 0; transition: transform 0.1s; }
+      .docs-tree-folder.collapsed > .docs-tree-item > .docs-tree-arrow { transform: rotate(-90deg); }
+      .docs-tree-icon { flex-shrink: 0; font-size: 12px; }
+      .docs-tree-name { overflow: hidden; text-overflow: ellipsis; }
+      .docs-tree-size { margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; padding-left: var(--space-sm); }
+      .docs-breadcrumb { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-md); }
+      .docs-breadcrumb span { color: var(--text-muted); }
+      .docs-breadcrumb span:last-child { color: var(--text); }
+      .docs-meta { font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--border); display: flex; gap: var(--space-lg); }
+      .docs-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: var(--text-base); }
+      /* Markdown content styling */
+      .docs-rendered { line-height: 1.7; color: var(--text); }
+      .docs-rendered h1 { font-size: 24px; margin: 24px 0 12px; color: var(--text-bright); }
+      .docs-rendered h2 { font-size: 20px; margin: 20px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; color: var(--text-bright); }
+      .docs-rendered h3 { font-size: 16px; margin: 16px 0 8px; color: var(--text-bright); }
+      .docs-rendered h4 { font-size: 14px; margin: 14px 0 6px; color: var(--text-bright); }
+      .docs-rendered p { margin: 8px 0; }
+      .docs-rendered ul, .docs-rendered ol { margin: 8px 0; padding-left: 24px; }
+      .docs-rendered li { margin: 4px 0; }
+      .docs-rendered a { color: var(--accent); text-decoration: none; }
+      .docs-rendered a:hover { text-decoration: underline; }
+      .docs-rendered blockquote { border-left: 3px solid var(--accent); padding-left: var(--space-md); color: var(--text-muted); margin: 12px 0; }
+      .docs-rendered table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+      .docs-rendered th, .docs-rendered td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; font-size: var(--text-base); }
+      .docs-rendered th { background: var(--bg-card); }
+      .docs-rendered code { background: var(--bg-card); padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--text-base); font-family: var(--font-mono); }
+      .docs-rendered pre { background: var(--bg-card); padding: var(--space-md); border-radius: var(--radius-md); overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); }
+      .docs-rendered pre code { background: none; padding: 0; border-radius: 0; }
+      .docs-rendered hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+      .docs-rendered img { max-width: 100%; border-radius: var(--radius-md); }
+      .docs-edit-textarea {
+        width: 100%;
+        height: calc(100vh - 200px);
+        min-height: 400px;
+        background: var(--bg-card);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.6;
+        resize: vertical;
+        tab-size: 2;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .docs-edit-textarea:focus { border-color: var(--accent); }
+      .docs-toolbar { display: flex; gap: 8px; align-items: center; }
+      .docs-toolbar .btn { font-size: 12px; padding: 4px 12px; }
+
       /* ── Responsive ── */
       @media (max-width: 600px) {
         .tab-panel.active { padding: var(--space-md); }
@@ -1336,6 +1510,8 @@
         .card-grid { grid-template-columns: 1fr; }
         .hide-mobile { display: none; }
         #tab-chat.active { height: calc(100vh - 49px - var(--space-lg)); }
+        .docs-container { flex-direction: column; }
+        .docs-tree { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
       }
     </style>
   </head>
@@ -1420,6 +1596,10 @@
               <span class="sidebar-icon">▤</span>
               <span class="sidebar-label">Templates</span>
             </div>
+            <div class="sidebar-item" data-tab="documents" data-label="Documents" onclick="showTab('documents')">
+              <span class="sidebar-icon">☰</span>
+              <span class="sidebar-label">Documents</span>
+            </div>
           </div>
           <!-- Analytics -->
           <div class="sidebar-group">
@@ -1427,6 +1607,14 @@
             <div class="sidebar-item" data-tab="costs" data-label="Costs" onclick="showTab('costs')">
               <span class="sidebar-icon">◑</span>
               <span class="sidebar-label">Costs</span>
+            </div>
+          </div>
+          <!-- Infrastructure -->
+          <div class="sidebar-group">
+            <div class="sidebar-group-label">Infra</div>
+            <div class="sidebar-item" data-tab="services" data-label="Services" onclick="showTab('services')">
+              <span class="sidebar-icon">◈</span>
+              <span class="sidebar-label">Services</span>
             </div>
           </div>
           <!-- Spacer pushes Chat to bottom -->
@@ -1473,6 +1661,17 @@
         </div>
         <!-- Grid: 2 columns -->
         <div class="ov-grid">
+          <!-- Your Tasks (full width) -->
+          <div class="ov-section ov-section-full" style="max-height:280px">
+            <div class="ov-section-title">
+              <span style="color:var(--accent)">★</span>
+              Your Tasks
+              <span class="badge badge-blue" id="ovOwnerTaskCount" style="margin-left:4px;font-size:9px"></span>
+            </div>
+            <div id="ovOwnerTasks">
+              <div class="ov-empty">Loading…</div>
+            </div>
+          </div>
           <!-- Now Running -->
           <div class="ov-section">
             <div class="ov-section-title">
@@ -1781,13 +1980,45 @@
         </div>
       </div>
 
+      <!-- ── Services ── -->
+      <div id="tab-services" class="tab-panel">
+        <div class="section-header">
+          <h2>Services</h2>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadServices()">Refresh</button>
+          </div>
+        </div>
+        <div id="servicesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-md);"></div>
+      </div>
+
+      <!-- ── Documents ── -->
+      <div id="tab-documents" class="tab-panel">
+        <div class="docs-container">
+          <div class="docs-tree" id="docsTree">
+            <input type="text" class="docs-search" id="docsSearch" placeholder="Filter files..." oninput="filterDocTree(this.value)" />
+            <div id="docsTreeContent">
+              <div class="loading">Loading documents...</div>
+            </div>
+          </div>
+          <div class="docs-content" id="docsContent">
+            <div class="docs-empty">Select a document to view</div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Chat ── -->
       <div id="tab-chat" class="tab-panel">
+        <div class="chat-header-bar">
+          <div class="chat-search-wrapper">
+            <input type="text" class="chat-search-input" id="chatSearchInput" placeholder="Search chat history... (Enter to search)" />
+            <div class="chat-search-results" id="chatSearchResults"></div>
+          </div>
+        </div>
         <div id="chatMessages" class="chat-messages">
           <div class="chat-empty" id="chatEmpty">Connect and type a message to chat with your familiar.</div>
         </div>
         <div class="chat-input-bar">
-          <textarea id="chatInput" placeholder="Message your familiar… (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+          <textarea id="chatInput" placeholder="Message your familiar... (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
           <button id="chatSendBtn" onclick="chatSend()">Send</button>
         </div>
       </div>
@@ -2235,6 +2466,50 @@
       </div>
     </div>
 
+    <!-- ── Project Detail Modal ── -->
+    <div id="projectDetailModal" class="modal-overlay">
+      <div class="modal modal-wide" style="max-width:860px;width:96%">
+        <div class="modal-header">
+          <h3 id="projectDetailTitle">Project</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm" id="projectDetailEditBtn" onclick="openProjectModalFromDetail()">Edit</button>
+            <button class="modal-close" onclick="closeProjectDetail()">&times;</button>
+          </div>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;max-height:80vh">
+          <!-- Info bar -->
+          <div id="projectDetailInfo" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center"></div>
+
+          <!-- Repos panel -->
+          <details open style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border)">Repos</summary>
+            <div id="projectDetailRepos" style="margin-top:8px"><div class="loading">Loading…</div></div>
+          </details>
+
+          <!-- Agents panel -->
+          <details open style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border)">Agents</summary>
+            <div id="projectDetailAgents" style="margin-top:8px"><div class="loading">Loading…</div></div>
+          </details>
+
+          <!-- Recent Runs panel -->
+          <details open style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border)">Recent Runs</summary>
+            <div id="projectDetailRuns" style="margin-top:8px"><div class="loading">Loading…</div></div>
+          </details>
+
+          <!-- Docs panel -->
+          <details style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border)">Docs</summary>
+            <div id="projectDetailDocs" style="margin-top:8px"><div class="loading">Loading…</div></div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeProjectDetail()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Confirm dialog ── -->
     <div id="confirmOverlay" class="modal-overlay">
       <div class="confirm-dialog">
@@ -2249,6 +2524,7 @@
     <!-- Toast -->
     <div id="toast-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
       'use strict';
 
@@ -2263,6 +2539,8 @@
       let cronJobs = [];
       let tasks = [];
       let projects = [];
+      let _ownerName = 'owner';
+      let _ownerDisplay = 'Owner';
       let tools = [];
       let toolProfiles = [];
       let templates = [];
@@ -2298,16 +2576,82 @@
       _sp = _loadSort('templates');
       let templateSortKey = _sp.key !== undefined ? _sp.key : 'name', templateSortDir = _sp.dir || 'asc';
 
-      // ── Init ──────────────────────────────────────────────────────────
-      if (token) {
-        document.getElementById('tokenInput').value = token;
-        connectWs();
-        loadAll();
-        setTimeout(handleHashRoute, 100); // handle direct #/runs/ID links after data loads
+      // ── Hash-based routing ─────────────────────────────────────────
+      const VALID_TABS = new Set([
+        'overview', 'activity', 'agents', 'schedules', 'runs', 'tasks',
+        'projects', 'tools', 'templates', 'documents', 'costs', 'services', 'chat'
+      ]);
+
+      let _suppressHashUpdate = false;
+
+      function parseRoute() {
+        const hash = window.location.hash.slice(1) || '/overview';
+        const [path, query] = hash.split('?');
+        const tab = path.replace(/^\//, '').split('/')[0] || 'overview';
+        // Extract sub-path (e.g., /runs/123 -> '123')
+        const parts = path.replace(/^\//, '').split('/');
+        const subId = parts.length > 1 ? parts.slice(1).join('/') : null;
+        const params = query ? Object.fromEntries(new URLSearchParams(query)) : null;
+        return { tab: VALID_TABS.has(tab) ? tab : 'overview', subId, params };
+      }
+
+      function buildHash(tab, params, subId) {
+        let hash = '#/' + tab;
+        if (subId) hash += '/' + subId;
+        if (params && Object.keys(params).length > 0) {
+          hash += '?' + new URLSearchParams(params).toString();
+        }
+        return hash;
+      }
+
+      function handleRouteParams(tab, params, subId) {
+        if (tab === 'documents' && params && params.path) {
+          // Wait for documents tree to load, then open the file
+          const tryOpen = () => {
+            if (_docsTree && _docsTree.length > 0) {
+              loadDocument(params.path, params.path.split('/').pop());
+            } else {
+              setTimeout(tryOpen, 200);
+            }
+          };
+          setTimeout(tryOpen, 200);
+        }
+        if (tab === 'runs' && subId) {
+          const runId = parseInt(subId, 10);
+          if (!isNaN(runId)) {
+            const tryOpen = () => {
+              openRunDetail(runId);
+            };
+            setTimeout(tryOpen, 200);
+          }
+        }
+        if (tab === 'tasks' && params && params.id) {
+          const taskId = params.id;
+          setTimeout(() => {
+            const row = document.querySelector(`#tab-tasks tr[data-task-id="${taskId}"], #tab-tasks [data-task-id="${taskId}"]`);
+            if (row) {
+              row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              row.style.outline = '2px solid var(--cyan)';
+              setTimeout(() => { row.style.outline = ''; }, 3000);
+            }
+          }, 500);
+        }
+        if (tab === 'agents' && params && params.id) {
+          // Highlight agent in list if possible
+          setTimeout(() => {
+            const card = document.querySelector(`#tab-agents [data-agent-id="${params.id}"]`);
+            if (card) {
+              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              card.style.outline = '2px solid var(--cyan)';
+              setTimeout(() => { card.style.outline = ''; }, 3000);
+            }
+          }, 500);
+        }
       }
 
       // Sidebar tab switching
-      function showTab(tab) {
+      function showTab(tab, opts) {
+        opts = opts || {};
         document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         const item = document.querySelector(`.sidebar-item[data-tab="${tab}"]`);
@@ -2321,6 +2665,36 @@
         else { if (_ovTimer) { clearInterval(_ovTimer); _ovTimer = null; } }
         if (tab === 'runs') loadRuns();
         if (tab === 'costs') loadCosts();
+        if (tab === 'services') loadServices();
+        if (tab === 'documents') loadDocuments();
+        if (tab === 'chat') loadChatHistory();
+
+        // Update URL hash (unless we're responding to a hash change)
+        if (!opts.fromHash && !_suppressHashUpdate) {
+          _suppressHashUpdate = true;
+          history.pushState(null, '', buildHash(tab, null, null));
+          _suppressHashUpdate = false;
+        }
+      }
+
+      // ── Init ──────────────────────────────────────────────────────────
+      if (token) {
+        document.getElementById('tokenInput').value = token;
+        connectWs();
+        // Determine initial tab from hash before loading data
+        const _initRoute = parseRoute();
+        if (_initRoute.tab !== 'overview') {
+          _suppressHashUpdate = true;
+          showTab(_initRoute.tab, { fromHash: true });
+          _suppressHashUpdate = false;
+        } else {
+          history.replaceState(null, '', '#/overview');
+        }
+        loadAll();
+        // Handle deep-link params (subId, query params) after data loads
+        if (_initRoute.params || _initRoute.subId) {
+          setTimeout(() => handleRouteParams(_initRoute.tab, _initRoute.params, _initRoute.subId), 300);
+        }
       }
 
       // Sidebar collapse toggle
@@ -2495,6 +2869,10 @@
       // ── Load all data ─────────────────────────────────────────────────
       function loadAll() {
         if (!token) return;
+        // Load owner config for task assignment
+        api('GET', '/api/config').then(cfg => {
+          if (cfg?.owner?.name) { _ownerName = cfg.owner.name; _ownerDisplay = cfg.owner.displayName || cfg.owner.name; }
+        }).catch(() => {});
         loadMetrics();
         loadActivity();
         loadAgents();
@@ -2969,7 +3347,8 @@
           if (!el) return;
           const current = el.value;
           const prefix = selId === 'taskBulkAgent' ? '<option value="">Set agent...</option>' : '<option value="">All agents</option>';
-          el.innerHTML = prefix + agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
+          const ownerOpt = _ownerName ? `<option value="${esc(_ownerName)}">${esc(_ownerDisplay)} (you)</option>` : '';
+          el.innerHTML = prefix + ownerOpt + agents.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.id)}</option>`).join('');
           el.value = current;
         });
       }
@@ -3852,7 +4231,7 @@
           ].filter(Boolean).join('');
 
           return `
-            <div class="card" onclick="openProjectModal('${esc(p.id)}')">
+            <div class="card" onclick="openProjectDetail('${esc(p.id)}')" style="cursor:pointer">
               <div class="card-title">${esc(p.name)} ${enabledBadge}</div>
               ${p.description ? `<div class="card-desc">${esc(p.description)}</div>` : '<div class="card-desc" style="opacity:0.4">No description</div>'}
               <div class="card-meta">
@@ -3952,6 +4331,201 @@
           }
         });
       }
+
+      // ── Project Detail View ────────────────────────────────────────────
+      let projectDetailId = null;
+
+      async function openProjectDetail(projectId) {
+        projectDetailId = projectId;
+        const p = projects.find(x => x.id === projectId);
+        document.getElementById('projectDetailTitle').textContent = p ? (p.name || projectId) : projectId;
+        document.getElementById('projectDetailInfo').innerHTML = '<span class="loading">Loading…</span>';
+        document.getElementById('projectDetailRepos').innerHTML = '<div class="loading">Loading…</div>';
+        document.getElementById('projectDetailAgents').innerHTML = '<div class="loading">Loading…</div>';
+        document.getElementById('projectDetailRuns').innerHTML = '<div class="loading">Loading…</div>';
+        document.getElementById('projectDetailDocs').innerHTML = '<div class="loading">Loading…</div>';
+        document.getElementById('projectDetailModal').classList.add('visible');
+        renderProjectDetailInfo(p);
+        await Promise.all([
+          loadProjectDetailRepos(projectId),
+          loadProjectDetailAgents(projectId),
+          loadProjectDetailRuns(projectId),
+          loadProjectDetailDocs(projectId),
+        ]);
+      }
+
+      function closeProjectDetail() {
+        document.getElementById('projectDetailModal').classList.remove('visible');
+        projectDetailId = null;
+      }
+
+      function openProjectModalFromDetail() {
+        if (projectDetailId) {
+          closeProjectDetail();
+          openProjectModal(projectDetailId);
+        }
+      }
+
+      function renderProjectDetailInfo(p) {
+        if (!p) { document.getElementById('projectDetailInfo').innerHTML = ''; return; }
+        const tags = Array.isArray(p.tags) ? p.tags : [];
+        const statusBadge = p.status ? `<span class="badge badge-blue">${esc(p.status)}</span>` : '';
+        const enabledBadge = p.enabled
+          ? `<span class="badge badge-green">enabled</span>`
+          : `<span class="badge badge-gray">disabled</span>`;
+        const priorityBadge = p.priority != null ? `<span class="badge badge-gray">P${esc(String(p.priority))}</span>` : '';
+        const tagBadges = tags.map(t => `<span class="badge badge-gray">${esc(t)}</span>`).join('');
+        document.getElementById('projectDetailInfo').innerHTML = `
+          ${enabledBadge} ${statusBadge} ${priorityBadge} ${tagBadges}
+          ${p.path ? `<code style="font-size:11px;opacity:0.7">${esc(p.path)}</code>` : ''}
+          ${p.description ? `<span style="font-size:13px;opacity:0.8">${esc(p.description)}</span>` : ''}
+        `;
+      }
+
+      async function loadProjectDetailRepos(projectId) {
+        const el = document.getElementById('projectDetailRepos');
+        try {
+          const data = await api('GET', `/api/projects/${encodeURIComponent(projectId)}/repos`);
+          const repos = data.repos || [];
+          if (repos.length === 0) {
+            el.innerHTML = '<div style="opacity:0.5;font-size:13px">No repos configured.</div>';
+            return;
+          }
+          el.innerHTML = `<table class="data-table"><thead><tr>
+            <th>Name</th><th>URL</th><th>Status</th><th>Last Commit</th><th></th>
+          </tr></thead><tbody>` +
+          repos.map(r => {
+            const dirty = r.dirty ? `<span class="badge badge-yellow">dirty</span>` : `<span class="badge badge-green">clean</span>`;
+            const cloned = r.cloned ? `<span class="badge badge-green">cloned</span>` : `<span class="badge badge-gray">not cloned</span>`;
+            const lastCommit = r.lastCommit ? `<code style="font-size:10px">${esc(r.lastCommit.slice(0, 40))}</code>` : '—';
+            return `<tr>
+              <td><strong>${esc(r.name)}</strong></td>
+              <td><code style="font-size:11px">${esc(r.url || '')}</code></td>
+              <td>${cloned} ${r.cloned ? dirty : ''}</td>
+              <td>${lastCommit}</td>
+              <td><button class="btn btn-sm" onclick="pullProjectRepo('${esc(projectId)}','${esc(r.name)}',this)">Pull</button></td>
+            </tr>`;
+          }).join('') + '</tbody></table>';
+        } catch (e) {
+          el.innerHTML = `<div style="opacity:0.5;font-size:13px">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      async function pullProjectRepo(projectId, repoName, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Pulling…';
+        try {
+          await api('POST', `/api/projects/${encodeURIComponent(projectId)}/repos/${encodeURIComponent(repoName)}/pull`);
+          toast(`Pulled ${repoName}`, 'success');
+          await loadProjectDetailRepos(projectId);
+        } catch (e) {
+          toast(`Pull failed: ${e.message}`, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Pull';
+        }
+      }
+
+      function loadProjectDetailAgents(projectId) {
+        const el = document.getElementById('projectDetailAgents');
+        const projAgents = agents.filter(a => a.project_id === projectId);
+        if (projAgents.length === 0) {
+          el.innerHTML = '<div style="opacity:0.5;font-size:13px">No agents assigned.</div>';
+          return;
+        }
+        // Build schedule lookup by agent_id
+        const schedMap = {};
+        schedules.forEach(s => { if (s.agent_id) schedMap[s.agent_id] = s; });
+
+        el.innerHTML = `<table class="data-table"><thead><tr>
+          <th>Agent</th><th>Model</th><th>Last Run</th><th>Next Run</th><th></th>
+        </tr></thead><tbody>` +
+        projAgents.map(a => {
+          const sched = schedMap[a.id];
+          const lastRun = sched?.last_run_at ? relativeTime(sched.last_run_at) : '—';
+          const nextRun = sched?.next_run_at ? relativeTime(sched.next_run_at) : '—';
+          const statusBadge = a.enabled
+            ? `<span class="badge badge-green">on</span>`
+            : `<span class="badge badge-gray">off</span>`;
+          return `<tr>
+            <td><strong>${esc(a.name || a.id)}</strong> ${statusBadge}</td>
+            <td><span style="opacity:0.7;font-size:11px">${esc(a.model || '')}</span></td>
+            <td style="opacity:0.7;font-size:12px">${lastRun}</td>
+            <td style="opacity:0.7;font-size:12px">${nextRun}</td>
+            <td><button class="btn btn-sm btn-primary" onclick="triggerProjectAgent('${esc(a.id)}',this)">Run</button></td>
+          </tr>`;
+        }).join('') + '</tbody></table>';
+      }
+
+      async function triggerProjectAgent(agentId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Triggering…';
+        try {
+          await api('POST', `/api/cron/jobs/${encodeURIComponent(agentId)}/run`);
+          toast(`Triggered ${agentId}`, 'success');
+        } catch (e) {
+          toast(`Failed: ${e.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Run';
+        }
+      }
+
+      async function loadProjectDetailRuns(projectId) {
+        const el = document.getElementById('projectDetailRuns');
+        try {
+          const data = await api('GET', `/api/runs?project_id=${encodeURIComponent(projectId)}&limit=20`);
+          const runs = data.runs || [];
+          if (runs.length === 0) {
+            el.innerHTML = '<div style="opacity:0.5;font-size:13px">No runs yet.</div>';
+            return;
+          }
+          el.innerHTML = `<table class="data-table"><thead><tr>
+            <th>Agent</th><th>Status</th><th>Duration</th><th>Cost</th><th>When</th>
+          </tr></thead><tbody>` +
+          runs.map(r => {
+            const errBadge = r.isError ? `<span class="badge badge-red">error</span>` : `<span class="badge badge-green">ok</span>`;
+            const dur = r.durationMs ? (r.durationMs / 1000).toFixed(1) + 's' : '—';
+            const cost = r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—';
+            const when = r.startedAt ? relativeTime(r.startedAt) : '—';
+            return `<tr onclick="openRunDetail(${r.id})" style="cursor:pointer">
+              <td>${esc(r.jobId)}</td>
+              <td>${errBadge}</td>
+              <td>${dur}</td>
+              <td>${cost}</td>
+              <td style="opacity:0.7;font-size:12px">${when}</td>
+            </tr>`;
+          }).join('') + '</tbody></table>';
+        } catch (e) {
+          el.innerHTML = `<div style="opacity:0.5;font-size:13px">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      async function loadProjectDetailDocs(projectId) {
+        const el = document.getElementById('projectDetailDocs');
+        try {
+          const data = await api('GET', `/api/projects/${encodeURIComponent(projectId)}/docs`);
+          const docs = data.docs || [];
+          if (docs.length === 0) {
+            el.innerHTML = `<div style="opacity:0.5;font-size:13px">No docs in ~/.familiar/projects/${esc(projectId)}/</div>`;
+            return;
+          }
+          el.innerHTML = '<ul style="list-style:none;padding:0;margin:0">' +
+            docs.map(d => {
+              const kb = (d.size / 1024).toFixed(1);
+              return `<li style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px">
+                <span>${esc(d.name)}</span>
+                <span style="opacity:0.5">${kb} KB &middot; ${relativeTime(d.modified)}</span>
+              </li>`;
+            }).join('') + '</ul>';
+        } catch (e) {
+          el.innerHTML = `<div style="opacity:0.5;font-size:13px">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      // Close project detail on overlay click
+      document.getElementById('projectDetailModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('projectDetailModal')) closeProjectDetail();
+      });
 
       // ── Tool Profiles ──────────────────────────────────────────────────
       async function loadToolProfiles() {
@@ -4601,7 +5175,10 @@
       // ── Run Detail modal ──────────────────────────────────────────────────
 
       async function openRunDetail(id) {
+        _suppressHashUpdate = true;
         location.hash = '#/runs/' + id;
+        // Allow hash to settle, then re-enable
+        setTimeout(() => { _suppressHashUpdate = false; }, 0);
         document.getElementById('runDetailTitle').textContent = 'Run #' + id;
         document.getElementById('runDetailOutput').textContent = 'Loading…';
         document.getElementById('runDetailMeta').innerHTML = '';
@@ -4705,15 +5282,22 @@
 
       function closeRunDetail() {
         document.getElementById('runDetailModal').classList.remove('visible');
-        if (location.hash.startsWith('#/runs/')) history.pushState('', '', location.pathname);
+        if (location.hash.startsWith('#/runs/')) {
+          _suppressHashUpdate = true;
+          history.pushState(null, '', '#/runs');
+          _suppressHashUpdate = false;
+        }
       }
 
       function handleHashRoute() {
-        const m = location.hash.match(/^#\/runs\/(\d+)$/);
-        if (m && token) {
-          showTab('runs');
-          loadRuns();
-          openRunDetail(parseInt(m[1], 10));
+        if (_suppressHashUpdate) return;
+        const route = parseRoute();
+        if (!token) return;
+        _suppressHashUpdate = true;
+        showTab(route.tab, { fromHash: true });
+        _suppressHashUpdate = false;
+        if (route.params || route.subId) {
+          handleRouteParams(route.tab, route.params, route.subId);
         }
       }
 
@@ -4729,13 +5313,15 @@
       async function loadOverview() {
         if (!token) return;
         try {
-          const [m1d, m7d, errRuns, dailyCosts] = await Promise.all([
+          const [m1d, m7d, errRuns, dailyCosts, mattTasks] = await Promise.all([
             api('GET', '/api/metrics?period=1d').catch(() => ({ summary: {} })),
             api('GET', '/api/metrics?period=7d').catch(() => ({ summary: {} })),
             api('GET', '/api/runs?limit=5&is_error=1').catch(() => ({ runs: [] })),
             api('GET', '/api/cost/daily?period=7d').catch(() => ({ days: [], totalCostUsd: 0 })),
+            api('GET', `/api/tasks?assigned_agent=${encodeURIComponent(_ownerName)}&status=ready`).catch(() => []),
           ]);
           renderOvStatBar(m1d.summary || {}, m7d.summary || {});
+          renderOvOwnerTasks(Array.isArray(mattTasks) ? mattTasks : []);
           renderOvRecentErrors(errRuns.runs || []);
           renderOvNextUp();
           renderOvSparkline(dailyCosts.days || [], dailyCosts.totalCostUsd || 0);
@@ -4751,6 +5337,24 @@
         } catch (e) {
           console.error('loadOverview', e);
         }
+      }
+
+      function renderOvOwnerTasks(tasks) {
+        const el = document.getElementById('ovOwnerTasks');
+        const badge = document.getElementById('ovOwnerTaskCount');
+        if (!tasks.length) {
+          el.innerHTML = '<div class="ov-empty ov-empty-ok">All clear -- no tasks assigned to you</div>';
+          if (badge) badge.textContent = '';
+          return;
+        }
+        if (badge) badge.textContent = tasks.length;
+        const priorityColor = p => p <= 1 ? 'var(--red)' : p <= 2 ? 'var(--orange)' : p <= 3 ? 'var(--yellow)' : 'var(--text-muted)';
+        el.innerHTML = tasks.map(t => `
+          <div class="ov-row" style="cursor:pointer" onclick="showTab('tasks')">
+            <span style="color:${priorityColor(t.priority || 5)};font-weight:700;font-size:10px;width:24px;flex-shrink:0">P${t.priority || '?'}</span>
+            <span class="ov-row-name">${esc(t.title)}</span>
+            <span class="ov-row-meta">${t.project_id ? esc(t.project_id) : ''}</span>
+          </div>`).join('');
       }
 
       function renderOvStatBar(s1d, s7d) {
@@ -5020,6 +5624,51 @@
         container.innerHTML = html;
       }
 
+      // ── Services ────────────────────────────────────────────────────────────
+
+      async function loadServices() {
+        const grid = document.getElementById('servicesGrid');
+        let services = [];
+        try {
+          const cfg = await api('GET', '/api/config');
+          services = cfg?.services || [];
+        } catch { services = []; }
+
+        if (!services.length) {
+          grid.innerHTML = '<div class="ov-empty">No services configured. Add a <code>services</code> array to your config.json.</div>';
+          return;
+        }
+
+        const grouped = {};
+        for (const s of services) {
+          const cat = s.category || 'General';
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(s);
+        }
+        let html = '';
+        for (const [cat, svcs] of Object.entries(grouped)) {
+          html += `<div style="grid-column:1/-1;margin-top:var(--space-sm);"><h3 style="color:var(--text-muted);font-size:var(--text-sm);text-transform:uppercase;letter-spacing:1px;margin:0 0 var(--space-xs)">${esc(cat)}</h3></div>`;
+          for (const s of svcs) {
+            html += `
+              <a href="${esc(s.url)}" target="_blank" rel="noopener" class="service-card" style="
+                display:flex;align-items:center;gap:var(--space-md);
+                background:var(--bg-card);border:1px solid var(--bg-hover);border-radius:var(--radius-lg);
+                padding:var(--space-md) var(--space-lg);text-decoration:none;color:var(--text);
+                transition:border-color .15s,background .15s;cursor:pointer;
+              " onmouseover="this.style.borderColor='var(--border-focus)';this.style.background='var(--bg-hover)'"
+                 onmouseout="this.style.borderColor='var(--bg-hover)';this.style.background='var(--bg-card)'">
+                <span style="font-size:24px;flex-shrink:0;width:36px;text-align:center">${s.icon || '◈'}</span>
+                <div style="min-width:0">
+                  <div style="font-weight:600;font-size:var(--text-base);color:var(--text-bright)">${esc(s.name)}</div>
+                  <div style="font-size:var(--text-sm);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.description || '')}</div>
+                </div>
+                <span style="margin-left:auto;color:var(--text-muted);font-size:var(--text-sm);flex-shrink:0">↗</span>
+              </a>`;
+          }
+        }
+        grid.innerHTML = html;
+      }
+
       // ── Chat ──────────────────────────────────────────────────────────────
 
       let chatDraftEl = null; // currently streaming bubble element
@@ -5047,7 +5696,7 @@
       }
 
       /** Append a permanent chat message bubble. Clears any in-flight draft bubble. */
-      function chatAppendMessage(role, text) {
+      function chatAppendMessage(role, text, msgId) {
         if (chatDraftEl) {
           chatDraftEl.remove();
           chatDraftEl = null;
@@ -5055,12 +5704,22 @@
         const empty = document.getElementById('chatEmpty');
         if (empty) empty.style.display = 'none';
 
+        // Add today's date separator if not already present
+        const container = document.getElementById('chatMessages');
+        const todayKey = chatGetDateKey(new Date().toISOString());
+        const existingSeps = container.querySelectorAll('.chat-date-separator');
+        let hasTodaySep = false;
+        existingSeps.forEach(s => { if (s.dataset.dateKey === todayKey) hasTodaySep = true; });
+        if (!hasTodaySep && _chatHistoryLoaded) {
+          container.appendChild(chatCreateDateSeparator(new Date().toISOString()));
+        }
+
         const msg = document.createElement('div');
         msg.className = `chat-msg ${role}`;
+        if (msgId) msg.dataset.msgId = String(msgId);
         msg.innerHTML = `
           <div class="chat-label">${role === 'user' ? 'You' : 'Familiar'}</div>
           <div class="chat-bubble">${role === 'user' ? esc(text) : chatMarkdown(text)}</div>`;
-        const container = document.getElementById('chatMessages');
         container.appendChild(msg);
         container.scrollTop = container.scrollHeight;
       }
@@ -5121,7 +5780,564 @@
           }
         });
         input.addEventListener('input', () => chatInputResize(input));
+
+        // Wire up chat search
+        const searchInput = document.getElementById('chatSearchInput');
+        if (searchInput) {
+          searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              chatSearch(searchInput.value.trim());
+            }
+            if (e.key === 'Escape') {
+              chatSearchClose();
+            }
+          });
+        }
+
+        // Close search results when clicking outside
+        document.addEventListener('click', e => {
+          const wrapper = document.querySelector('.chat-search-wrapper');
+          if (wrapper && !wrapper.contains(e.target)) {
+            chatSearchClose();
+          }
+        });
       });
+
+      // ── Chat History ────────────────────────────────────────────────────
+
+      let _chatHistoryLoaded = false;
+      let _chatHistoryLoading = false;
+      let _chatHistoryHasMore = true;
+      let _chatHistoryBeforeCursor = null;
+      let _chatLoadedMsgIds = new Set();
+
+      function chatFormatDate(isoStr) {
+        try {
+          const d = new Date(isoStr);
+          const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+        } catch { return ''; }
+      }
+
+      function chatFormatTime(isoStr) {
+        try {
+          const d = new Date(isoStr);
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch { return ''; }
+      }
+
+      function chatGetDateKey(isoStr) {
+        try {
+          const d = new Date(isoStr);
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        } catch { return ''; }
+      }
+
+      function chatCreateDateSeparator(dateStr) {
+        const sep = document.createElement('div');
+        sep.className = 'chat-date-separator';
+        sep.dataset.dateKey = chatGetDateKey(dateStr);
+        sep.textContent = chatFormatDate(dateStr);
+        return sep;
+      }
+
+      function chatCreateHistoryMessage(msg) {
+        const el = document.createElement('div');
+        el.className = `chat-msg ${msg.role}`;
+        el.dataset.msgId = String(msg.id);
+        el.innerHTML = `
+          <div class="chat-label">${msg.role === 'user' ? 'You' : 'Familiar'}</div>
+          <div class="chat-bubble">${msg.role === 'user' ? esc(msg.content) : chatMarkdown(msg.content)}</div>
+          <div class="chat-history-timestamp">${chatFormatTime(msg.created_at)}</div>`;
+        return el;
+      }
+
+      async function loadChatHistory() {
+        if (_chatHistoryLoaded || _chatHistoryLoading) return;
+        _chatHistoryLoading = true;
+        _chatHistoryLoaded = true;
+
+        const container = document.getElementById('chatMessages');
+        const empty = document.getElementById('chatEmpty');
+
+        try {
+          const data = await api('GET', '/api/chat/messages/all?limit=50');
+          const messages = (data.messages || []).slice().reverse(); // oldest first
+          _chatHistoryHasMore = data.has_more;
+
+          if (messages.length === 0) {
+            _chatHistoryLoading = false;
+            return;
+          }
+
+          // Set the cursor for next page load
+          // messages are now oldest-first, so the oldest has the smallest id
+          _chatHistoryBeforeCursor = messages[0].id;
+
+          // Hide empty state
+          if (empty) empty.style.display = 'none';
+
+          // Build message elements with date separators
+          const frag = document.createDocumentFragment();
+          let lastDateKey = '';
+          for (const msg of messages) {
+            _chatLoadedMsgIds.add(msg.id);
+            const dateKey = chatGetDateKey(msg.created_at);
+            if (dateKey !== lastDateKey) {
+              frag.appendChild(chatCreateDateSeparator(msg.created_at));
+              lastDateKey = dateKey;
+            }
+            frag.appendChild(chatCreateHistoryMessage(msg));
+          }
+
+          // Insert before any existing live messages (or at the start)
+          const firstChild = container.firstChild;
+          if (firstChild && firstChild !== empty) {
+            container.insertBefore(frag, firstChild);
+          } else {
+            container.appendChild(frag);
+          }
+
+          // Scroll to bottom (newest messages)
+          container.scrollTop = container.scrollHeight;
+
+          // Set up infinite scroll
+          container.addEventListener('scroll', chatHandleScroll);
+
+        } catch (e) {
+          console.error('Failed to load chat history:', e);
+        }
+        _chatHistoryLoading = false;
+      }
+
+      async function chatLoadMore() {
+        if (_chatHistoryLoading || !_chatHistoryHasMore || !_chatHistoryBeforeCursor) return;
+        _chatHistoryLoading = true;
+
+        const container = document.getElementById('chatMessages');
+
+        // Add loading indicator
+        const loader = document.createElement('div');
+        loader.className = 'chat-loading-more';
+        loader.id = 'chatLoadingMore';
+        loader.textContent = 'Loading older messages...';
+        container.prepend(loader);
+
+        try {
+          const data = await api('GET', `/api/chat/messages/all?limit=50&before=${_chatHistoryBeforeCursor}`);
+          const messages = (data.messages || []).slice().reverse(); // oldest first
+          _chatHistoryHasMore = data.has_more;
+
+          // Remove loader
+          const loaderEl = document.getElementById('chatLoadingMore');
+          if (loaderEl) loaderEl.remove();
+
+          if (messages.length === 0) {
+            _chatHistoryLoading = false;
+            return;
+          }
+
+          // Update cursor
+          _chatHistoryBeforeCursor = messages[0].id;
+
+          // Save scroll position
+          const prevScrollHeight = container.scrollHeight;
+          const prevScrollTop = container.scrollTop;
+
+          // Build fragment
+          const frag = document.createDocumentFragment();
+          let lastDateKey = '';
+
+          // Check if we need a date separator connecting to the existing first message
+          const firstExisting = container.querySelector('.chat-date-separator');
+          const existingFirstDateKey = firstExisting ? firstExisting.dataset.dateKey : '';
+
+          for (const msg of messages) {
+            if (_chatLoadedMsgIds.has(msg.id)) continue;
+            _chatLoadedMsgIds.add(msg.id);
+            const dateKey = chatGetDateKey(msg.created_at);
+            if (dateKey !== lastDateKey) {
+              // Don't add separator if it matches the existing first separator
+              if (dateKey !== existingFirstDateKey) {
+                frag.appendChild(chatCreateDateSeparator(msg.created_at));
+              }
+              lastDateKey = dateKey;
+            }
+            frag.appendChild(chatCreateHistoryMessage(msg));
+          }
+
+          // If last loaded messages have same date as existing first separator, remove the duplicate
+          if (lastDateKey === existingFirstDateKey && firstExisting) {
+            // Keep the existing one -- new messages go before it
+          }
+
+          // Prepend at the top
+          container.prepend(frag);
+
+          // Restore scroll position
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+
+        } catch (e) {
+          console.error('Failed to load more chat history:', e);
+          const loaderEl = document.getElementById('chatLoadingMore');
+          if (loaderEl) loaderEl.remove();
+        }
+        _chatHistoryLoading = false;
+      }
+
+      function chatHandleScroll() {
+        const container = document.getElementById('chatMessages');
+        if (container.scrollTop < 100 && _chatHistoryHasMore && !_chatHistoryLoading) {
+          chatLoadMore();
+        }
+      }
+
+      // ── Chat Search ─────────────────────────────────────────────────────
+
+      let _chatSearchDebounce = null;
+
+      async function chatSearch(query) {
+        if (!query) {
+          chatSearchClose();
+          return;
+        }
+
+        const resultsEl = document.getElementById('chatSearchResults');
+        resultsEl.innerHTML = '<div class="chat-loading-more">Searching...</div>';
+        resultsEl.classList.add('visible');
+
+        try {
+          const data = await api('GET', `/api/chat/search?q=${encodeURIComponent(query)}&limit=20`);
+          const results = data.results || [];
+
+          if (results.length === 0) {
+            resultsEl.innerHTML = '<div class="chat-loading-more">No results found</div>';
+            return;
+          }
+
+          let html = '';
+          for (const r of results) {
+            const dateStr = chatFormatDate(r.created_at);
+            const timeStr = chatFormatTime(r.created_at);
+            const roleLabel = r.role === 'user' ? 'You' : 'Familiar';
+            html += `<div class="chat-search-result" data-msg-id="${r.id}" onclick="chatSearchGoTo(${r.id}, '${esc(r.created_at)}')">
+              <div class="search-meta">${esc(roleLabel)} &middot; ${esc(dateStr)} ${esc(timeStr)}</div>
+              <div class="search-snippet">${r.snippet}</div>
+            </div>`;
+          }
+          resultsEl.innerHTML = html;
+        } catch (e) {
+          resultsEl.innerHTML = `<div class="chat-loading-more" style="color:var(--red)">Search failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function chatSearchClose() {
+        const resultsEl = document.getElementById('chatSearchResults');
+        if (resultsEl) resultsEl.classList.remove('visible');
+      }
+
+      async function chatSearchGoTo(msgId, createdAt) {
+        chatSearchClose();
+
+        // Check if this message is already loaded in the chat view
+        const existing = document.querySelector(`.chat-msg[data-msg-id="${msgId}"]`);
+        if (existing) {
+          chatHighlightMessage(existing);
+          return;
+        }
+
+        // Message not loaded yet -- we need to load history until we find it
+        // For simplicity, load pages until we reach this message
+        let attempts = 0;
+        while (attempts < 20 && _chatHistoryHasMore) {
+          await chatLoadMore();
+          const found = document.querySelector(`.chat-msg[data-msg-id="${msgId}"]`);
+          if (found) {
+            chatHighlightMessage(found);
+            return;
+          }
+          // Check if we've gone past this message (cursor is now before it)
+          if (_chatHistoryBeforeCursor && _chatHistoryBeforeCursor <= msgId) {
+            // We should have loaded it by now; it might be from Telegram
+            break;
+          }
+          attempts++;
+        }
+
+        // Fallback: if we can't scroll to it, show a toast with the message
+        toast('Message found but could not scroll to it in current view', 'info');
+      }
+
+      function chatHighlightMessage(el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('highlight');
+        setTimeout(() => el.classList.remove('highlight'), 3000);
+      }
+
+      // ── Documents Tab ──
+      let _docsTree = [];
+      let _docsActiveFile = null;
+      let _docsEditMode = false;
+
+      async function loadDocuments() {
+        const container = document.getElementById('docsTreeContent');
+        try {
+          const data = await api('GET', '/api/documents');
+          _docsTree = data.tree || [];
+          renderDocTree(_docsTree);
+        } catch (e) {
+          container.innerHTML = '<div style="color:var(--red);padding:8px;">Failed to load documents</div>';
+        }
+      }
+
+      function renderDocTree(tree) {
+        const container = document.getElementById('docsTreeContent');
+        container.innerHTML = '';
+        tree.forEach(node => container.appendChild(buildTreeNode(node, 0)));
+      }
+
+      function buildTreeNode(node, depth) {
+        const isFolder = node.type === 'folder' || node.type === 'project';
+        const hasChildren = node.children && node.children.length > 0;
+
+        if (isFolder && hasChildren) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'docs-tree-folder';
+          wrapper.dataset.name = node.name.toLowerCase();
+
+          const item = document.createElement('div');
+          item.className = 'docs-tree-item';
+          item.innerHTML = `<span class="docs-tree-arrow">▼</span>` +
+            `<span class="docs-tree-icon">${node.type === 'project' ? '⊡' : '▸'}</span>` +
+            `<span class="docs-tree-name">${esc(node.name)}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            wrapper.classList.toggle('collapsed');
+          };
+          wrapper.appendChild(item);
+
+          const children = document.createElement('div');
+          children.className = 'docs-tree-children';
+          node.children.forEach(child => children.appendChild(buildTreeNode(child, depth + 1)));
+          wrapper.appendChild(children);
+          return wrapper;
+        } else if (!isFolder) {
+          const item = document.createElement('div');
+          item.className = 'docs-tree-item';
+          item.dataset.path = node.path;
+          item.dataset.name = node.name.toLowerCase();
+          const sizeStr = formatFileSize(node.size || 0);
+          const icon = node.name.endsWith('.yaml') ? '◇' : '◆';
+          item.innerHTML = `<span class="docs-tree-icon" style="opacity:0.5">${icon}</span>` +
+            `<span class="docs-tree-name">${esc(node.name)}</span>` +
+            `<span class="docs-tree-size">${sizeStr}</span>`;
+          item.onclick = () => loadDocument(node.path, node.name);
+          return item;
+        } else {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'docs-tree-folder collapsed';
+          wrapper.dataset.name = node.name.toLowerCase();
+          const item = document.createElement('div');
+          item.className = 'docs-tree-item';
+          item.innerHTML = `<span class="docs-tree-arrow">▼</span>` +
+            `<span class="docs-tree-icon">${node.type === 'project' ? '⊡' : '▸'}</span>` +
+            `<span class="docs-tree-name">${esc(node.name)}</span>`;
+          wrapper.appendChild(item);
+          const children = document.createElement('div');
+          children.className = 'docs-tree-children';
+          wrapper.appendChild(children);
+          return wrapper;
+        }
+      }
+
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + 'B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'K';
+        return (bytes / (1024 * 1024)).toFixed(1) + 'M';
+      }
+
+      async function loadDocument(path, name) {
+        // Update URL hash with document path
+        _suppressHashUpdate = true;
+        history.replaceState(null, '', buildHash('documents', { path: path }, null));
+        setTimeout(() => { _suppressHashUpdate = false; }, 0);
+
+        // Highlight active item
+        document.querySelectorAll('.docs-tree-item').forEach(el => el.classList.remove('active'));
+        const activeItem = document.querySelector(`.docs-tree-item[data-path="${CSS.escape(path)}"]`);
+        if (activeItem) activeItem.classList.add('active');
+
+        const content = document.getElementById('docsContent');
+        content.innerHTML = '<div class="loading">Loading...</div>';
+
+        try {
+          const data = await api('GET', '/api/documents/read?path=' + encodeURIComponent(path));
+
+          _docsActiveFile = data;
+          const breadcrumb = buildBreadcrumb(path);
+          const lineCount = (data.content || '').split('\n').length;
+          const modDate = new Date(data.mtime).toLocaleString();
+          const sizeStr = formatFileSize(data.size);
+
+          let rendered = '';
+          if (name.endsWith('.yaml') || name.endsWith('.yml')) {
+            rendered = `<pre><code>${esc(data.content)}</code></pre>`;
+          } else if (typeof marked !== 'undefined' && marked.parse) {
+            rendered = marked.parse(data.content || '');
+          } else {
+            rendered = `<pre>${esc(data.content)}</pre>`;
+          }
+
+          const isEditable = name.endsWith('.md') || name.endsWith('.yaml') || name.endsWith('.yml');
+          content.innerHTML =
+            `<div class="docs-breadcrumb">${breadcrumb}</div>` +
+            `<div class="docs-meta">` +
+              `<span>Modified: ${modDate}</span>` +
+              `<span>${lineCount} lines</span>` +
+              `<span>${sizeStr}</span>` +
+              (isEditable ? `<div class="docs-toolbar" style="margin-left:auto;"><button class="btn btn-sm" onclick="docsEnterEdit()">Edit</button></div>` : '') +
+            `</div>` +
+            `<div class="docs-rendered" id="docsRendered">${rendered}</div>` +
+            `<div id="docsEditArea" style="display:none;"></div>`;
+          _docsEditMode = false;
+        } catch (e) {
+          content.innerHTML = '<div style="color:var(--red)">Failed to load document</div>';
+        }
+      }
+
+      function buildBreadcrumb(path) {
+        const base = '/home/mwhit/oliver/';
+        const rel = path.startsWith(base) ? path.slice(base.length) : path;
+        const parts = rel.split('/');
+        return parts.map((p, i) => {
+          const isLast = i === parts.length - 1;
+          return `<span${isLast ? ' style="color:var(--text-bright)"' : ''}>${esc(p)}</span>`;
+        }).join(' <span style="color:var(--text-muted)">/</span> ');
+      }
+
+      function filterDocTree(query) {
+        const q = query.toLowerCase().trim();
+        const container = document.getElementById('docsTreeContent');
+        if (!q) {
+          renderDocTree(_docsTree);
+          return;
+        }
+        // Filter: show only matching files and their parent folders
+        const filtered = filterNodes(_docsTree, q);
+        container.innerHTML = '';
+        filtered.forEach(node => {
+          const el = buildTreeNode(node, 0);
+          // Expand all folders when filtering
+          el.querySelectorAll && el.querySelectorAll('.docs-tree-folder').forEach(f => f.classList.remove('collapsed'));
+          if (el.classList && el.classList.contains('docs-tree-folder')) el.classList.remove('collapsed');
+          container.appendChild(el);
+        });
+      }
+
+      function filterNodes(nodes, q) {
+        const result = [];
+        for (const node of nodes) {
+          const isFolder = node.type === 'folder' || node.type === 'project';
+          if (isFolder && node.children) {
+            const filteredChildren = filterNodes(node.children, q);
+            if (filteredChildren.length > 0) {
+              result.push({ ...node, children: filteredChildren });
+            }
+          } else if (!isFolder && node.name.toLowerCase().includes(q)) {
+            result.push(node);
+          }
+        }
+        return result;
+      }
+
+      // ── Document Edit Mode ──
+      function docsEnterEdit() {
+        if (!_docsActiveFile) return;
+        _docsEditMode = true;
+
+        const rendered = document.getElementById('docsRendered');
+        const editArea = document.getElementById('docsEditArea');
+        if (!rendered || !editArea) return;
+
+        rendered.style.display = 'none';
+        editArea.style.display = 'block';
+        editArea.innerHTML =
+          `<div class="docs-toolbar" style="margin-bottom:12px;">` +
+            `<button class="btn btn-sm" onclick="docsSave()" style="background:var(--green);color:#000;">Save</button>` +
+            `<button class="btn btn-sm" onclick="docsCancel()">Cancel</button>` +
+            `<span id="docsEditStatus" style="font-size:11px;color:var(--text-muted);margin-left:8px;"></span>` +
+          `</div>` +
+          `<textarea class="docs-edit-textarea" id="docsEditTextarea"></textarea>`;
+
+        const textarea = document.getElementById('docsEditTextarea');
+        textarea.value = _docsActiveFile.content || '';
+        textarea.focus();
+
+        // Tab key inserts spaces instead of moving focus
+        textarea.addEventListener('keydown', docsTextareaKeydown);
+
+        // Update toolbar: replace Edit button with editing indicator
+        const toolbar = document.querySelector('.docs-meta .docs-toolbar');
+        if (toolbar) toolbar.innerHTML = '<span style="font-size:11px;color:var(--accent);">Editing</span>';
+      }
+
+      function docsTextareaKeydown(e) {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const ta = e.target;
+          const start = ta.selectionStart;
+          const end = ta.selectionEnd;
+          ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+          ta.selectionStart = ta.selectionEnd = start + 2;
+        }
+        // Ctrl+S / Cmd+S to save
+        if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          docsSave();
+        }
+        // Escape to cancel
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          docsCancel();
+        }
+      }
+
+      async function docsSave() {
+        if (!_docsActiveFile) return;
+        const textarea = document.getElementById('docsEditTextarea');
+        const status = document.getElementById('docsEditStatus');
+        if (!textarea) return;
+
+        const content = textarea.value;
+        if (status) status.textContent = 'Saving...';
+
+        try {
+          const data = await api('PUT', '/api/documents/write', {
+            path: _docsActiveFile.path,
+            content: content,
+          });
+          toast('Document saved', 'success');
+          // Update cached content and reload the rendered view
+          _docsActiveFile.content = content;
+          _docsActiveFile.size = data.size;
+          _docsActiveFile.mtime = data.mtime;
+          _docsEditMode = false;
+          // Re-render the document
+          loadDocument(_docsActiveFile.path, _docsActiveFile.name);
+        } catch (e) {
+          toast('Save failed: ' + e.message, 'error');
+          if (status) status.textContent = 'Save failed';
+        }
+      }
+
+      function docsCancel() {
+        _docsEditMode = false;
+        if (_docsActiveFile) {
+          loadDocument(_docsActiveFile.path, _docsActiveFile.name);
+        }
+      }
     </script>
   </body>
 </html>
