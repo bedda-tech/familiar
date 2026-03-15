@@ -2929,6 +2929,7 @@
           return `${Math.floor(diff/86400000)}d ago`;
         } catch { return esc(isoStr); }
       }
+      const relativeTime = formatRelative;
 
       function formatDuration(ms) {
         if (ms == null) return '—';
@@ -4346,12 +4347,21 @@
         document.getElementById('projectDetailDocs').innerHTML = '<div class="loading">Loading…</div>';
         document.getElementById('projectDetailModal').classList.add('visible');
         renderProjectDetailInfo(p);
-        await Promise.all([
+        // Fetch runs once and share with both panels (runs + agent success rate)
+        const [runs] = await Promise.all([
+          _fetchProjectRuns(projectId),
           loadProjectDetailRepos(projectId),
-          loadProjectDetailAgents(projectId),
-          loadProjectDetailRuns(projectId),
           loadProjectDetailDocs(projectId),
         ]);
+        renderProjectDetailRuns(runs);
+        renderProjectDetailAgents(projectId, runs);
+      }
+
+      async function _fetchProjectRuns(projectId) {
+        try {
+          const data = await api('GET', `/api/runs?project_id=${encodeURIComponent(projectId)}&limit=100`);
+          return data.runs || [];
+        } catch { return []; }
       }
 
       function closeProjectDetail() {
@@ -4425,30 +4435,44 @@
         }
       }
 
-      function loadProjectDetailAgents(projectId) {
+      function renderProjectDetailAgents(projectId, runs) {
         const el = document.getElementById('projectDetailAgents');
         const projAgents = agents.filter(a => a.project_id === projectId);
         if (projAgents.length === 0) {
           el.innerHTML = '<div style="opacity:0.5;font-size:13px">No agents assigned.</div>';
           return;
         }
-        // Build schedule lookup by agent_id
+        // Schedule lookup by agent_id
         const schedMap = {};
         schedules.forEach(s => { if (s.agent_id) schedMap[s.agent_id] = s; });
+        // Success rate per agent from loaded runs
+        const agentStats = {};
+        for (const r of (runs || [])) {
+          const s = agentStats[r.jobId] || { total: 0, ok: 0 };
+          s.total++;
+          if (!r.isError) s.ok++;
+          agentStats[r.jobId] = s;
+        }
 
         el.innerHTML = `<table class="data-table"><thead><tr>
-          <th>Agent</th><th>Model</th><th>Last Run</th><th>Next Run</th><th></th>
+          <th>Agent</th><th>Model</th><th>Success</th><th>Last Run</th><th>Next Run</th><th></th>
         </tr></thead><tbody>` +
         projAgents.map(a => {
           const sched = schedMap[a.id];
-          const lastRun = sched?.last_run_at ? relativeTime(sched.last_run_at) : '—';
-          const nextRun = sched?.next_run_at ? relativeTime(sched.next_run_at) : '—';
+          const lastRun = formatRelative(sched?.last_run_at);
+          const nextRun = formatRelative(sched?.next_run_at);
           const statusBadge = a.enabled
             ? `<span class="badge badge-green">on</span>`
             : `<span class="badge badge-gray">off</span>`;
+          const stats = agentStats[a.id];
+          const pct = stats ? Math.round(stats.ok / stats.total * 100) : null;
+          const successRate = pct != null
+            ? `<span class="badge ${pct >= 80 ? 'badge-green' : pct >= 50 ? 'badge-yellow' : 'badge-red'}">${pct}%</span>`
+            : `<span style="opacity:0.4">—</span>`;
           return `<tr>
             <td><strong>${esc(a.name || a.id)}</strong> ${statusBadge}</td>
             <td><span style="opacity:0.7;font-size:11px">${esc(a.model || '')}</span></td>
+            <td>${successRate}</td>
             <td style="opacity:0.7;font-size:12px">${lastRun}</td>
             <td style="opacity:0.7;font-size:12px">${nextRun}</td>
             <td><button class="btn btn-sm btn-primary" onclick="triggerProjectAgent('${esc(a.id)}',this)">Run</button></td>
@@ -4470,34 +4494,28 @@
         }
       }
 
-      async function loadProjectDetailRuns(projectId) {
+      function renderProjectDetailRuns(runs) {
         const el = document.getElementById('projectDetailRuns');
-        try {
-          const data = await api('GET', `/api/runs?project_id=${encodeURIComponent(projectId)}&limit=20`);
-          const runs = data.runs || [];
-          if (runs.length === 0) {
-            el.innerHTML = '<div style="opacity:0.5;font-size:13px">No runs yet.</div>';
-            return;
-          }
-          el.innerHTML = `<table class="data-table"><thead><tr>
-            <th>Agent</th><th>Status</th><th>Duration</th><th>Cost</th><th>When</th>
-          </tr></thead><tbody>` +
-          runs.map(r => {
-            const errBadge = r.isError ? `<span class="badge badge-red">error</span>` : `<span class="badge badge-green">ok</span>`;
-            const dur = r.durationMs ? (r.durationMs / 1000).toFixed(1) + 's' : '—';
-            const cost = r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—';
-            const when = r.startedAt ? relativeTime(r.startedAt) : '—';
-            return `<tr onclick="openRunDetail(${r.id})" style="cursor:pointer">
-              <td>${esc(r.jobId)}</td>
-              <td>${errBadge}</td>
-              <td>${dur}</td>
-              <td>${cost}</td>
-              <td style="opacity:0.7;font-size:12px">${when}</td>
-            </tr>`;
-          }).join('') + '</tbody></table>';
-        } catch (e) {
-          el.innerHTML = `<div style="opacity:0.5;font-size:13px">Failed: ${esc(e.message)}</div>`;
+        const display = (runs || []).slice(0, 20);
+        if (display.length === 0) {
+          el.innerHTML = '<div style="opacity:0.5;font-size:13px">No runs yet.</div>';
+          return;
         }
+        el.innerHTML = `<table class="data-table"><thead><tr>
+          <th>Agent</th><th>Status</th><th>Duration</th><th>Cost</th><th>When</th>
+        </tr></thead><tbody>` +
+        display.map(r => {
+          const errBadge = r.isError ? `<span class="badge badge-red">error</span>` : `<span class="badge badge-green">ok</span>`;
+          const dur = r.durationMs ? (r.durationMs / 1000).toFixed(1) + 's' : '—';
+          const cost = r.costUsd != null ? '$' + r.costUsd.toFixed(4) : '—';
+          return `<tr onclick="openRunDetail(${r.id})" style="cursor:pointer">
+            <td>${esc(r.jobId)}</td>
+            <td>${errBadge}</td>
+            <td>${dur}</td>
+            <td>${cost}</td>
+            <td style="opacity:0.7;font-size:12px">${formatRelative(r.startedAt)}</td>
+          </tr>`;
+        }).join('') + '</tbody></table>';
       }
 
       async function loadProjectDetailDocs(projectId) {
