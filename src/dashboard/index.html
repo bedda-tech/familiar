@@ -6,21 +6,24 @@
     <title>Familiar Dashboard</title>
     <style>
       :root {
-        --bg: #0d1117;
-        --bg-card: #161b22;
-        --bg-hover: #1c2129;
-        --bg-input: #0d1117;
-        --border: #30363d;
-        --border-focus: #58a6ff;
-        --text: #c9d1d9;
-        --text-muted: #8b949e;
-        --text-bright: #f0f6fc;
-        --accent: #58a6ff;
-        --green: #3fb950;
-        --red: #f85149;
-        --yellow: #d29922;
-        --orange: #db6d28;
-        --purple: #bc8cff;
+        --bg: #0a0e14;
+        --bg-card: #111820;
+        --bg-hover: #161e28;
+        --bg-elevated: #1a2332;
+        --bg-input: #0a0e14;
+        --border: #1e2a38;
+        --border-focus: #7ec883;
+        --text: #b8c4d0;
+        --text-muted: #6b7a8d;
+        --text-bright: #e8edf3;
+        --accent: #7ec883;
+        --accent-glow: rgba(126, 200, 131, 0.15);
+        --green: #5cdb6f;
+        --red: #ff6b6b;
+        --yellow: #ffd166;
+        --orange: #ff9f43;
+        --purple: #c084fc;
+        --blue: #60a5fa;
         --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Consolas, monospace;
 
         /* Golden ratio scale (phi = 1.618) */
@@ -59,6 +62,9 @@
       body {
         font-family: var(--font-mono);
         background: var(--bg);
+        background-image:
+          radial-gradient(ellipse at 20% 50%, rgba(126,200,131,0.03) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 20%, rgba(96,165,250,0.02) 0%, transparent 50%);
         color: var(--text);
         height: 100vh;
         width: 100vw;
@@ -288,7 +294,7 @@
       .sidebar-item.active {
         color: var(--accent);
         border-left-color: var(--accent);
-        background: rgba(88, 166, 255, 0.06);
+        background: rgba(126, 200, 131, 0.06);
       }
 
       .sidebar-icon {
@@ -530,13 +536,13 @@
         border: 1px solid transparent;
       }
 
-      .badge-green { background: rgba(63,185,80,0.15); color: var(--green); border-color: rgba(63,185,80,0.3); }
-      .badge-red { background: rgba(248,81,73,0.15); color: var(--red); border-color: rgba(248,81,73,0.3); }
-      .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); border-color: rgba(88,166,255,0.3); }
-      .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); border-color: rgba(210,153,34,0.3); }
-      .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); border-color: rgba(188,140,255,0.3); }
-      .badge-gray { background: rgba(139,148,158,0.15); color: var(--text-muted); border-color: rgba(139,148,158,0.3); }
-      .badge-orange { background: rgba(219,109,40,0.15); color: var(--orange); border-color: rgba(219,109,40,0.3); }
+      .badge-green { background: rgba(92,219,111,0.12); color: var(--green); border-color: rgba(92,219,111,0.25); }
+      .badge-red { background: rgba(255,107,107,0.12); color: var(--red); border-color: rgba(255,107,107,0.25); }
+      .badge-blue { background: rgba(96,165,250,0.12); color: var(--blue); border-color: rgba(96,165,250,0.25); }
+      .badge-yellow { background: rgba(255,209,102,0.12); color: var(--yellow); border-color: rgba(255,209,102,0.25); }
+      .badge-purple { background: rgba(192,132,252,0.12); color: var(--purple); border-color: rgba(192,132,252,0.25); }
+      .badge-gray { background: rgba(107,122,141,0.12); color: var(--text-muted); border-color: rgba(107,122,141,0.25); }
+      .badge-orange { background: rgba(255,159,67,0.12); color: var(--orange); border-color: rgba(255,159,67,0.25); }
 
       /* ── Empty state ── */
       .empty-state {
@@ -673,9 +679,9 @@
         padding: 1px 5px;
         border-radius: 3px;
         margin-left: 4px;
-        background: rgba(248,81,73,0.15);
+        background: rgba(255,107,107,0.12);
         color: var(--red);
-        border: 1px solid rgba(248,81,73,0.3);
+        border: 1px solid rgba(255,107,107,0.25);
         vertical-align: middle;
       }
 
@@ -812,7 +818,7 @@
         transition: transform 0.2s, background 0.2s;
       }
 
-      .toggle input:checked + .toggle-slider { background: rgba(63,185,80,0.3); }
+      .toggle input:checked + .toggle-slider { background: rgba(92,219,111,0.3); }
       .toggle input:checked + .toggle-slider:before { transform: translateX(14px); background: var(--green); }
 
       /* ── Filters ── */
@@ -1446,7 +1452,7 @@
       .docs-search:focus { border-color: var(--border-focus); }
       .docs-tree-item { padding: 3px var(--space-sm); cursor: pointer; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 6px; font-size: var(--text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
       .docs-tree-item:hover { background: var(--bg-hover); }
-      .docs-tree-item.active { background: rgba(88,166,255,0.12); color: var(--accent); }
+      .docs-tree-item.active { background: rgba(126,200,131,0.12); color: var(--accent); }
       .docs-tree-folder > .docs-tree-children { padding-left: 16px; }
       .docs-tree-folder.collapsed > .docs-tree-children { display: none; }
       .docs-tree-arrow { font-size: 10px; width: 12px; text-align: center; color: var(--text-muted); flex-shrink: 0; transition: transform 0.1s; }
@@ -2871,7 +2877,7 @@
         if (!token) return;
         // Load owner config for task assignment
         api('GET', '/api/config').then(cfg => {
-          if (cfg?.owner?.name) { _ownerName = cfg.owner.name; _ownerDisplay = cfg.owner.displayName || cfg.owner.name; }
+          const c = cfg?.config; if (c?.owner?.name) { _ownerName = c.owner.name; _ownerDisplay = c.owner.displayName || c.owner.name; }
         }).catch(() => {});
         loadMetrics();
         loadActivity();
@@ -3759,7 +3765,7 @@
         if (taskTagFilters.size === 0) { container.style.display = 'none'; return; }
         container.style.display = 'flex';
         container.innerHTML = [...taskTagFilters].map(tag =>
-          `<span style="font-size:10px;padding:2px 6px;border-radius:12px;border:1px solid var(--blue);background:rgba(56,139,253,0.2);color:var(--blue);display:flex;align-items:center;gap:3px">${esc(tag)}<button onclick="removeTagFilter('${esc(tag)}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;padding:0;line-height:1">&times;</button></span>`
+          `<span style="font-size:10px;padding:2px 6px;border-radius:12px;border:1px solid var(--blue);background:rgba(96,165,250,0.15);color:var(--blue);display:flex;align-items:center;gap:3px">${esc(tag)}<button onclick="removeTagFilter('${esc(tag)}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;padding:0;line-height:1">&times;</button></span>`
         ).join('');
       }
 
@@ -5474,7 +5480,7 @@
         el.innerHTML = `
           <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">7-day total: $${totalCostUsd.toFixed(2)}</div>
           <svg viewBox="0 0 ${w} ${h}" height="${h}" style="width:100%;overflow:visible">
-            <path d="${fillPath}" fill="rgba(88,166,255,0.08)"/>
+            <path d="${fillPath}" fill="rgba(96,165,250,0.08)"/>
             <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
             ${circles}
           </svg>
@@ -5649,7 +5655,7 @@
         let services = [];
         try {
           const cfg = await api('GET', '/api/config');
-          services = cfg?.services || [];
+          services = cfg?.config?.services || [];
         } catch { services = []; }
 
         if (!services.length) {
