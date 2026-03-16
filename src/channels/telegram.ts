@@ -7,6 +7,7 @@ import { getConfigPath, type TelegramConfig } from "../config.js";
 import type { Channel, IncomingMessage, DraftHandle } from "./types.js";
 import { markdownToTelegramHtml, stripHtml } from "../streaming/markdown-to-html.js";
 import { getLogger } from "../util/logger.js";
+import type { MessageBus } from "../bus.js";
 
 const log = getLogger("telegram");
 
@@ -15,6 +16,7 @@ const log = getLogger("telegram");
 const SEND_INTERVAL_MS = 1100;
 
 export class TelegramChannel implements Channel {
+  readonly id = "telegram";
   private bot: Bot;
   private allowedUsers: Set<number>;
   private messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null;
@@ -41,6 +43,19 @@ export class TelegramChannel implements Channel {
 
   onCommand(command: string, handler: (msg: IncomingMessage) => Promise<void>): void {
     this.commandHandlers.set(command, handler);
+  }
+
+  /**
+   * Subscribe to a MessageBus and deliver final messages from non-telegram sources.
+   * Used for Phase 2+ cross-channel delivery (Slack, Discord → Telegram).
+   * For Phase 1 (Dashboard → Telegram), the Bridge.mirrorChannel handles this.
+   */
+  setBus(bus: MessageBus, primaryChatId: string): void {
+    bus.on((event) => {
+      if (event.source === "telegram") return; // skip own echoes
+      if (event.type !== "message") return; // finals only, skip drafts/typing
+      void this.sendDirectMessage(primaryChatId, `[${event.source}] ${event.text}`);
+    });
   }
 
   /** Convert markdown to Telegram HTML for sending */

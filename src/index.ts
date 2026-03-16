@@ -34,6 +34,7 @@ import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
 import { WsServer } from "./ws/server.js";
 import { DashboardChannel } from "./channels/dashboard.js";
+import { MessageBus } from "./bus.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -742,10 +743,13 @@ async function cmdStart(configPath?: string): Promise<void> {
       bridge.addChannel(dashboardChannel);
       await dashboardChannel.start();
 
-      // Bridge: broadcast Telegram messages to dashboard, mirror dashboard responses to Telegram
-      bridge.setWsServer(wsServer);
+      // Wire MessageBus for cross-channel sync (Telegram ↔ Dashboard)
+      const bus = new MessageBus();
+      bridge.setBus(bus);
+      wsServer.setBus(bus);
+      telegram.setBus(bus, primaryChatId);
       bridge.setMirrorChannel(telegram, primaryChatId);
-      log.info("dashboard channel wired (cross-channel sync enabled)");
+      log.info("dashboard channel wired (cross-channel sync via MessageBus enabled)");
     }
   }
 

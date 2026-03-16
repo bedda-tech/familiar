@@ -1083,6 +1083,19 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
+      .chat-source-badge {
+        display: inline-block;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        text-transform: lowercase;
+        letter-spacing: 0;
+        margin-left: 4px;
+        vertical-align: middle;
+      }
 
       .chat-bubble {
         background: var(--bg-card);
@@ -2862,7 +2875,7 @@
         }
 
         if (msg.type === 'chat:message') {
-          chatAppendMessage(msg.role, msg.text);
+          chatAppendMessage(msg.role, msg.text, null, msg.source);
           return;
         }
 
@@ -2875,20 +2888,21 @@
       // ── Load all data ─────────────────────────────────────────────────
       function loadAll() {
         if (!token) return;
-        // Load owner config for task assignment
+        // Load owner config FIRST (blocking), then load everything else
         api('GET', '/api/config').then(cfg => {
           const c = cfg?.config; if (c?.owner?.name) { _ownerName = c.owner.name; _ownerDisplay = c.owner.displayName || c.owner.name; }
-        }).catch(() => {});
-        loadMetrics();
-        loadActivity();
-        loadAgents();
-        loadSchedules();
-        loadTasks();
-        loadProjects();
-        loadTools();
-        loadToolProfiles();
-        loadTemplates();
-        loadOverview();
+        }).catch(() => {}).finally(() => {
+          loadMetrics();
+          loadActivity();
+          loadAgents();
+          loadSchedules();
+          loadTasks();
+          loadProjects();
+          loadTools();
+          loadToolProfiles();
+          loadTemplates();
+          loadOverview();
+        });
       }
 
       // ── API helpers ───────────────────────────────────────────────────
@@ -5345,7 +5359,7 @@
             api('GET', `/api/tasks?assigned_agent=${encodeURIComponent(_ownerName)}&status=ready`).catch(() => []),
           ]);
           renderOvStatBar(m1d.summary || {}, m7d.summary || {});
-          renderOvOwnerTasks(Array.isArray(mattTasks) ? mattTasks : []);
+          renderOvOwnerTasks(mattTasks?.tasks || (Array.isArray(mattTasks) ? mattTasks : []));
           renderOvRecentErrors(errRuns.runs || []);
           renderOvNextUp();
           renderOvSparkline(dailyCosts.days || [], dailyCosts.totalCostUsd || 0);
@@ -5720,7 +5734,7 @@
       }
 
       /** Append a permanent chat message bubble. Clears any in-flight draft bubble. */
-      function chatAppendMessage(role, text, msgId) {
+      function chatAppendMessage(role, text, msgId, source) {
         if (chatDraftEl) {
           chatDraftEl.remove();
           chatDraftEl = null;
@@ -5738,11 +5752,15 @@
           container.appendChild(chatCreateDateSeparator(new Date().toISOString()));
         }
 
+        const sourceLabel = source && source !== 'dashboard'
+          ? ` <span class="chat-source-badge">${esc(source)}</span>` : '';
+        const userLabel = role === 'user' ? `You${sourceLabel}` : 'Familiar';
+
         const msg = document.createElement('div');
         msg.className = `chat-msg ${role}`;
         if (msgId) msg.dataset.msgId = String(msgId);
         msg.innerHTML = `
-          <div class="chat-label">${role === 'user' ? 'You' : 'Familiar'}</div>
+          <div class="chat-label">${role === 'user' ? userLabel : 'Familiar'}</div>
           <div class="chat-bubble">${role === 'user' ? esc(text) : chatMarkdown(text)}</div>`;
         container.appendChild(msg);
         container.scrollTop = container.scrollHeight;

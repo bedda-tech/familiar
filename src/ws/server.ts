@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 import { getLogger } from "../util/logger.js";
 import type { WsEvent } from "./types.js";
+import type { MessageBus } from "../bus.js";
 
 const log = getLogger("ws-server");
 
@@ -106,6 +107,21 @@ export class WsServer {
     if (this.messageHandler) {
       this.messageHandler(clientId, msg);
     }
+  }
+
+  /**
+   * Subscribe to a MessageBus and broadcast chat events to dashboard clients.
+   * Only broadcasts events from non-dashboard sources (DashboardChannel handles its own).
+   */
+  setBus(bus: MessageBus): void {
+    bus.on((event) => {
+      if (event.source === "dashboard") return; // DashboardChannel already broadcasts these
+      if (event.type === "message") {
+        this.broadcast({ type: "chat:message", role: event.role, text: event.text, source: event.source });
+      } else if (event.type === "draft") {
+        this.broadcast({ type: "chat:draft", text: event.text, done: event.done });
+      }
+    });
   }
 
   /** Close all connections and clean up. */

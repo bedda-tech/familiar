@@ -8,6 +8,7 @@ import type { DeliveryQueue } from "./delivery/queue.js";
 import type { CronScheduler } from "./cron/scheduler.js";
 import type { ProcessTracker } from "./claude/process-tracker.js";
 import type { WsServer } from "./ws/server.js";
+import { type MessageBus, type BusSource } from "./bus.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
@@ -77,6 +78,8 @@ export class Bridge {
   private chatChannelMap = new Map<string, Channel>();
   /** WebSocket server for cross-channel broadcasting */
   private wsServer: WsServer | undefined;
+  /** MessageBus for cross-channel sync (replaces direct wsServer broadcasts) */
+  private bus: MessageBus | undefined;
   /** Mirror channel: receives a copy of responses when the originating channel is not this one */
   private mirrorChannel: Channel | undefined;
   private mirrorChatId: string | undefined;
@@ -555,9 +558,19 @@ export class Bridge {
   /**
    * Attach a WebSocket server so Bridge can broadcast user messages and assistant responses
    * to all dashboard clients whenever a non-WS channel (e.g. Telegram) is active.
+   * @deprecated Use setBus() for new code. Kept for backwards compatibility.
    */
   setWsServer(wsServer: WsServer): void {
     this.wsServer = wsServer;
+  }
+
+  /**
+   * Attach a MessageBus. When set, Bridge emits all non-dashboard chat events to the bus
+   * instead of calling wsServer.broadcast directly. Subscribers (WsServer, TelegramChannel)
+   * react to bus events from other channels.
+   */
+  setBus(bus: MessageBus): void {
+    this.bus = bus;
   }
 
   /**
@@ -663,12 +676,17 @@ export class Bridge {
       chatId: msg.chatId,
     };
 
-    // Log the user message
-    this.sessions.logMessage(msg.chatId, "user", prompt);
+    const channelSource = (origCh.id ?? "telegram") as BusSource;
 
-    // Broadcast user message to dashboard when originating from a non-WS channel (e.g. Telegram)
+    // Log the user message (with originating channel source)
+    this.sessions.logMessage(msg.chatId, "user", prompt, 0, channelSource);
+
+    // Emit user message to bus for non-dashboard channels
     // (DashboardChannel already echoes its own user messages; skip to avoid duplicates)
-    if (this.wsServer && origCh.id !== "dashboard") {
+    if (this.bus && origCh.id !== "dashboard") {
+      this.bus.emit({ type: "message", role: "user", text: prompt, source: channelSource, chatId: msg.chatId });
+    } else if (this.wsServer && origCh.id !== "dashboard") {
+      // Legacy: direct wsServer broadcast (used when no bus is configured)
       this.wsServer.broadcast({ type: "chat:message", role: "user", text: prompt });
     }
 
@@ -721,8 +739,10 @@ export class Bridge {
             }
             fullText += event.text;
             await appendToDraft(draft, draftCtx, event.text);
-            // Stream draft updates to dashboard for Telegram-originated messages
-            if (this.wsServer && origCh.id !== "dashboard") {
+            // Stream draft updates to other channels for non-dashboard-originated messages
+            if (this.bus && origCh.id !== "dashboard") {
+              this.bus.emit({ type: "draft", text: draft.text, done: false, source: channelSource });
+            } else if (this.wsServer && origCh.id !== "dashboard") {
               this.wsServer.broadcast({ type: "chat:draft", text: draft.text, done: false });
             }
             break;
@@ -745,8 +765,13 @@ export class Bridge {
             log.debug({ tool: event.name }, "tool use");
             // Finalize current draft so text before this tool call is sent as its own message
             if (draft.text) {
-              // Finalize the WS draft segment before clearing
-              if (this.wsServer && origCh.id !== "dashboard") {
+              // Finalize the draft segment before clearing (emit to bus or broadcast directly)
+              if (this.bus && origCh.id !== "dashboard") {
+                for (const chunk of chunkMessage(draft.text)) {
+                  this.bus.emit({ type: "message", role: "assistant", text: chunk, source: channelSource, chatId: msg.chatId });
+                }
+                this.bus.emit({ type: "draft", text: "", done: true, source: channelSource });
+              } else if (this.wsServer && origCh.id !== "dashboard") {
                 for (const chunk of chunkMessage(draft.text)) {
                   this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: chunk });
                 }
@@ -759,8 +784,10 @@ export class Bridge {
             // Show tool usage with brief input summary
             const toolLabel = formatToolUse(event.name, event.input);
             await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, toolLabel);
-            // Mirror tool label to dashboard for Telegram messages
-            if (this.wsServer && origCh.id !== "dashboard") {
+            // Mirror tool label to other channels for non-dashboard messages
+            if (this.bus && origCh.id !== "dashboard") {
+              this.bus.emit({ type: "message", role: "assistant", text: toolLabel, source: channelSource, chatId: msg.chatId });
+            } else if (this.wsServer && origCh.id !== "dashboard") {
               this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: toolLabel });
             }
             // Restart typing during tool execution
@@ -792,8 +819,8 @@ export class Bridge {
             // Use the final text from result if we got nothing from streaming
             const responseText = fullText || result.text;
 
-            // Log assistant response
-            this.sessions.logMessage(msg.chatId, "assistant", responseText, result.costUsd);
+            // Log assistant response (with originating channel source)
+            this.sessions.logMessage(msg.chatId, "assistant", responseText, result.costUsd, channelSource);
 
             // Finalize only the current (unsent) draft.
             // Earlier drafts were already finalized when tool_use events split them.
@@ -801,8 +828,13 @@ export class Bridge {
             const draftText = draft.text || (!fullText ? result.text : "");
             if (draftText) {
               const chunks = chunkMessage(draftText);
-              // Broadcast final segment to dashboard for Telegram-originated messages
-              if (this.wsServer && origCh.id !== "dashboard" && draftText) {
+              // Broadcast final segment to other channels for non-dashboard-originated messages
+              if (this.bus && origCh.id !== "dashboard" && draftText) {
+                for (const chunk of chunks) {
+                  this.bus.emit({ type: "message", role: "assistant", text: chunk, source: channelSource, chatId: msg.chatId });
+                }
+                this.bus.emit({ type: "draft", text: "", done: true, source: channelSource });
+              } else if (this.wsServer && origCh.id !== "dashboard" && draftText) {
                 for (const chunk of chunks) {
                   this.wsServer.broadcast({ type: "chat:message", role: "assistant", text: chunk });
                 }
