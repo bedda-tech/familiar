@@ -75,8 +75,11 @@ async function summarizeAgentRun(agentLabel: string, resultText: string, runLog?
   // If assistant text is mostly filler ("Let me check...", "I'll run..."),
   // supplement with actual tool result snippets from the run log
   let content = resultText;
-  const stripped = resultText.replace(/\b(Let me|I'll|Now let me|Looking at|Checking)[^.]*[.:]/gi, "").trim();
-  if (stripped.length < 50 && runLog) {
+  const fillerPattern = /\b(Let me|I'll|Now let me|Looking at|Checking|Let me check|I need to|Now I|First,? let|Running|Searching|Querying|Examining|Analyzing|Investigating|Reading|Fetching|Scanning)[^.:!]*[.:!]/gi;
+  const stripped = resultText.replace(fillerPattern, "").replace(/\s+/g, " ").trim();
+  const fillerRatio = stripped.length / Math.max(resultText.length, 1);
+  // If more than 60% of the text is filler, or stripped is short, pull from tool results
+  if ((fillerRatio < 0.4 || stripped.length < 100) && runLog) {
     const snippets = extractToolSnippets(runLog);
     if (snippets) {
       content = `${resultText}\n\n[Tool outputs]\n${snippets}`;

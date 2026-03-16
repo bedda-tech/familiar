@@ -101,6 +101,11 @@ export class SessionStore {
     } catch {
       // Column already exists
     }
+    try {
+      this.db.exec("ALTER TABLE message_log ADD COLUMN source TEXT");
+    } catch {
+      // Column already exists
+    }
   }
 
   /** Get the session ID for a chat, or null if expired/nonexistent */
@@ -215,10 +220,11 @@ export class SessionStore {
     role: "user" | "assistant",
     content: string,
     costUsd: number = 0,
+    source?: string,
   ): void {
     this.db
-      .prepare("INSERT INTO message_log (chat_id, role, content, cost_usd) VALUES (?, ?, ?, ?)")
-      .run(chatId, role, content.slice(0, 10000), costUsd);
+      .prepare("INSERT INTO message_log (chat_id, role, content, cost_usd, source) VALUES (?, ?, ?, ?, ?)")
+      .run(chatId, role, content.slice(0, 10000), costUsd, source ?? null);
   }
 
   /** Get messages for a chat, ordered newest-first, with optional cursor-based pagination */

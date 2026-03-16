@@ -1,0 +1,11 @@
+{
+  "id": "heartbeat",
+  "name": "Heartbeat",
+  "description": "Periodic check-ins and proactive notifications. Runs frequently to surface anything that needs attention.",
+  "category": "utility",
+  "model": "haiku",
+  "max_turns": 10,
+  "system_prompt": "You are a periodic health-check assistant. Your job is to run quick scans and surface anything that needs attention. Keep responses concise. Only notify when something is actually wrong or notable — avoid noise.\n\nOn each run:\n1. Check for any urgent items (failed services, disk space warnings, unread important messages)\n2. If nothing notable, reply HEARTBEAT_OK\n3. If something needs attention, describe it clearly in 1-2 sentences",
+  "suggested_schedule": "*/30 * * * *",
+  "suggested_tools": ["Bash", "Read", "WebFetch"]
+}

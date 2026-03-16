@@ -499,6 +499,59 @@
 
       .card:hover { border-color: var(--accent); background: var(--bg-hover); }
 
+      /* ── Agent card state variants ── */
+      .card--running {
+        border-left: 3px solid var(--green);
+        background: linear-gradient(90deg, rgba(92,219,111,0.07) 0%, var(--bg-card) 45%);
+      }
+      .card--running:hover { background: linear-gradient(90deg, rgba(92,219,111,0.12) 0%, var(--bg-hover) 45%); }
+      .card--errored {
+        border-left: 3px solid var(--red);
+        background: linear-gradient(90deg, rgba(255,107,107,0.07) 0%, var(--bg-card) 45%);
+      }
+      .card--errored:hover { background: linear-gradient(90deg, rgba(255,107,107,0.12) 0%, var(--bg-hover) 45%); }
+      .card--disabled { opacity: 0.5; border-style: dashed; }
+      .card-state-dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        flex-shrink: 0;
+        opacity: 0.5;
+      }
+      .card-state-dot.running { background: var(--green); opacity: 1; animation: pulse 2s ease-in-out infinite; }
+      .card-state-dot.errored { background: var(--red); opacity: 1; }
+
+      /* ── Project health bar ── */
+      .card-health-bar {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--border);
+        margin-top: var(--space-sm);
+        overflow: hidden;
+      }
+      .card-health-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+      .card-health-ok { background: var(--green); }
+      .card-health-warn { background: var(--yellow); }
+      .card-health-bad { background: var(--red); }
+      .card-progress-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+      .card-progress-bar {
+        flex: 1;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--border);
+        overflow: hidden;
+      }
+      .card-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+
       .card-title {
         font-size: var(--text-base);
         font-weight: 600;
@@ -2567,6 +2620,7 @@
       let runsData = [];   // cache for client-side sort
       let costsData = [];  // cache for client-side sort
       let nowRunning = new Map(); // scheduleId -> { agentId, scheduleId, startedAt }
+      let _agentRunStats7d = {}; // agentId -> { errorCount, runCount } for 7d window
       let _ovTimer = null;
 
       // ── Sort helpers ──────────────────────────────────────────────────────
@@ -2864,6 +2918,9 @@
           if (msg.type === 'schedule:completed' && activeTab === 'schedules') {
             loadSchedules();
           }
+
+          // Re-render agent cards to update running/errored state
+          if (activeTab === 'agents') renderAgents();
         }
 
         if (msg.type === 'task:updated') {
@@ -3268,25 +3325,43 @@
       async function loadAgents() {
         if (!token) return;
         try {
-          const [agentData, scheduleData, costData] = await Promise.all([
+          const [agentData, scheduleData, costData, cost7dData, runsData] = await Promise.all([
             api('GET', '/api/agents'),
             api('GET', '/api/schedules').catch(() => ({ schedules: [] })),
             api('GET', '/api/cost/summary?period=1d').catch(() => ({ agents: [] })),
+            api('GET', '/api/cost/summary?period=7d').catch(() => ({ agents: [] })),
+            api('GET', '/api/runs?limit=200').catch(() => ({ runs: [] })),
           ]);
           agents = agentData.agents || [];
-          // Count schedules per agent
+          // Count schedules per agent; build schedule_id → agent_id map
           const schedCounts = {};
+          const schedJobToAgent = {};
           for (const s of (scheduleData.schedules || [])) {
             schedCounts[s.agent_id] = (schedCounts[s.agent_id] || 0) + 1;
+            schedJobToAgent[s.id] = s.agent_id;
           }
           // Attach daily cost per agent
           const dailyCosts = {};
           for (const c of (costData.agents || [])) {
             dailyCosts[c.agentId] = c.totalCostUsd;
           }
+          // Build 7d run stats per agent
+          _agentRunStats7d = {};
+          for (const c of (cost7dData.agents || [])) {
+            _agentRunStats7d[c.agentId] = { errorCount: c.errorCount, runCount: c.runCount };
+          }
+          // Determine last-run-failed per agent from recent runs
+          const lastRunPerAgent = {};
+          for (const r of (runsData.runs || [])) {
+            const aid = schedJobToAgent[r.jobId] || r.jobId;
+            if (!lastRunPerAgent[aid]) lastRunPerAgent[aid] = r;
+          }
           agents.forEach(a => {
             a._scheduleCount = schedCounts[a.id] || 0;
             a._dailyCostUsd = dailyCosts[a.id] || 0;
+            const lr = lastRunPerAgent[a.id];
+            a._lastRunFailed = lr ? lr.isError : false;
+            a._lastRunAt = lr?.startedAt ?? null;
           });
           document.getElementById('agentCount').textContent = agents.length;
           renderAgents();
@@ -3321,7 +3396,21 @@
         const projectMap = {};
         projects.forEach(p => { projectMap[p.id] = p.name || p.id; });
 
+        // Determine running agents from nowRunning map
+        const runningAgentIds = new Set([...nowRunning.values()].map(v => v.agentId));
+
         grid.innerHTML = filtered.map(a => {
+          const isRunning = runningAgentIds.has(a.id);
+          const isDisabled = !a.enabled;
+          const isErrored = !isRunning && !isDisabled && !!a._lastRunFailed;
+
+          let cardClass = 'card';
+          let dotClass = 'card-state-dot';
+          let dotTitle = 'idle';
+          if (isRunning) { cardClass += ' card--running'; dotClass += ' running'; dotTitle = 'running'; }
+          else if (isErrored) { cardClass += ' card--errored'; dotClass += ' errored'; dotTitle = 'last run failed'; }
+          if (isDisabled) cardClass += ' card--disabled';
+
           const modelBadge = `<span class="badge ${modelColors[a.model] || 'badge-gray'}">${esc(a.model || 'sonnet')}</span>`;
           const enabledBadge = a.enabled
             ? `<span class="badge badge-green">on</span>`
@@ -3334,8 +3423,9 @@
           }
           const projectBadge = a.project_id ? `<span class="badge badge-purple" title="Project">${esc(projectMap[a.project_id] || a.project_id)}</span>` : '';
           return `
-            <div class="card" onclick="openAgentModal('${esc(a.id)}')">
+            <div class="${cardClass}" onclick="openAgentModal('${esc(a.id)}')">
               <div class="card-title">
+                <span class="${dotClass}" title="${dotTitle}"></span>
                 ${esc(a.name)}
                 ${enabledBadge}
               </div>
