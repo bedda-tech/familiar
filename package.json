@@ -1,7 +1,7 @@
 {
   "name": "@bedda/familiar",
   "version": "0.7.0",
-  "description": "Bridge between Telegram and Claude Code — your AI familiar",
+  "description": "Open-source AI familiar — a persistent personal assistant with autonomous agents, real-time dashboard, multi-platform messaging, and semantic memory. Built on Claude Code.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

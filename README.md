@@ -8,22 +8,24 @@
   <a href="https://github.com/orgs/bedda-tech/projects/3"><img src="https://img.shields.io/badge/project-roadmap-blue" alt="roadmap"></a>
 </p>
 
-A persistent AI agent platform powered by Claude Code. Run autonomous agents, scheduled jobs, and background tasks -- all through your existing Claude subscription, no API keys required.
-
-Message your agent on Telegram, pick up the same session in the terminal, schedule cron jobs that run while you sleep, spawn sub-agents for parallel work. Familiar handles the orchestration; Claude Code does the heavy lifting.
+Your own AI familiar -- a persistent personal assistant that works 24/7. 30+ autonomous agents run on cron schedules, a real-time dashboard tracks everything, and semantic memory means your familiar actually remembers. Built on Claude Code, powered by your existing Claude subscription.
 
 ```
-You (Telegram / TUI)  ──>  Familiar  ──>  claude -p (with full toolset)
-                       <──            <──  streaming results, tool calls, files
-                                      ──>  cron jobs, sub-agents, webhooks
+You (Telegram / TUI / Dashboard)  ──>  Familiar  ──>  Claude Code CLI
+                                  <──             <──  streaming responses
+                                                  ──>  30+ cron agents, sub-agents
+                                                  ──>  task queue, memory, webhooks
 ```
 
 ### Why Familiar?
 
-- **Use your Claude subscription** -- Familiar wraps `claude -p` (Claude Code's CLI mode), so it runs on your existing Claude Pro/Team/Enterprise subscription. No separate API billing, no token counting, no ToS violations.
-- **Truly autonomous** -- Cron jobs, self-spawning sub-agents, and webhook triggers let your agent work 24/7 without manual intervention.
-- **One agent, every interface** -- Same session across Telegram (mobile) and TUI (terminal). Switch mid-conversation without losing context.
-- **Personality system** -- Governing docs (SOUL.md, IDENTITY.md, USER.md) give your agent a persistent identity that carries across sessions.
+- **Your Claude subscription, zero API costs** -- Wraps `claude -p` (Claude Code CLI). Runs on Pro/Team/Enterprise. No token counting, no separate billing.
+- **30+ autonomous agents** -- Cron-scheduled agents for engineering, research, content, infrastructure monitoring, job applications, and more. They work while you sleep.
+- **Real-time dashboard** -- Web UI with task management, cost tracking, agent monitoring, run history, and live activity feed. Accessible from anywhere.
+- **Semantic memory** -- Hybrid vector + full-text search over your knowledge base. Your familiar remembers conversations, decisions, and context across sessions.
+- **Multi-platform** -- Same conversation across Telegram (mobile), TUI (terminal), and web dashboard. Switch mid-conversation.
+- **Self-hosted** -- Runs on your own machine. Your data stays yours. SQLite database, no external dependencies beyond Claude Code.
+- **Personality system** -- Governing docs (SOUL.md, IDENTITY.md, USER.md) give your familiar a persistent identity.
 
 ## Features
 
