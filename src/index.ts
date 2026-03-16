@@ -29,6 +29,7 @@ import { ProjectStore } from "./projects/store.js";
 import { ToolStore } from "./tools/store.js";
 import { ToolAccountStore } from "./tools/account-store.js";
 import { TemplateStore } from "./templates/store.js";
+import { AgentTemplateStore } from "./templates/agent-store.js";
 import { runMigration } from "./migrations/001-entity-separation.js";
 import { migrateFromOpenClaw } from "./migrate-openclaw.js";
 import { runConfigure } from "./configure.js";
@@ -677,6 +678,11 @@ async function cmdStart(configPath?: string): Promise<void> {
     webhooks.setToolStore(toolStore);
     webhooks.setToolAccountStore(toolAccountStore);
     webhooks.setTemplateStore(new TemplateStore(db));
+
+    // Wire up agent template store (starter agent templates)
+    const agentTemplateStore = new AgentTemplateStore(db);
+    agentTemplateStore.seed(join(__dirname, "..", "templates"));
+    webhooks.setTemplateStore(agentTemplateStore as any);
 
     // Wire up memory store for /api/memory/search
     if (memoryStore) {

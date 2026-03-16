@@ -48,6 +48,7 @@ import type { RepoManager } from "../projects/repo-manager.js";
 import type { ToolStore } from "../tools/store.js";
 import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
+import type { AgentTemplateStore } from "../templates/agent-store.js";
 import { TOOL_PROFILES, getProfile } from "../tools/profiles.js";
 import { getLogger } from "../util/logger.js";
 
@@ -63,6 +64,8 @@ export class ApiRouter {
   private toolStore: ToolStore | null = null;
   private toolAccountStore: ToolAccountStore | null = null;
   private templateStore: TemplateStore | null = null;
+  private agentTemplateStore: AgentTemplateStore | null = null;
+  private sessionClearHandler: (() => void) | null = null;
   private db: Database.Database | null = null;
   private configPath: string | null = null;
   private onConfigChange: (() => Promise<void>) | null = null;
@@ -106,6 +109,10 @@ export class ApiRouter {
     this.onTaskCreated = handler;
   }
 
+  setSessionClearHandler(handler: () => void): void {
+    this.sessionClearHandler = handler;
+  }
+
   setToolStore(store: ToolStore): void {
     this.toolStore = store;
   }
@@ -116,6 +123,10 @@ export class ApiRouter {
 
   setTemplateStore(store: TemplateStore): void {
     this.templateStore = store;
+  }
+
+  setAgentTemplateStore(store: AgentTemplateStore): void {
+    this.agentTemplateStore = store;
   }
 
   setDb(db: Database.Database): void {
@@ -360,6 +371,28 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Agent Templates ──
+      if (path === "/api/agent-templates") {
+        if (!this.agentTemplateStore) {
+          sendJson(res, 503, { error: "Agent template store not available" });
+        } else {
+          sendJson(res, 200, { templates: this.agentTemplateStore.list() });
+        }
+        return true;
+      }
+      const agentTemplateMatch = path.match(/^\/api\/agent-templates\/([^/]+)$/);
+      if (agentTemplateMatch) {
+        const atId = decodeURIComponent(agentTemplateMatch[1]);
+        if (!this.agentTemplateStore) {
+          sendJson(res, 503, { error: "Agent template store not available" });
+        } else {
+          const t = this.agentTemplateStore.get(atId);
+          if (!t) sendJson(res, 404, { error: "Agent template not found" });
+          else sendJson(res, 200, { template: t });
+        }
+        return true;
+      }
+
       // ── Sub-agents (read-only, legacy) ──
       if (path === "/api/subagents") {
         this.handleListAgents(res);
@@ -573,6 +606,17 @@ export class ApiRouter {
     }
 
     if (method === "POST") {
+      // ── Session Clear ──
+      if (path === "/api/sessions/clear") {
+        if (this.sessionClearHandler) {
+          this.sessionClearHandler();
+          sendJson(res, 200, { status: "cleared" });
+        } else {
+          sendJson(res, 503, { error: "Session clear handler not available" });
+        }
+        return true;
+      }
+
       // ── Activity Log ──
       if (path === "/api/activity" && body) {
         if (!this.db) {
@@ -604,6 +648,25 @@ export class ApiRouter {
             } catch (e: any) {
               sendJson(res, 500, { error: e.message ?? "Failed to insert activity" });
             }
+          }
+        }
+        return true;
+      }
+
+      // ── Agent Template deploy ──
+      const agentTemplateDeployMatch = path.match(/^\/api\/agent-templates\/([^/]+)\/deploy$/);
+      if (agentTemplateDeployMatch) {
+        const atId = decodeURIComponent(agentTemplateDeployMatch[1]);
+        if (!this.agentTemplateStore || !this.agentCrudStore || !this.scheduleStore) {
+          sendJson(res, 503, { error: "Required stores not available" });
+        } else {
+          try {
+            const result = this.agentTemplateStore.deploy(atId, this.agentCrudStore, this.scheduleStore);
+            if (this.cronScheduler) await this.cronScheduler.reload();
+            sendJson(res, 201, result as unknown as Record<string, unknown>);
+          } catch (e: any) {
+            const status = e.message?.includes("not found") ? 404 : 409;
+            sendJson(res, status, { error: e.message ?? "Deploy failed" });
           }
         }
         return true;

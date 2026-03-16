@@ -98,6 +98,11 @@ export class WebhookServer {
     this.apiRouter.setTaskCreatedHandler(handler);
   }
 
+  /** Register a handler for clearing sessions (used by /save skill via API). */
+  onSessionClear(handler: () => void): void {
+    this.apiRouter.setSessionClearHandler(handler);
+  }
+
   /** Attach the persistent agent CRUD store. */
   setAgentCrudStore(store: AgentCrudStore): void {
     this.apiRouter.setAgentCrudStore(store);

@@ -132,6 +132,21 @@ export class Bridge {
       );
     });
 
+    // Handle /save — save context to memory, then clear session
+    // Works on: Telegram (/save), dashboard chat (/save), TUI (as a skill)
+    const saveHandler = async (msg: any) => {
+      this.chatChannelMap.set(msg.chatId, ch);
+      await this.saveSessionContext(msg.chatId, "user requested /save");
+      this.sessions.clearSession(msg.chatId);
+      await this.channelFor(msg.chatId).sendText(
+        msg.chatId,
+        "Context saved to memory. Session reset. Next message starts fresh.",
+        msg.replyContext,
+      );
+    };
+    ch.onCommand("save", saveHandler);
+    ch.onCommand("reset", saveHandler);
+
     // Handle /status — session info
     ch.onCommand("status", async (msg) => {
       this.chatChannelMap.set(msg.chatId, ch);
