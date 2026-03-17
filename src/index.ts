@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, cpSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, cpSync, symlinkSync, lstatSync } from "node:fs";
 import { join, dirname } from "node:path";
 import Database from "better-sqlite3";
 import { homedir } from "node:os";
@@ -149,89 +149,205 @@ Options:
 
 async function cmdInit(): Promise<void> {
   const { createInterface } = await import("node:readline");
-  const configDir = getConfigDir();
-  mkdirSync(configDir, { recursive: true });
+  const { randomBytes } = await import("node:crypto");
 
-  // Create example config if none exists
-  if (!configExists()) {
-    const exampleConfig = {
-      telegram: {
-        botToken: "YOUR_BOT_TOKEN_HERE",
-        allowedUsers: [0],
+  console.log("\n╭──────────────────────────────────────────────╮");
+  console.log("│   Welcome to Familiar — AI Agent Platform    │");
+  console.log("╰──────────────────────────────────────────────╯\n");
+  console.log("This wizard sets up your familiar workspace.\n");
+  console.log("Press Enter to accept defaults shown in [brackets].\n");
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (prompt: string, defaultVal = ""): Promise<string> =>
+    new Promise((resolve) => {
+      const hint = defaultVal ? ` [${defaultVal}]` : "";
+      rl.question(`${prompt}${hint}: `, (ans) => resolve(ans.trim() || defaultVal));
+    });
+
+  // ── Step 1: Workspace path ─────────────────────────────────
+  const defaultWorkspace = join(homedir(), "familiar-workspace");
+  const workspaceInput = await ask("Workspace directory", defaultWorkspace);
+  const workspaceDir = workspaceInput.startsWith("~/")
+    ? join(homedir(), workspaceInput.slice(2))
+    : workspaceInput;
+
+  // ── Step 2: Owner ──────────────────────────────────────────
+  console.log("");
+  const ownerName = await ask("Your username (for task assignment)", "owner");
+  const displayName = await ask("Your display name (optional)", "");
+
+  // ── Step 3: Familiar name ──────────────────────────────────
+  console.log("");
+  const familiarName = await ask("Name your familiar", "Familiar");
+
+  // ── Step 4: Telegram ───────────────────────────────────────
+  console.log("\n── Telegram ─────────────────────────────────────");
+  console.log("  Create a bot at https://t.me/BotFather to get a token.");
+  console.log("  Find your user ID at https://t.me/userinfobot\n");
+  const botToken = await ask("Bot token", "YOUR_BOT_TOKEN_HERE");
+  const userIdInput = await ask("Your Telegram user ID(s) (comma-separated)", "0");
+  const allowedUsers = userIdInput
+    .split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !isNaN(n));
+
+  // ── Step 5: Dashboard ─────────────────────────────────────
+  console.log("\n── Dashboard ────────────────────────────────────");
+  const portInput = await ask("Dashboard port", "3002");
+  const port = parseInt(portInput, 10) || 3002;
+  const token = randomBytes(32).toString("hex");
+  const publicUrl = await ask(
+    "Public URL (e.g. https://myserver.com:3002, press Enter to skip)",
+    "",
+  );
+
+  // ── Step 6: OpenAI (optional) ─────────────────────────────
+  console.log("\n── OpenAI (optional, for voice + embeddings) ───");
+  const openaiKey = await ask("OpenAI API key (press Enter to skip)", "");
+
+  rl.close();
+
+  // ── Create workspace structure ────────────────────────────
+  console.log("\n── Creating workspace ───────────────────────────");
+
+  const configDir = join(workspaceDir, ".familiar");
+  mkdirSync(join(configDir, "agents"), { recursive: true });
+  mkdirSync(join(workspaceDir, "memory"), { recursive: true });
+  mkdirSync(join(workspaceDir, "identity"), { recursive: true });
+  mkdirSync(join(workspaceDir, "claude-memory"), { recursive: true });
+  console.log(`  Created ${workspaceDir}/`);
+
+  // ── Symlink ~/.familiar -> workspace/.familiar ─────────────
+  const symlinkTarget = join(homedir(), ".familiar");
+  if (!existsSync(symlinkTarget)) {
+    try {
+      symlinkSync(configDir, symlinkTarget);
+      console.log(`  Symlink: ~/.familiar -> ${configDir}`);
+    } catch (e: any) {
+      console.log(`  Warning: Could not create ~/.familiar symlink: ${e.message}`);
+    }
+  } else {
+    let kind = "exists";
+    try {
+      kind = lstatSync(symlinkTarget).isSymbolicLink() ? "symlink" : "directory";
+    } catch { /* ignore */ }
+    console.log(`  ~/.familiar already exists (${kind}) — skipping symlink`);
+  }
+
+  // ── Write config.json ─────────────────────────────────────
+  const configPath = join(configDir, "config.json");
+  if (!existsSync(configPath)) {
+    const cfg: Record<string, unknown> = {
+      name: familiarName,
+      owner: {
+        name: ownerName,
+        ...(displayName ? { displayName } : {}),
       },
+      telegram: { botToken, allowedUsers },
       claude: {
-        workingDirectory: join(homedir(), "familiar-workspace"),
+        workingDirectory: workspaceDir,
         model: "sonnet",
-        systemPrompt:
-          "You are a helpful personal assistant communicating via Telegram. Keep responses concise and well-formatted for mobile reading.",
+        systemPrompt: `You are ${familiarName}, an AI familiar — a persistent personal assistant communicating through a messaging platform. Keep responses concise and well-formatted for mobile reading.`,
         allowedTools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"],
         maxTurns: 25,
       },
-      sessions: {
-        inactivityTimeout: "24h",
-        rotateAfterMessages: 200,
+      sessions: { inactivityTimeout: "24h", rotateAfterMessages: 200 },
+      webhooks: {
+        port,
+        token,
+        ...(publicUrl ? { publicUrl } : {}),
       },
-      log: {
-        level: "info",
-      },
+      ...(openaiKey ? { openai: { apiKey: openaiKey } } : {}),
+      log: { level: "info" },
     };
-
-    writeFileSync(getConfigPath(), JSON.stringify(exampleConfig, null, 2) + "\n");
-    console.log(`Created config at ${getConfigPath()}`);
-    console.log("Edit it with your Telegram bot token and user ID.");
+    writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\n");
+    console.log(`  Config: ${configPath}`);
   } else {
-    console.log(`Config already exists at ${getConfigPath()}`);
+    console.log(`  Config already exists at ${configPath}`);
   }
 
-  // Create workspace with templates
-  const config = configExists()
-    ? (() => {
-        try {
-          return loadConfig();
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
-  const workspaceDir = config?.claude?.workingDirectory ?? join(homedir(), "familiar-workspace");
-  mkdirSync(workspaceDir, { recursive: true });
-
-  // Copy templates
+  // ── Copy templates ────────────────────────────────────────
   const templatesDir = join(__dirname, "..", "templates");
-  const templateFiles = [
-    "CLAUDE.md",
-    "SOUL.md",
-    "IDENTITY.md",
-    "USER.md",
-    "AGENTS.md",
-    "TOOLS.md",
-    "BOOTSTRAP.md",
-    "TODO.md",
-    "MEMORY.md",
-  ];
 
-  for (const file of templateFiles) {
+  // Identity files go in identity/
+  const identityFiles = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
+  for (const file of identityFiles) {
+    const dest = join(workspaceDir, "identity", file);
+    const src = join(templatesDir, file);
+    if (!existsSync(dest) && existsSync(src)) {
+      cpSync(src, dest);
+      console.log(`  Created identity/${file}`);
+    }
+  }
+
+  // IDENTITY.md with name pre-filled
+  const identityMdPath = join(workspaceDir, "identity", "IDENTITY.md");
+  if (!existsSync(identityMdPath)) {
+    writeFileSync(
+      identityMdPath,
+      `# Identity\n\n**Name**: ${familiarName}\n**Nature**: AI familiar — persistent personal assistant\n**Emoji**: ✨\n`,
+    );
+    console.log(`  Created identity/IDENTITY.md (name: ${familiarName})`);
+  }
+
+  // CLAUDE.md with identity/ paths
+  const claudeMdPath = join(workspaceDir, "CLAUDE.md");
+  if (!existsSync(claudeMdPath)) {
+    writeFileSync(
+      claudeMdPath,
+      `# Familiar Workspace\n\nYou are ${familiarName} — an AI familiar and persistent personal assistant communicating through a messaging platform.\n\n## Session Startup\n\nRead these files in order:\n1. identity/SOUL.md — who you are\n2. identity/IDENTITY.md — your name and nature\n3. identity/USER.md — who you're helping\n4. identity/AGENTS.md — behavioral rules\n5. identity/TOOLS.md — available tools\n\nCheck the \`memory/\` directory for recent daily notes.\n\nIf BOOTSTRAP.md exists, follow it — it's your first-run onboarding.\n`,
+    );
+    console.log(`  Created CLAUDE.md`);
+  }
+
+  // Other workspace-root files
+  for (const file of ["MEMORY.md", "BOOTSTRAP.md"]) {
     const dest = join(workspaceDir, file);
     const src = join(templatesDir, file);
     if (!existsSync(dest) && existsSync(src)) {
       cpSync(src, dest);
-      console.log(`Created ${dest}`);
+      console.log(`  Created ${file}`);
     }
   }
 
-  // Create memory directory
-  const memDir = join(workspaceDir, "memory");
-  mkdirSync(memDir, { recursive: true });
-
-  console.log(`\nWorkspace initialized at ${workspaceDir}`);
-
-  // Offer to deploy starter agent templates
+  // ── Deploy starter agents ─────────────────────────────────
   await deployStarterTemplates(configDir, createInterface);
 
-  console.log("\nNext steps:");
-  console.log(`1. Edit ${getConfigPath()} with your bot token and Telegram user ID`);
-  console.log("2. Run 'familiar start' to start the bot");
+  // ── Systemd service ───────────────────────────────────────
+  const rl2 = createInterface({ input: process.stdin, output: process.stdout });
+  const ask2 = (prompt: string, defaultVal = ""): Promise<string> =>
+    new Promise((resolve) => {
+      const hint = defaultVal ? ` [${defaultVal}]` : "";
+      rl2.question(`${prompt}${hint}: `, (ans) => resolve(ans.trim() || defaultVal));
+    });
+
+  console.log("\n── System service ───────────────────────────────");
+  const doService = await ask2("Install systemd user service? (y/n)", "n");
+  rl2.close();
+
+  if (doService.toLowerCase().startsWith("y")) {
+    cmdInstallService();
+    console.log("\n  To enable and start:");
+    console.log("    systemctl --user daemon-reload");
+    console.log("    systemctl --user enable familiar");
+    console.log("    systemctl --user start familiar");
+  }
+
+  // ── Summary ───────────────────────────────────────────────
+  const dashUrl = publicUrl || `http://localhost:${port}`;
+  console.log("\n╭──────────────────────────────────────────────╮");
+  console.log("│   Setup complete!                            │");
+  console.log("╰──────────────────────────────────────────────╯");
+  console.log(`\n  Workspace:  ${workspaceDir}`);
+  console.log(`  Config:     ${configPath}`);
+  console.log(`  Dashboard:  ${dashUrl}`);
+  if (botToken === "YOUR_BOT_TOKEN_HERE") {
+    console.log("\n  Next: edit config.json with your real Telegram bot token and user ID.");
+  }
+  console.log("\n  1. Run 'familiar start' to start");
+  console.log(`  2. Open the dashboard: ${dashUrl}`);
+  console.log("  3. Enable your agents from the Agents tab");
+  console.log("  4. Message your bot to begin your first conversation\n");
 }
 
 async function deployStarterTemplates(
