@@ -96,6 +96,8 @@ export interface ServiceLink {
 }
 
 export interface FamiliarConfig {
+  /** Name of the familiar (shown in startup messages, dashboard, etc.) */
+  name?: string;
   owner?: OwnerConfig;
   telegram: TelegramConfig;
   claude: ClaudeConfig;

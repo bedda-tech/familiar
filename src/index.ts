@@ -148,6 +148,7 @@ Options:
 }
 
 async function cmdInit(): Promise<void> {
+  const { createInterface } = await import("node:readline");
   const configDir = getConfigDir();
   mkdirSync(configDir, { recursive: true });
 
@@ -224,9 +225,85 @@ async function cmdInit(): Promise<void> {
   mkdirSync(memDir, { recursive: true });
 
   console.log(`\nWorkspace initialized at ${workspaceDir}`);
+
+  // Offer to deploy starter agent templates
+  await deployStarterTemplates(configDir, createInterface);
+
   console.log("\nNext steps:");
   console.log(`1. Edit ${getConfigPath()} with your bot token and Telegram user ID`);
   console.log("2. Run 'familiar start' to start the bot");
+}
+
+async function deployStarterTemplates(
+  configDir: string,
+  createInterface: typeof import("node:readline").createInterface,
+): Promise<void> {
+  // Open (or create) the DB so we can seed and deploy templates
+  const dbPath = join(configDir, "familiar.db");
+  const db = new Database(dbPath);
+
+  const agentTemplateStore = new AgentTemplateStore(db);
+  const agentStore = new AgentCrudStore(db);
+  const scheduleStore = new ScheduleStore(db);
+
+  // Seed built-in templates from JSON files
+  agentTemplateStore.seed(join(__dirname, "..", "templates"));
+
+  const templates = agentTemplateStore.list();
+  if (templates.length === 0) {
+    db.close();
+    return;
+  }
+
+  console.log("\nStarter agent templates available:");
+  templates.forEach((t, i) => {
+    console.log(`  ${i + 1}. ${t.name} (${t.model}, ${t.suggested_schedule ?? "no schedule"}) — ${t.description ?? ""}`);
+  });
+  console.log("  0. Skip (deploy templates later from the dashboard)");
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const question = (q: string): Promise<string> =>
+    new Promise((resolve) => rl.question(q, resolve));
+
+  const answer = await question("\nWhich templates to deploy? (e.g. 1,3 or 'all' or 0 to skip): ");
+  rl.close();
+
+  const input = answer.trim().toLowerCase();
+  if (!input || input === "0" || input === "skip") {
+    console.log("Skipped. Deploy templates anytime from the dashboard (Templates tab).");
+    db.close();
+    return;
+  }
+
+  let selected: typeof templates;
+  if (input === "all") {
+    selected = templates;
+  } else {
+    const indices = input
+      .split(/[,\s]+/)
+      .map((s) => parseInt(s, 10) - 1)
+      .filter((i) => i >= 0 && i < templates.length);
+    selected = indices.map((i) => templates[i]).filter(Boolean);
+  }
+
+  for (const t of selected) {
+    try {
+      agentTemplateStore.deploy(t.id, agentStore, scheduleStore);
+      console.log(`  Deployed: ${t.name} (agent + schedule created, enabled=false)`);
+    } catch (e: any) {
+      if (e.message?.includes("UNIQUE constraint")) {
+        console.log(`  Skipped: ${t.name} (already exists)`);
+      } else {
+        console.log(`  Failed: ${t.name} — ${e.message}`);
+      }
+    }
+  }
+
+  if (selected.length > 0) {
+    console.log("\nAgents created with enabled=false. Enable them from the dashboard when ready.");
+  }
+
+  db.close();
 }
 
 function cmdInstallService(): void {
@@ -682,7 +759,7 @@ async function cmdStart(configPath?: string): Promise<void> {
     // Wire up agent template store (starter agent templates)
     const agentTemplateStore = new AgentTemplateStore(db);
     agentTemplateStore.seed(join(__dirname, "..", "templates"));
-    webhooks.setTemplateStore(agentTemplateStore as any);
+    webhooks.setAgentTemplateStore(agentTemplateStore);
 
     // Wire up memory store for /api/memory/search
     if (memoryStore) {
@@ -706,6 +783,12 @@ async function cmdStart(configPath?: string): Promise<void> {
         const msg = `New task for you: #${id}\n${title}${project ? ` [${project}]` : ""}${priority ? ` P${priority}` : ""}\n${desc}`;
         deliveryQueue.deliver(defaultChatId, msg).catch(() => {});
       }
+    });
+
+    // Allow /save skill to clear sessions via API
+    webhooks.onSessionClear(() => {
+      sessions.clearSession(String(defaultChatId));
+      log.info("session cleared via /api/sessions/clear");
     });
 
     // Wire task store into scheduler so validation failures can create follow-up tasks
@@ -779,7 +862,7 @@ async function cmdStart(configPath?: string): Promise<void> {
   const dashboardLink = publicUrl ? ` | ${publicUrl}` : "";
   await deliveryQueue.deliver(
     startupChatId,
-    `${config.owner?.displayName ?? "Familiar"} online. ${agentCount} agents, ${scheduleCount} schedules.${dashboardLink}`,
+    `${config.name ?? "Familiar"} online. ${agentCount} agents, ${scheduleCount} schedules.${dashboardLink}`,
   );
 
   // Watch config for hot-reload
