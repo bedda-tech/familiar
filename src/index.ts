@@ -138,6 +138,8 @@ Usage:
   familiar export [--persona <path>]  Export DB state to persona repo YAML files
   familiar sync [--from <path>]      Import persona repo YAML files into DB
   familiar manifest [--persona <path>]  Generate SYSTEM.md from DB state
+  familiar backup [--output <dir>] [--jobs-db <path>]  Dump DB(s) to .sql files for git backup
+  familiar restore [--from <dir>] [--jobs-db <path>] [--dry-run]  Restore DB(s) from .sql files
   familiar install-service      Install systemd user service
   familiar help                 Show this help
 
@@ -1058,6 +1060,129 @@ async function cmdStart(configPath?: string): Promise<void> {
   log.info("familiar is running");
 }
 
+/** Dump a SQLite DB to a .sql file using the sqlite3 CLI. Returns true on success. */
+function dumpSqlite(dbPath: string, outPath: string): boolean {
+  const result = spawnSync("sqlite3", [dbPath, ".dump"], { encoding: "utf-8", maxBuffer: 256 * 1024 * 1024 });
+  if (result.error || result.status !== 0) {
+    const msg = result.error?.message ?? result.stderr ?? "unknown error";
+    console.error(`  ✗ Failed to dump ${dbPath}: ${msg}`);
+    return false;
+  }
+  writeFileSync(outPath, result.stdout, "utf-8");
+  return true;
+}
+
+async function cmdBackup(subArgs: string[]): Promise<void> {
+  const configDir = getConfigDir();
+  const outDirIdx = subArgs.indexOf("--output");
+  const outputDir = outDirIdx >= 0 ? subArgs[outDirIdx + 1] : configDir;
+  const jobsDbIdx = subArgs.indexOf("--jobs-db");
+  const jobsDbPath = jobsDbIdx >= 0 ? subArgs[jobsDbIdx + 1] : join(homedir(), "oliver", "projects", "job-hunt", "jobs.db");
+
+  console.log("familiar backup\n");
+
+  // Dump familiar.db
+  const familiarDb = join(configDir, "familiar.db");
+  const familiarSql = join(outputDir, "familiar.sql");
+  if (!existsSync(familiarDb)) {
+    console.error(`  ✗ familiar.db not found at ${familiarDb}`);
+    process.exit(1);
+  }
+  process.stdout.write(`  Dumping familiar.db → ${familiarSql} ... `);
+  if (dumpSqlite(familiarDb, familiarSql)) {
+    const bytes = readFileSync(familiarSql).length;
+    console.log(`ok (${Math.round(bytes / 1024)}KB)`);
+  } else {
+    process.exit(1);
+  }
+
+  // Dump jobs.db if present
+  if (existsSync(jobsDbPath)) {
+    const jobsSql = join(dirname(jobsDbPath), "jobs.sql");
+    process.stdout.write(`  Dumping jobs.db → ${jobsSql} ... `);
+    if (dumpSqlite(jobsDbPath, jobsSql)) {
+      const bytes = readFileSync(jobsSql).length;
+      console.log(`ok (${Math.round(bytes / 1024)}KB)`);
+    }
+  } else {
+    console.log(`  (jobs.db not found at ${jobsDbPath} — skipping)`);
+  }
+
+  console.log("\nBackup complete. Commit the .sql files to your git repo to save them.");
+}
+
+async function cmdRestore(subArgs: string[]): Promise<void> {
+  const configDir = getConfigDir();
+  const fromIdx = subArgs.indexOf("--from");
+  const sourceDir = fromIdx >= 0 ? subArgs[fromIdx + 1] : configDir;
+  const jobsDbIdx = subArgs.indexOf("--jobs-db");
+  const jobsDbPath = jobsDbIdx >= 0 ? subArgs[jobsDbIdx + 1] : join(homedir(), "oliver", "projects", "job-hunt", "jobs.db");
+  const dryRun = subArgs.includes("--dry-run");
+
+  console.log(`familiar restore${dryRun ? " (dry-run)" : ""}\n`);
+
+  // Restore familiar.db from familiar.sql
+  const familiarSql = join(sourceDir, "familiar.sql");
+  const familiarDb = join(configDir, "familiar.db");
+  if (!existsSync(familiarSql)) {
+    console.error(`  ✗ familiar.sql not found at ${familiarSql}`);
+    console.error(`  Run 'familiar backup' first, or pass --from <path> to the directory containing the .sql file.`);
+    process.exit(1);
+  }
+
+  if (existsSync(familiarDb) && !dryRun) {
+    const backupPath = familiarDb + ".bak";
+    cpSync(familiarDb, backupPath);
+    console.log(`  Backed up existing familiar.db → ${backupPath}`);
+    unlinkSync(familiarDb);
+  }
+
+  if (!dryRun) {
+    console.log(`  Restoring familiar.db from ${familiarSql} ...`);
+    const result = spawnSync("sqlite3", [familiarDb], {
+      input: readFileSync(familiarSql, "utf-8"),
+      encoding: "utf-8",
+    });
+    if (result.error || result.status !== 0) {
+      console.error(`  ✗ Failed: ${result.error?.message ?? result.stderr}`);
+      process.exit(1);
+    }
+    console.log("  ✓ familiar.db restored");
+  } else {
+    console.log(`  [dry-run] Would restore familiar.db from ${familiarSql}`);
+  }
+
+  // Restore jobs.db if jobs.sql exists
+  const jobsSqlPath = join(dirname(jobsDbPath), "jobs.sql");
+  if (existsSync(jobsSqlPath)) {
+    if (!dryRun) {
+      if (existsSync(jobsDbPath)) {
+        cpSync(jobsDbPath, jobsDbPath + ".bak");
+        unlinkSync(jobsDbPath);
+      }
+      mkdirSync(dirname(jobsDbPath), { recursive: true });
+      console.log(`  Restoring jobs.db from ${jobsSqlPath} ...`);
+      const result = spawnSync("sqlite3", [jobsDbPath], {
+        input: readFileSync(jobsSqlPath, "utf-8"),
+        encoding: "utf-8",
+      });
+      if (result.error || result.status !== 0) {
+        console.error(`  ✗ Failed: ${result.error?.message ?? result.stderr}`);
+      } else {
+        console.log("  ✓ jobs.db restored");
+      }
+    } else {
+      console.log(`  [dry-run] Would restore jobs.db from ${jobsSqlPath}`);
+    }
+  } else {
+    console.log(`  (jobs.sql not found — skipping jobs.db restore)`);
+  }
+
+  if (!dryRun) {
+    console.log("\nRestore complete. Run 'familiar start' to launch.");
+  }
+}
+
 // CLI entry point
 const args = process.argv.slice(2);
 const command = args[0];
@@ -1366,6 +1491,20 @@ switch (command) {
       console.log(`Generated SYSTEM.md at ${personaPath}/SYSTEM.md`);
       sessions.close();
     })().catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "backup":
+    cmdBackup(args.slice(1)).catch((e) => {
+      console.error("Error:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+
+  case "restore":
+    cmdRestore(args.slice(1)).catch((e) => {
       console.error("Error:", e instanceof Error ? e.message : e);
       process.exit(1);
     });
