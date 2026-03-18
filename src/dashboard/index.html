@@ -1572,7 +1572,94 @@
       .docs-toolbar { display: flex; gap: 8px; align-items: center; }
       .docs-toolbar .btn { font-size: 12px; padding: 4px 12px; }
 
+      /* ── Chat Panel (floating widget) ── */
+      .chat-panel-toggle {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 200;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      }
+      .chat-panel-toggle:hover {
+        transform: scale(1.08);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      }
+      .chat-panel-toggle.active { background: var(--text-muted); }
+
+      .chat-panel-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 140;
+      }
+      .chat-panel-backdrop.visible { display: block; }
+
+      .chat-panel {
+        position: fixed;
+        top: 49px;
+        right: 0;
+        width: 400px;
+        height: calc(100vh - 49px);
+        background: var(--bg-card);
+        border-left: 1px solid var(--border);
+        z-index: 150;
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.35);
+      }
+      .chat-panel.open { transform: translateX(0); }
+
+      .chat-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+      .chat-panel-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: 0.3px;
+      }
+      .chat-panel-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 20px;
+        padding: 2px 6px;
+        line-height: 1;
+        border-radius: 4px;
+      }
+      .chat-panel-close:hover { color: var(--text); background: var(--bg-hover); }
+
+      .chat-panel .chat-messages { padding: 12px 16px; }
+      .chat-panel .chat-input-bar { padding: 10px 16px; flex-shrink: 0; }
+      .chat-panel .chat-header-bar { padding: 8px 16px; flex-shrink: 0; }
+
       /* ── Responsive ── */
+      @media (max-width: 899px) {
+        .chat-panel { width: 100%; }
+        /* On mobile full-screen panel, backdrop is not needed */
+        .chat-panel-backdrop.visible { display: none; }
+      }
+
       @media (max-width: 600px) {
         .tab-panel.active { padding: var(--space-md); }
         header { padding: var(--space-sm) var(--space-md); gap: var(--space-sm); }
@@ -5799,7 +5886,7 @@
 
       // ── Chat ──────────────────────────────────────────────────────────────
 
-      let chatDraftEl = null; // currently streaming bubble element
+      let chatDraftEls = {}; // keyed by 'tab' | 'panel'
 
       /** Minimal markdown-to-HTML for chat bubbles (safe: escape first, then apply patterns). */
       function chatMarkdown(text) {
@@ -5823,22 +5910,22 @@
         return html;
       }
 
-      /** Append a permanent chat message bubble. Clears any in-flight draft bubble. */
-      function chatAppendMessage(role, text, msgId, source) {
-        if (chatDraftEl) {
-          chatDraftEl.remove();
-          chatDraftEl = null;
+      /** Internal: append a message bubble to one container. */
+      function _chatAppendToContainer(containerId, emptyId, draftKey, historyLoaded, role, text, msgId, source) {
+        if (chatDraftEls[draftKey]) {
+          chatDraftEls[draftKey].remove();
+          chatDraftEls[draftKey] = null;
         }
-        const empty = document.getElementById('chatEmpty');
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const empty = document.getElementById(emptyId);
         if (empty) empty.style.display = 'none';
 
-        // Add today's date separator if not already present
-        const container = document.getElementById('chatMessages');
         const todayKey = chatGetDateKey(new Date().toISOString());
         const existingSeps = container.querySelectorAll('.chat-date-separator');
         let hasTodaySep = false;
         existingSeps.forEach(s => { if (s.dataset.dateKey === todayKey) hasTodaySep = true; });
-        if (!hasTodaySep && _chatHistoryLoaded) {
+        if (!hasTodaySep && historyLoaded) {
           container.appendChild(chatCreateDateSeparator(new Date().toISOString()));
         }
 
@@ -5856,27 +5943,44 @@
         container.scrollTop = container.scrollHeight;
       }
 
-      /** Update or create the streaming draft bubble; clears it when done=true. */
-      function chatUpdateDraft(text, done) {
+      /** Append a permanent chat message bubble to all active containers. */
+      function chatAppendMessage(role, text, msgId, source) {
+        _chatAppendToContainer('chatMessages', 'chatEmpty', 'tab', _chatHistoryLoaded, role, text, msgId, source);
+        if (document.getElementById('chatPanelMessages')) {
+          _chatAppendToContainer('chatPanelMessages', 'chatPanelEmpty', 'panel', _chatPanelHistoryLoaded, role, text, msgId, source);
+        }
+      }
+
+      /** Internal: update/create streaming draft bubble in one container. */
+      function _chatUpdateDraftInContainer(containerId, emptyId, draftKey, text, done) {
         if (done) {
-          if (chatDraftEl) { chatDraftEl.remove(); chatDraftEl = null; }
+          if (chatDraftEls[draftKey]) { chatDraftEls[draftKey].remove(); chatDraftEls[draftKey] = null; }
           return;
         }
-        const empty = document.getElementById('chatEmpty');
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const empty = document.getElementById(emptyId);
         if (empty) empty.style.display = 'none';
 
-        const container = document.getElementById('chatMessages');
-        if (!chatDraftEl) {
-          chatDraftEl = document.createElement('div');
-          chatDraftEl.className = 'chat-msg assistant';
-          chatDraftEl.innerHTML = `
+        if (!chatDraftEls[draftKey]) {
+          chatDraftEls[draftKey] = document.createElement('div');
+          chatDraftEls[draftKey].className = 'chat-msg assistant';
+          chatDraftEls[draftKey].innerHTML = `
             <div class="chat-label">Familiar</div>
             <div class="chat-bubble streaming"></div>`;
-          container.appendChild(chatDraftEl);
+          container.appendChild(chatDraftEls[draftKey]);
         }
-        const bubble = chatDraftEl.querySelector('.chat-bubble');
+        const bubble = chatDraftEls[draftKey].querySelector('.chat-bubble');
         if (bubble) bubble.innerHTML = chatMarkdown(text);
         container.scrollTop = container.scrollHeight;
+      }
+
+      /** Update streaming draft in all active containers; clears when done=true. */
+      function chatUpdateDraft(text, done) {
+        _chatUpdateDraftInContainer('chatMessages', 'chatEmpty', 'tab', text, done);
+        if (document.getElementById('chatPanelMessages')) {
+          _chatUpdateDraftInContainer('chatPanelMessages', 'chatPanelEmpty', 'panel', text, done);
+        }
       }
 
       /** Send the chat input to the server via WebSocket. */
@@ -5903,37 +6007,52 @@
 
       // Wire up Enter key and auto-resize for chat input
       document.addEventListener('DOMContentLoaded', () => {
+        // ── Tab chat input ──
         const input = document.getElementById('chatInput');
-        if (!input) return;
-        input.addEventListener('keydown', e => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            chatSend();
-          }
-        });
-        input.addEventListener('input', () => chatInputResize(input));
+        if (input) {
+          input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
+          });
+          input.addEventListener('input', () => chatInputResize(input));
+        }
 
-        // Wire up chat search
+        // ── Panel chat input ──
+        const panelInput = document.getElementById('chatPanelInput');
+        if (panelInput) {
+          panelInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatPanelSend(); }
+          });
+          panelInput.addEventListener('input', () => chatInputResize(panelInput));
+        }
+
+        // ── Tab chat search ──
         const searchInput = document.getElementById('chatSearchInput');
         if (searchInput) {
           searchInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              chatSearch(searchInput.value.trim());
-            }
-            if (e.key === 'Escape') {
-              chatSearchClose();
-            }
+            if (e.key === 'Enter') { e.preventDefault(); chatSearch(searchInput.value.trim()); }
+            if (e.key === 'Escape') chatSearchClose();
+          });
+        }
+
+        // ── Panel chat search ──
+        const panelSearchInput = document.getElementById('chatPanelSearchInput');
+        if (panelSearchInput) {
+          panelSearchInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); chatSearchInPanel(panelSearchInput.value.trim()); }
+            if (e.key === 'Escape') chatPanelSearchClose();
           });
         }
 
         // Close search results when clicking outside
         document.addEventListener('click', e => {
-          const wrapper = document.querySelector('.chat-search-wrapper');
-          if (wrapper && !wrapper.contains(e.target)) {
+          if (!e.target.closest('.chat-search-wrapper')) {
             chatSearchClose();
+            chatPanelSearchClose();
           }
         });
+
+        // Restore panel open/closed state from localStorage
+        if (localStorage.getItem('chatPanelOpen') === '1') chatPanelOpen();
       });
 
       // ── Chat History ────────────────────────────────────────────────────
@@ -5943,6 +6062,10 @@
       let _chatHistoryHasMore = true;
       let _chatHistoryBeforeCursor = null;
       let _chatLoadedMsgIds = new Set();
+
+      // Panel history state (separate load from tab history)
+      let _chatPanelHistoryLoaded = false;
+      let _chatPanelHistoryLoading = false;
 
       function chatFormatDate(isoStr) {
         try {
@@ -6208,6 +6331,129 @@
         setTimeout(() => el.classList.remove('highlight'), 3000);
       }
 
+      // ── Chat Panel ──────────────────────────────────────────────────────
+
+      function chatPanelOpen() {
+        const panel = document.getElementById('chatPanel');
+        if (!panel) return;
+        panel.classList.add('open');
+        const btn = document.getElementById('chatPanelToggle');
+        if (btn) btn.classList.add('active');
+        const backdrop = document.getElementById('chatPanelBackdrop');
+        if (backdrop) backdrop.classList.add('visible');
+        localStorage.setItem('chatPanelOpen', '1');
+        if (!_chatPanelHistoryLoaded) loadChatPanelHistory();
+        setTimeout(() => {
+          const input = document.getElementById('chatPanelInput');
+          if (input) input.focus();
+        }, 260);
+      }
+
+      function chatPanelClose() {
+        const panel = document.getElementById('chatPanel');
+        if (!panel) return;
+        panel.classList.remove('open');
+        const btn = document.getElementById('chatPanelToggle');
+        if (btn) btn.classList.remove('active');
+        const backdrop = document.getElementById('chatPanelBackdrop');
+        if (backdrop) backdrop.classList.remove('visible');
+        localStorage.setItem('chatPanelOpen', '0');
+      }
+
+      function chatPanelToggle() {
+        const panel = document.getElementById('chatPanel');
+        if (panel && panel.classList.contains('open')) chatPanelClose();
+        else chatPanelOpen();
+      }
+
+      function chatPanelSend() {
+        const input = document.getElementById('chatPanelInput');
+        const text = input ? input.value.trim() : '';
+        if (!text) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          toast('Not connected — check WebSocket status', 'error');
+          return;
+        }
+        ws.send(JSON.stringify({ type: 'chat:send', text }));
+        input.value = '';
+        chatInputResize(input);
+        const btn = document.getElementById('chatPanelSendBtn');
+        if (btn) { btn.disabled = true; setTimeout(() => { btn.disabled = false; }, 500); }
+      }
+
+      async function loadChatPanelHistory() {
+        if (_chatPanelHistoryLoaded || _chatPanelHistoryLoading) return;
+        _chatPanelHistoryLoading = true;
+        _chatPanelHistoryLoaded = true;
+
+        const container = document.getElementById('chatPanelMessages');
+        const empty = document.getElementById('chatPanelEmpty');
+        if (!container) { _chatPanelHistoryLoading = false; return; }
+
+        try {
+          const data = await api('GET', '/api/chat/messages/all?limit=50');
+          const messages = (data.messages || []).slice().reverse(); // oldest first
+          if (messages.length === 0) { _chatPanelHistoryLoading = false; return; }
+
+          if (empty) empty.style.display = 'none';
+
+          const frag = document.createDocumentFragment();
+          let lastDateKey = '';
+          for (const msg of messages) {
+            const dateKey = chatGetDateKey(msg.created_at);
+            if (dateKey !== lastDateKey) {
+              frag.appendChild(chatCreateDateSeparator(msg.created_at));
+              lastDateKey = dateKey;
+            }
+            frag.appendChild(chatCreateHistoryMessage(msg));
+          }
+          const firstChild = container.firstChild;
+          if (firstChild && firstChild !== empty) {
+            container.insertBefore(frag, firstChild);
+          } else {
+            container.appendChild(frag);
+          }
+          container.scrollTop = container.scrollHeight;
+        } catch (e) {
+          console.error('Failed to load panel chat history:', e);
+        }
+        _chatPanelHistoryLoading = false;
+      }
+
+      async function chatSearchInPanel(query) {
+        if (!query) { chatPanelSearchClose(); return; }
+        const resultsEl = document.getElementById('chatPanelSearchResults');
+        if (!resultsEl) return;
+        resultsEl.innerHTML = '<div class="chat-loading-more">Searching...</div>';
+        resultsEl.classList.add('visible');
+        try {
+          const data = await api('GET', `/api/chat/search?q=${encodeURIComponent(query)}&limit=20`);
+          const results = data.results || [];
+          if (results.length === 0) {
+            resultsEl.innerHTML = '<div class="chat-loading-more">No results found</div>';
+            return;
+          }
+          let html = '';
+          for (const r of results) {
+            const dateStr = chatFormatDate(r.created_at);
+            const timeStr = chatFormatTime(r.created_at);
+            const roleLabel = r.role === 'user' ? 'You' : 'Familiar';
+            html += `<div class="chat-search-result" onclick="chatPanelSearchClose(); chatHighlightMessage(document.querySelector('.chat-msg[data-msg-id=\\'${r.id}\\']') || document.createElement('div'))">
+              <div class="search-meta">${esc(roleLabel)} &middot; ${esc(dateStr)} ${esc(timeStr)}</div>
+              <div class="search-snippet">${r.snippet}</div>
+            </div>`;
+          }
+          resultsEl.innerHTML = html;
+        } catch (e) {
+          resultsEl.innerHTML = `<div class="chat-loading-more" style="color:var(--red)">Search failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function chatPanelSearchClose() {
+        const el = document.getElementById('chatPanelSearchResults');
+        if (el) el.classList.remove('visible');
+      }
+
       // ── Documents Tab ──
       let _docsTree = [];
       let _docsActiveFile = null;
@@ -6471,5 +6717,32 @@
         }
       }
     </script>
+
+    <!-- Chat panel backdrop (click-outside to close) -->
+    <div id="chatPanelBackdrop" class="chat-panel-backdrop" onclick="chatPanelClose()"></div>
+
+    <!-- Floating chat toggle button -->
+    <button class="chat-panel-toggle" id="chatPanelToggle" onclick="chatPanelToggle()" title="Chat with your familiar" aria-label="Toggle chat panel">✉</button>
+
+    <!-- Slide-out chat panel -->
+    <div id="chatPanel" class="chat-panel">
+      <div class="chat-panel-header">
+        <span class="chat-panel-title">Familiar</span>
+        <button class="chat-panel-close" onclick="chatPanelClose()" title="Close">&times;</button>
+      </div>
+      <div class="chat-header-bar">
+        <div class="chat-search-wrapper">
+          <input type="text" class="chat-search-input" id="chatPanelSearchInput" placeholder="Search history..." />
+          <div class="chat-search-results" id="chatPanelSearchResults"></div>
+        </div>
+      </div>
+      <div id="chatPanelMessages" class="chat-messages">
+        <div class="chat-empty" id="chatPanelEmpty">Connect and type a message to chat with your familiar.</div>
+      </div>
+      <div class="chat-input-bar">
+        <textarea id="chatPanelInput" placeholder="Message your familiar..." rows="1"></textarea>
+        <button id="chatPanelSendBtn" onclick="chatPanelSend()">Send</button>
+      </div>
+    </div>
   </body>
 </html>
