@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, existsSync, statSync, readdirSync, lstatSync } from "node:fs";
+import { join, relative, extname, basename } from "node:path";
 import { createHash } from "node:crypto";
 import type { OpenAIConfig } from "../config.js";
 import { getLogger } from "../util/logger.js";
@@ -152,36 +152,128 @@ export class MemoryStore {
     return results;
   }
 
-  /** Index all memory files in the workspace */
+  // Directories to skip entirely during indexing
+  private static EXCLUDED_DIRS = new Set([
+    ".git",
+    "node_modules",
+    "backup",
+    "claude-memory",
+    ".vercel",
+    ".next",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+    "__pycache__",
+    ".turbo",
+    ".cache",
+  ]);
+
+  // Path prefixes to skip (matched against relative path)
+  private static EXCLUDED_PREFIXES = [
+    "projects/job-hunt/resumes/tailored",
+    "projects/job-hunt/cover-letters",
+    "projects/job-hunt/state",
+  ];
+
+  // Document/config extensions worth indexing (everything else is skipped)
+  // Source code lives in grep, not the vector index
+  private static INDEXABLE_EXTENSIONS = new Set([
+    ".md",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".html",
+  ]);
+
+  // Files in .familiar/agents/ that ARE worth indexing
+  private static AGENT_INDEXABLE = new Set(["AGENTS.md", "memory.md"]);
+
+  /** Index all text files in the workspace */
   async indexAll(): Promise<{ indexed: number; skipped: number }> {
-    const memoryDir = join(this.workspaceDir, "memory");
     let indexed = 0;
     let skipped = 0;
 
-    // Index memory/ directory
-    if (existsSync(memoryDir)) {
-      const files = readdirSync(memoryDir).filter((f) => f.endsWith(".md"));
-      for (const file of files) {
-        const fullPath = join(memoryDir, file);
-        const relPath = relative(this.workspaceDir, fullPath);
-        const result = await this.indexFile(relPath, fullPath);
-        if (result) indexed++;
-        else skipped++;
-      }
-    }
+    const files = this.walkDir(this.workspaceDir);
 
-    // Index top-level memory files
-    for (const name of ["MEMORY.md", "TODO.md"]) {
-      const fullPath = join(this.workspaceDir, name);
-      if (existsSync(fullPath)) {
-        const result = await this.indexFile(name, fullPath);
-        if (result) indexed++;
-        else skipped++;
-      }
+    for (const fullPath of files) {
+      const relPath = relative(this.workspaceDir, fullPath);
+      const result = await this.indexFile(relPath, fullPath);
+      if (result) indexed++;
+      else skipped++;
     }
 
     log.info({ indexed, skipped }, "memory indexing complete");
     return { indexed, skipped };
+  }
+
+  /** Recursively walk directory, returning indexable file paths */
+  private walkDir(dir: string): string[] {
+    const results: string[] = [];
+
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return results;
+    }
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
+
+      let stat;
+      try {
+        stat = lstatSync(fullPath);
+      } catch {
+        continue;
+      }
+
+      if (stat.isSymbolicLink()) continue;
+
+      if (stat.isDirectory()) {
+        // Skip excluded directory names
+        if (MemoryStore.EXCLUDED_DIRS.has(entry)) continue;
+
+        const relPath = relative(this.workspaceDir, fullPath);
+
+        // For .familiar/agents/*, only descend into agent dirs (not output/)
+        if (relPath.startsWith(".familiar/agents/")) {
+          // We're inside an agent dir -- don't recurse into output/
+          if (entry === "output") continue;
+        }
+
+        // Skip excluded path prefixes
+        const skipPrefix = MemoryStore.EXCLUDED_PREFIXES.some((p) => relPath.startsWith(p));
+        if (skipPrefix) continue;
+
+        results.push(...this.walkDir(fullPath));
+        continue;
+      }
+
+      if (!stat.isFile()) continue;
+
+      // Only index document/config file types
+      const ext = extname(entry).toLowerCase();
+      if (!MemoryStore.INDEXABLE_EXTENSIONS.has(ext)) continue;
+
+      // For .familiar/agents/*/*, only index AGENTS.md and memory.md
+      const relPath = relative(this.workspaceDir, fullPath);
+      if (relPath.startsWith(".familiar/agents/")) {
+        if (!MemoryStore.AGENT_INDEXABLE.has(basename(fullPath))) continue;
+      }
+
+      // Skip very large files (>100KB) to avoid blowing up embedding costs
+      if (stat.size > 100 * 1024) {
+        log.debug({ path: relPath, size: stat.size }, "skipping large file");
+        continue;
+      }
+
+      results.push(fullPath);
+    }
+
+    return results;
   }
 
   /** Index a single file if it's changed since last index */
