@@ -132,20 +132,19 @@ export class Bridge {
       );
     });
 
-    // Handle /save — save context to memory, then clear session
-    // Works on: Telegram (/save), dashboard chat (/save), TUI (as a skill)
-    const saveHandler = async (msg: any) => {
+    // /save passes through to Claude as a regular message so the save skill runs fully
+    // (structured summary, memory saves, re-index, git backup). Session is cleared
+    // after Claude finishes responding — see the "done" handler in handleMessage.
+    // /reset is a lightweight session clear (no save skill).
+    ch.onCommand("reset", async (msg) => {
       this.chatChannelMap.set(msg.chatId, ch);
-      await this.saveSessionContext(msg.chatId, "user requested /save");
       this.sessions.clearSession(msg.chatId);
       await this.channelFor(msg.chatId).sendText(
         msg.chatId,
-        "Context saved to memory. Session reset. Next message starts fresh.",
+        "Session cleared. Next message starts a fresh conversation.",
         msg.replyContext,
       );
-    };
-    ch.onCommand("save", saveHandler);
-    ch.onCommand("reset", saveHandler);
+    });
 
     // Handle /status — session info
     ch.onCommand("status", async (msg) => {
@@ -675,6 +674,10 @@ export class Bridge {
       }
     }
 
+    // Detect /save — let it pass through to Claude (the save skill handles the work),
+    // then clear the session after Claude finishes responding.
+    const isSaveCommand = /^\/?save\b/i.test(prompt.trim());
+
     // Kill any existing in-flight request for this chat before spawning a new one.
     // This prevents session lock conflicts and queue blocking from hung processes.
     if (this.processTracker?.isActive(msg.chatId)) {
@@ -880,6 +883,13 @@ export class Bridge {
                 },
                 "response complete",
               );
+            }
+
+            // Post-completion: if this was a /save, clear the session now that
+            // Claude has finished the save skill and the response is delivered.
+            if (isSaveCommand) {
+              this.sessions.clearSession(msg.chatId);
+              log.info({ chatId: msg.chatId }, "session cleared after /save skill completed");
             }
             break;
           }

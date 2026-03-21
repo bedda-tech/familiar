@@ -31,6 +31,7 @@
  *   GET  /api/documents                 — hierarchical tree of oliver project documents
  *   GET  /api/documents/read?path=X     — read a specific document file
  *   PUT  /api/documents/write           — write/update a document file (body: {path, content})
+ *   POST /api/notify                    — send a Telegram notification (body: {agent, message?, error_type?, timestamp?})
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, copyFileSync } from "node:fs";
