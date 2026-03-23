@@ -4428,6 +4428,31 @@
             tc ? `<span class="badge badge-gray" title="Tasks">${tc}t</span>` : '',
           ].filter(Boolean).join('');
 
+          // Health bar: aggregate 7d error rate across this project's agents
+          const projAgents = agents.filter(a => a.project_id === p.id);
+          let totalRuns = 0, totalErrors = 0;
+          projAgents.forEach(a => {
+            const s = _agentRunStats7d[a.id];
+            if (s) { totalRuns += s.runCount || 0; totalErrors += s.errorCount || 0; }
+          });
+          let healthBarHtml = '';
+          if (totalRuns > 0) {
+            const errRate = totalErrors / totalRuns;
+            const healthClass = errRate >= 0.3 ? 'card-health-bad' : errRate >= 0.1 ? 'card-health-warn' : 'card-health-ok';
+            const healthPct = Math.max(0, Math.min(100, Math.round((1 - errRate) * 100)));
+            const errLabel = totalErrors > 0 ? `${totalErrors} errors / ${totalRuns} runs` : `${totalRuns} runs, healthy`;
+            healthBarHtml = `<div class="card-health-bar" title="Agent health 7d: ${errLabel}"><div class="card-health-bar-fill ${healthClass}" style="width:${healthPct}%"></div></div>`;
+          }
+
+          // Task completion progress bar
+          const projTasks = tasks.filter(t => t.project_id === p.id);
+          let taskProgressHtml = '';
+          if (projTasks.length > 0) {
+            const completed = projTasks.filter(t => t.status === 'completed').length;
+            const pct = Math.round((completed / projTasks.length) * 100);
+            taskProgressHtml = `<div class="card-progress-row" title="Tasks: ${completed}/${projTasks.length} completed"><span>${completed}/${projTasks.length}</span><div class="card-progress-bar"><div class="card-progress-fill" style="width:${pct}%"></div></div><span>${pct}%</span></div>`;
+          }
+
           return `
             <div class="card" onclick="openProjectDetail('${esc(p.id)}')" style="cursor:pointer">
               <div class="card-title">${esc(p.name)} ${enabledBadge}</div>
@@ -4438,6 +4463,7 @@
                 ${tagsHtml}
                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProject('${esc(p.id)}', '${esc(p.name)}')">Delete</button>
               </div>
+              ${healthBarHtml}${taskProgressHtml}
             </div>`;
         }).join('');
       }
