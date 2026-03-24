@@ -1660,6 +1660,157 @@
         .chat-panel-backdrop.visible { display: none; }
       }
 
+      /* ── Agent Detail Panel ── */
+      .agent-detail-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 140;
+      }
+      .agent-detail-backdrop.visible { display: block; }
+
+      .agent-detail-panel {
+        position: fixed;
+        top: 49px;
+        right: 0;
+        width: 480px;
+        height: calc(100vh - 49px);
+        background: var(--bg-card);
+        border-left: 1px solid var(--border);
+        z-index: 150;
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.35);
+        overflow-y: auto;
+      }
+      .agent-detail-panel.open { transform: translateX(0); }
+
+      .agent-detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        position: sticky;
+        top: 0;
+        background: var(--bg-card);
+        z-index: 1;
+      }
+      .agent-detail-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .agent-detail-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 20px;
+        padding: 2px 6px;
+        line-height: 1;
+        border-radius: 4px;
+      }
+      .agent-detail-close:hover { color: var(--text); background: var(--bg-hover); }
+
+      .agent-detail-body {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .agent-detail-section {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 12px;
+      }
+      .agent-detail-section-title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+      }
+      .agent-detail-prompt {
+        font-family: monospace;
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .agent-detail-link {
+        color: var(--accent);
+        cursor: pointer;
+        font-size: 11px;
+        text-decoration: none;
+        display: inline-block;
+        margin-top: 4px;
+      }
+      .agent-detail-link:hover { text-decoration: underline; }
+
+      .sparkline {
+        display: flex;
+        align-items: stretch;
+        gap: 3px;
+        height: 24px;
+      }
+      .spark-bar {
+        flex: 1;
+        min-width: 8px;
+        max-width: 24px;
+        border-radius: 2px;
+        cursor: pointer;
+        transition: opacity 0.15s;
+      }
+      .spark-bar:hover { opacity: 0.7; }
+      .spark-bar.ok { background: var(--green); }
+      .spark-bar.err { background: var(--red); }
+
+      .mini-cost-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        height: 32px;
+        margin-top: 8px;
+      }
+      .mini-cost-bar-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        height: 100%;
+        justify-content: flex-end;
+      }
+      .mini-cost-bar {
+        width: 100%;
+        border-radius: 2px 2px 0 0;
+        background: var(--accent);
+        min-height: 2px;
+        transition: opacity 0.15s;
+      }
+      .mini-cost-bar.error { background: var(--red); }
+      .mini-cost-bar-label {
+        font-size: 8px;
+        color: var(--text-muted);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 28px;
+      }
+
+      @media (max-width: 899px) {
+        .agent-detail-panel { width: 100%; }
+        .agent-detail-backdrop.visible { display: none; }
+      }
+
       @media (max-width: 600px) {
         .tab-panel.active { padding: var(--space-md); }
         header { padding: var(--space-sm) var(--space-md); gap: var(--space-sm); }
@@ -3510,7 +3661,7 @@
           }
           const projectBadge = a.project_id ? `<span class="badge badge-purple" title="Project">${esc(projectMap[a.project_id] || a.project_id)}</span>` : '';
           return `
-            <div class="${cardClass}" onclick="openAgentModal('${esc(a.id)}')">
+            <div class="${cardClass}" data-agent-id="${esc(a.id)}" onclick="openAgentDetail('${esc(a.id)}')">
               <div class="card-title">
                 <span class="${dotClass}" title="${dotTitle}"></span>
                 ${esc(a.name)}
@@ -3659,6 +3810,182 @@
             toast(`Failed: ${e.message}`, 'error');
           }
         });
+      }
+
+      // ── Agent Detail Slide-over ────────────────────────────────────────
+      let _agentDetailId = null;
+
+      async function openAgentDetail(agentId) {
+        _agentDetailId = agentId;
+        const a = agents.find(x => x.id === agentId);
+        if (!a) return;
+
+        document.getElementById('agentDetailTitle').textContent = a.name || a.id;
+        document.getElementById('agentDetailEditBtn').onclick = () => { closeAgentDetail(); openAgentModal(agentId); };
+        document.getElementById('agentDetailBody').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('agentDetailPanel').classList.add('open');
+        document.getElementById('agentDetailBackdrop').classList.add('visible');
+
+        const [runsResp, costSummaryResp, costHistResp] = await Promise.all([
+          api('GET', `/api/runs?agent_id=${encodeURIComponent(agentId)}&limit=5`).catch(() => ({ runs: [] })),
+          api('GET', `/api/cost/summary?period=7d`).catch(() => ({ agents: [] })),
+          api('GET', `/api/agents/${encodeURIComponent(agentId)}/cost?limit=7`).catch(() => ({ runs: [] })),
+        ]);
+
+        const agentRuns = runsResp.runs || [];
+        const agentCost = (costSummaryResp.agents || []).find(c => c.agentId === agentId) || null;
+        const agentSchedules = schedules.filter(s => s.agent_id === agentId);
+        const agentTasks = tasks.filter(t => t.assigned_agent === agentId);
+        const costHistory = costHistResp.runs || [];
+
+        _renderAgentDetail(a, agentSchedules, agentRuns, agentTasks, agentCost, costHistory);
+      }
+
+      function closeAgentDetail() {
+        document.getElementById('agentDetailPanel').classList.remove('open');
+        document.getElementById('agentDetailBackdrop').classList.remove('visible');
+        _agentDetailId = null;
+      }
+
+      function _renderAgentDetail(a, agentSchedules, agentRuns, agentTasks, costSummary, costHistory) {
+        const modelColors = { sonnet: 'badge-blue', haiku: 'badge-green', opus: 'badge-purple' };
+        const modelBadge = `<span class="badge ${modelColors[a.model] || 'badge-gray'}">${esc(a.model || 'sonnet')}</span>`;
+        const enabledBadge = a.enabled
+          ? `<span class="badge badge-green">enabled</span>`
+          : `<span class="badge badge-gray">disabled</span>`;
+
+        // 1. Hero
+        const heroHtml = `
+          <div class="agent-detail-section">
+            <div style="font-size:13px;font-weight:700;color:var(--text-bright);margin-bottom:4px">${esc(a.name || a.id)}</div>
+            ${a.description ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${esc(a.description)}</div>` : ''}
+            <div style="display:flex;gap:6px;flex-wrap:wrap">${modelBadge}${enabledBadge}</div>
+          </div>`;
+
+        // 2. System prompt preview
+        let promptHtml = '';
+        if (a.system_prompt) {
+          const preview = a.system_prompt.slice(0, 200);
+          const hasMore = a.system_prompt.length > 200;
+          promptHtml = `
+            <div class="agent-detail-section">
+              <div class="agent-detail-section-title">System Prompt</div>
+              <div class="agent-detail-prompt" id="agentDetailPromptText">${esc(preview)}${hasMore ? '…' : ''}</div>
+              ${hasMore ? `<a class="agent-detail-link" onclick="_toggleAgentDetailPrompt(${JSON.stringify(a.system_prompt)})">Show more</a>` : ''}
+            </div>`;
+        }
+
+        // 3. Schedules
+        let schedulesHtml = '';
+        if (agentSchedules.length > 0) {
+          const rows = agentSchedules.map(s => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+              <div>
+                <div style="font-size:12px;font-weight:500">${esc(s.name || s.id)}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${esc(humanCron(s.schedule))}</div>
+              </div>
+              <span class="badge ${s.enabled ? 'badge-green' : 'badge-gray'}">${s.enabled ? 'on' : 'off'}</span>
+            </div>`).join('');
+          schedulesHtml = `
+            <div class="agent-detail-section">
+              <div class="agent-detail-section-title">Schedules (${agentSchedules.length})</div>
+              ${rows}
+            </div>`;
+        }
+
+        // 4. Last 5 runs sparkline
+        let runsHtml = '';
+        if (agentRuns.length > 0) {
+          const bars = agentRuns.map(r => {
+            const cls = r.isError ? 'err' : 'ok';
+            const title = `${r.isError ? 'Error' : 'OK'} — ${formatRelative(r.startedAt)} (${r.numTurns} turns, $${(r.costUsd||0).toFixed(3)})`;
+            return `<div class="spark-bar ${cls}" title="${esc(title)}" onclick="closeAgentDetail(); showTab('runs'); document.getElementById('runsAgentFilter').value='${esc(a.id)}'; loadRuns();"></div>`;
+          }).join('');
+          const successCount = agentRuns.filter(r => !r.isError).length;
+          runsHtml = `
+            <div class="agent-detail-section">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div class="agent-detail-section-title" style="margin-bottom:0">Last ${agentRuns.length} Runs</div>
+                <a class="agent-detail-link" onclick="closeAgentDetail(); showTab('runs'); document.getElementById('runsAgentFilter').value='${esc(a.id)}'; loadRuns();">View all →</a>
+              </div>
+              <div class="sparkline">${bars}</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">${successCount}/${agentRuns.length} success</div>
+            </div>`;
+        } else {
+          runsHtml = `
+            <div class="agent-detail-section">
+              <div class="agent-detail-section-title">Last Runs</div>
+              <div style="color:var(--text-muted);font-size:12px">No runs yet.</div>
+            </div>`;
+        }
+
+        // 5. Tasks by status
+        const tasksByStatus = { ready: 0, in_progress: 0, completed: 0, blocked: 0 };
+        agentTasks.forEach(t => { if (t.status in tasksByStatus) tasksByStatus[t.status]++; });
+        const taskTotal = agentTasks.length;
+        const tasksHtml = `
+          <div class="agent-detail-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div class="agent-detail-section-title" style="margin-bottom:0">Tasks (${taskTotal})</div>
+              ${taskTotal > 0 ? `<a class="agent-detail-link" onclick="closeAgentDetail(); showTab('tasks'); document.getElementById('taskAgentFilter').value='${esc(a.id)}'; renderTasks();">View all →</a>` : ''}
+            </div>
+            ${taskTotal === 0
+              ? `<div style="color:var(--text-muted);font-size:12px">No tasks assigned.</div>`
+              : `<div style="display:flex;gap:6px;flex-wrap:wrap">
+                  ${tasksByStatus.ready > 0 ? `<span class="badge badge-blue">${tasksByStatus.ready} ready</span>` : ''}
+                  ${tasksByStatus.in_progress > 0 ? `<span class="badge badge-yellow">${tasksByStatus.in_progress} in progress</span>` : ''}
+                  ${tasksByStatus.completed > 0 ? `<span class="badge badge-green">${tasksByStatus.completed} done</span>` : ''}
+                  ${tasksByStatus.blocked > 0 ? `<span class="badge badge-red">${tasksByStatus.blocked} blocked</span>` : ''}
+                </div>`
+            }
+          </div>`;
+
+        // 6. Cost (7d) with mini daily chart
+        let costHtml = '';
+        const totalCost = costSummary ? costSummary.totalCostUsd : 0;
+        if (totalCost > 0 || costHistory.length > 0) {
+          let miniChartHtml = '';
+          if (costHistory.length > 0) {
+            const chronoRuns = [...costHistory].reverse();
+            const maxCost = Math.max(...chronoRuns.map(r => r.costUsd || 0), 0.0001);
+            const bars = chronoRuns.map(r => {
+              const pct = Math.max(Math.round(((r.costUsd || 0) / maxCost) * 100), 4);
+              const title = `$${(r.costUsd||0).toFixed(4)} — ${(r.startedAt||'').slice(0, 16)}`;
+              return `
+                <div class="mini-cost-bar-wrap">
+                  <div class="mini-cost-bar${r.isError ? ' error' : ''}" style="height:${pct}%" title="${esc(title)}"></div>
+                </div>`;
+            }).join('');
+            miniChartHtml = `<div class="mini-cost-chart">${bars}</div>`;
+          }
+          costHtml = `
+            <div class="agent-detail-section">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <div class="agent-detail-section-title" style="margin-bottom:0">Cost (7d)</div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-bright)">$${totalCost.toFixed(4)}</span>
+              </div>
+              ${costSummary ? `<div style="font-size:11px;color:var(--text-muted)">${costSummary.runCount} runs · ${costSummary.errorCount} errors</div>` : ''}
+              ${miniChartHtml}
+            </div>`;
+        }
+
+        document.getElementById('agentDetailBody').innerHTML = heroHtml + promptHtml + schedulesHtml + runsHtml + tasksHtml + costHtml;
+      }
+
+      function _toggleAgentDetailPrompt(fullText) {
+        const el = document.getElementById('agentDetailPromptText');
+        if (!el) return;
+        const isExpanded = el.dataset.expanded === '1';
+        const link = el.nextElementSibling;
+        if (isExpanded) {
+          el.textContent = fullText.slice(0, 200) + '…';
+          el.dataset.expanded = '0';
+          if (link) link.textContent = 'Show more';
+        } else {
+          el.textContent = fullText;
+          el.dataset.expanded = '1';
+          if (link) link.textContent = 'Show less';
+        }
       }
 
       // ── Schedules tab ──────────────────────────────────────────────────
@@ -6743,6 +7070,23 @@
         }
       }
     </script>
+
+    <!-- Agent detail backdrop (click-outside to close) -->
+    <div id="agentDetailBackdrop" class="agent-detail-backdrop" onclick="closeAgentDetail()"></div>
+
+    <!-- Agent detail slide-over panel -->
+    <div id="agentDetailPanel" class="agent-detail-panel">
+      <div class="agent-detail-header">
+        <span class="agent-detail-title" id="agentDetailTitle">Agent</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm" id="agentDetailEditBtn">Edit</button>
+          <button class="agent-detail-close" onclick="closeAgentDetail()" title="Close">&times;</button>
+        </div>
+      </div>
+      <div class="agent-detail-body" id="agentDetailBody">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
 
     <!-- Chat panel backdrop (click-outside to close) -->
     <div id="chatPanelBackdrop" class="chat-panel-backdrop" onclick="chatPanelClose()"></div>
