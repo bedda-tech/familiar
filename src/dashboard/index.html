@@ -896,6 +896,66 @@
 
       .filter-select:focus, .filter-input:focus { border-color: var(--border-focus); }
 
+      /* ── Kanban Board ── */
+      .kanban-board {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+      @media (max-width: 900px) { .kanban-board { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 540px) { .kanban-board { grid-template-columns: 1fr; } }
+      .kanban-col {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        min-height: 80px;
+        transition: border-color 0.1s, background 0.1s;
+      }
+      .kanban-col.drag-over { border-color: var(--accent); background: rgba(126,200,131,0.06); }
+      .kanban-col-header {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+      .kanban-col-count {
+        font-size: 10px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1px 6px;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      .kanban-col-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+      .kanban-card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        cursor: pointer;
+        transition: border-color 0.1s, background 0.1s;
+      }
+      .kanban-card:hover { border-color: var(--accent); background: var(--bg-hover); }
+      .kanban-card.prio-0 { border-left-color: var(--red); }
+      .kanban-card.prio-1 { border-left-color: var(--orange); }
+      .kanban-card.prio-2 { border-left-color: var(--yellow); }
+      .kanban-card-title { font-size: 12px; font-weight: 600; color: var(--text-bright); margin-bottom: 4px; line-height: 1.3; }
+      .kanban-card-meta { font-size: 10px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 3px; align-items: center; margin-top: 4px; }
+      .kanban-show-all { font-size: 10px; color: var(--text-muted); text-align: center; padding: 4px; cursor: pointer; border-top: 1px solid var(--border); margin-top: 2px; }
+      .kanban-show-all:hover { color: var(--accent); }
+      .view-toggle { display: flex; gap: 2px; }
+      .view-toggle .btn { padding: 4px 8px; }
+      .view-toggle .btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
       /* ── Modal ── */
       .modal-overlay {
         display: none;
@@ -2139,6 +2199,10 @@
           <h2>Tasks</h2>
           <span id="taskCount" class="count-badge">0</span>
           <div class="section-actions">
+            <div class="view-toggle">
+              <button id="taskViewTable" class="btn btn-sm active" onclick="setTaskViewMode('table')" title="Table view">☰</button>
+              <button id="taskViewKanban" class="btn btn-sm" onclick="setTaskViewMode('kanban')" title="Kanban view">⊞</button>
+            </div>
             <button class="btn btn-sm" onclick="loadTasks()">Refresh</button>
             <button class="btn btn-sm btn-success" onclick="openTaskModal()">+ New Task</button>
           </div>
@@ -4236,6 +4300,136 @@
       let taskChecked = new Set();
       let dragSrcId = null;
 
+      // ── Kanban view state ──
+      let taskViewMode = localStorage.getItem('taskViewMode') || 'table';
+      let kanbanDragId = null;
+      let kanbanShowAllCompleted = false;
+
+      function setTaskViewMode(mode) {
+        taskViewMode = mode;
+        localStorage.setItem('taskViewMode', mode);
+        const tblBtn = document.getElementById('taskViewTable');
+        const kbBtn = document.getElementById('taskViewKanban');
+        if (tblBtn) tblBtn.classList.toggle('active', mode === 'table');
+        if (kbBtn) kbBtn.classList.toggle('active', mode === 'kanban');
+        renderTasks();
+      }
+
+      function _initKanbanToggle() {
+        const tblBtn = document.getElementById('taskViewTable');
+        const kbBtn = document.getElementById('taskViewKanban');
+        if (tblBtn) tblBtn.classList.toggle('active', taskViewMode === 'table');
+        if (kbBtn) kbBtn.classList.toggle('active', taskViewMode === 'kanban');
+      }
+
+      // Kanban drag handlers (column-level drop)
+      function kanbanCardDragStart(ev, id) {
+        kanbanDragId = id;
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.currentTarget.style.opacity = '0.4';
+      }
+      function kanbanCardDragEnd(ev) {
+        ev.currentTarget.style.opacity = '1';
+        kanbanDragId = null;
+      }
+      function kanbanColDragOver(ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        ev.currentTarget.closest('.kanban-col').classList.add('drag-over');
+      }
+      function kanbanColDragLeave(ev) {
+        ev.currentTarget.closest('.kanban-col').classList.remove('drag-over');
+      }
+      async function kanbanColDrop(ev, status) {
+        ev.preventDefault();
+        const col = ev.currentTarget.closest('.kanban-col');
+        if (col) col.classList.remove('drag-over');
+        if (!kanbanDragId) return;
+        const task = tasks.find(t => t.id === kanbanDragId);
+        if (!task || task.status === status) { kanbanDragId = null; return; }
+        try {
+          await api('PUT', `/api/tasks/${kanbanDragId}`, { status });
+          await loadTasks();
+        } catch {}
+        kanbanDragId = null;
+      }
+
+      function renderKanban(filtered) {
+        const container = document.getElementById('tasksContainer');
+        const COLUMNS = [
+          { status: 'not_ready', label: 'Not Ready' },
+          { status: 'ready',     label: 'Ready' },
+          { status: 'in_progress', label: 'In Progress' },
+          { status: 'completed', label: 'Completed' },
+        ];
+
+        const prioBorder = (p) => {
+          if (p === 0) return 'prio-0';
+          if (p === 1) return 'prio-1';
+          if (p === 2) return 'prio-2';
+          return '';
+        };
+
+        const prioBadgeHtml = (p) => {
+          if (p == null) return '';
+          const cls = p === 0 ? 'badge-red' : p === 1 ? 'badge-orange' : p === 2 ? 'badge-yellow' : 'badge-gray';
+          return `<span class="badge ${cls}" style="font-size:9px">P${p}</span>`;
+        };
+
+        let html = '<div class="kanban-board">';
+        for (const col of COLUMNS) {
+          let colTasks = filtered.filter(t => t.status === col.status);
+          let showAll = col.status !== 'completed' || kanbanShowAllCompleted;
+          const total = colTasks.length;
+          if (col.status === 'completed' && !kanbanShowAllCompleted) {
+            colTasks = colTasks.slice(0, 10);
+          }
+
+          html += `
+            <div class="kanban-col" id="kanban-col-${col.status}"
+              ondragover="kanbanColDragOver(event)"
+              ondragleave="kanbanColDragLeave(event)"
+              ondrop="kanbanColDrop(event, '${col.status}')">
+              <div class="kanban-col-header">
+                <span>${col.label}</span>
+                <span class="kanban-col-count">${total}</span>
+              </div>
+              <div class="kanban-col-body">`;
+
+          for (const t of colTasks) {
+            const tags = Array.isArray(t.tags) ? t.tags : [];
+            const tagsHtml = tags.map(tag =>
+              `<span style="font-size:9px;padding:0 3px;background:var(--bg-card);border:1px solid var(--border);border-radius:3px">${esc(tag)}</span>`
+            ).join('');
+            const prioClass = prioBorder(t.priority);
+            html += `
+              <div class="kanban-card ${prioClass}" data-task-id="${t.id}"
+                draggable="true"
+                ondragstart="kanbanCardDragStart(event, ${t.id})"
+                ondragend="kanbanCardDragEnd(event)"
+                onclick="openTaskModal(${t.id})">
+                <div class="kanban-card-title">${esc(t.title)}</div>
+                <div class="kanban-card-meta">
+                  ${prioBadgeHtml(t.priority)}
+                  ${t.assigned_agent ? `<span style="font-size:9px;color:var(--text-muted)">${esc(t.assigned_agent)}</span>` : ''}
+                  ${t.project_id ? `<span style="font-size:9px;color:var(--text-muted);opacity:0.7">${esc(t.project_id)}</span>` : ''}
+                  ${tagsHtml}
+                </div>
+              </div>`;
+          }
+
+          if (col.status === 'completed' && total > 10) {
+            html += `<div class="kanban-show-all" onclick="kanbanShowAllCompleted=!kanbanShowAllCompleted; renderTasks()">
+              ${kanbanShowAllCompleted ? `▲ Show less` : `▼ Show all ${total}`}
+            </div>`;
+          }
+
+          html += '</div></div>'; // close col-body + kanban-col
+        }
+        html += '</div>'; // close kanban-board
+        container.innerHTML = html;
+      }
+
       function populateProjectFilter() {
         const sel = document.getElementById('taskProjectFilter');
         if (!sel) return;
@@ -4440,6 +4634,12 @@
 
         document.getElementById('taskCount').textContent = filtered.length;
         updateSidebarBadges();
+        _initKanbanToggle();
+
+        if (taskViewMode === 'kanban') {
+          renderKanban(filtered);
+          return;
+        }
 
         if (filtered.length === 0) {
           container.innerHTML = `
