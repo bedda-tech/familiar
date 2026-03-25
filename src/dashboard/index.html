@@ -1136,6 +1136,49 @@
         font-size: 12px;
       }
 
+      /* ── Skeleton screens ── */
+      @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      .skeleton {
+        background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+        border-radius: 4px;
+        display: inline-block;
+      }
+      .skeleton-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-lg);
+      }
+      .skeleton-line { height: 11px; margin: 5px 0; }
+      .skeleton-title { height: 15px; margin-bottom: 10px; }
+      .skeleton-row {
+        display: flex;
+        gap: var(--space-sm);
+        align-items: center;
+        padding: 9px var(--space-md);
+        border-bottom: 1px solid var(--border);
+      }
+      .skeleton-cell { height: 11px; flex-shrink: 0; }
+      .skeleton-activity-row {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .skeleton-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 3px;
+      }
+
       /* ── Code inline ── */
       code {
         background: var(--bg);
@@ -2015,18 +2058,18 @@
           </div>
           <div class="ov-stat" id="ovStatErrors">
             <div class="ov-stat-label">Errors (24h)</div>
-            <div class="ov-stat-value">—</div>
-            <div class="ov-stat-sub">loading…</div>
+            <div class="ov-stat-value"><span class="skeleton" style="width:36px;height:24px;border-radius:3px"></span></div>
+            <div class="ov-stat-sub"><span class="skeleton" style="width:70px;height:10px;border-radius:3px"></span></div>
           </div>
           <div class="ov-stat" id="ovStatRuns">
             <div class="ov-stat-label">Total Runs (7d)</div>
-            <div class="ov-stat-value">—</div>
-            <div class="ov-stat-sub">loading…</div>
+            <div class="ov-stat-value"><span class="skeleton" style="width:48px;height:24px;border-radius:3px"></span></div>
+            <div class="ov-stat-sub"><span class="skeleton" style="width:80px;height:10px;border-radius:3px"></span></div>
           </div>
           <div class="ov-stat" id="ovStatCost">
             <div class="ov-stat-label">Total Cost (7d)</div>
-            <div class="ov-stat-value">—</div>
-            <div class="ov-stat-sub">loading…</div>
+            <div class="ov-stat-value"><span class="skeleton" style="width:56px;height:24px;border-radius:3px"></span></div>
+            <div class="ov-stat-sub"><span class="skeleton" style="width:60px;height:10px;border-radius:3px"></span></div>
           </div>
         </div>
         <!-- Grid: 2 columns -->
@@ -2039,7 +2082,11 @@
               <span class="badge badge-blue" id="ovOwnerTaskCount" style="margin-left:4px;font-size:9px"></span>
             </div>
             <div id="ovOwnerTasks">
-              <div class="ov-empty">Loading…</div>
+              <div style="padding:8px 0" id="_ovOwnerTasksSkeleton">
+                <div class="skeleton-activity-row"><div class="skeleton skeleton-dot"></div><div style="flex:1"><div class="skeleton skeleton-line" style="width:65%"></div><div class="skeleton skeleton-line" style="width:35%"></div></div></div>
+                <div class="skeleton-activity-row"><div class="skeleton skeleton-dot"></div><div style="flex:1"><div class="skeleton skeleton-line" style="width:75%"></div><div class="skeleton skeleton-line" style="width:40%"></div></div></div>
+                <div class="skeleton-activity-row"><div class="skeleton skeleton-dot"></div><div style="flex:1"><div class="skeleton skeleton-line" style="width:55%"></div><div class="skeleton skeleton-line" style="width:30%"></div></div></div>
+              </div>
             </div>
           </div>
           <!-- Now Running -->
@@ -3244,6 +3291,35 @@
         }
       }
 
+      // ── Skeleton helpers ──────────────────────────────────────────────
+      function skeletonCardGrid(n) {
+        return Array.from({length: n}, (_, i) => `
+          <div class="skeleton-card">
+            <div class="skeleton skeleton-title" style="width:${55 + (i * 11) % 25}%"></div>
+            <div class="skeleton skeleton-line" style="width:${35 + (i * 7) % 30}%"></div>
+            <div class="skeleton skeleton-line" style="width:${45 + (i * 9) % 20}%"></div>
+          </div>`).join('');
+      }
+
+      function skeletonTableRows(cols, n) {
+        const widths = [55, 70, 45, 60, 40, 65];
+        return Array.from({length: n}, (_, r) => `
+          <div class="skeleton-row">
+            ${Array.from({length: cols}, (__, c) => `<div class="skeleton skeleton-cell" style="width:${widths[(r + c) % widths.length]}px"></div>`).join('')}
+          </div>`).join('');
+      }
+
+      function skeletonActivityFeed(n) {
+        return Array.from({length: n}, (_, i) => `
+          <div class="skeleton-activity-row">
+            <div class="skeleton skeleton-dot"></div>
+            <div style="flex:1">
+              <div class="skeleton skeleton-line" style="width:${60 + (i * 8) % 25}%"></div>
+              <div class="skeleton skeleton-line" style="width:${30 + (i * 7) % 20}%"></div>
+            </div>
+          </div>`).join('');
+      }
+
       // ── Load all data ─────────────────────────────────────────────────
       function loadAll() {
         if (!token) return;
@@ -3521,6 +3597,7 @@
       // ── Activity tab ──────────────────────────────────────────────────
       async function loadActivity() {
         if (!token) return;
+        document.getElementById('activityFeed').innerHTML = skeletonActivityFeed(5);
         try {
           const data = await api('GET', '/api/activity?limit=100');
           activityEntries = data.activity || [];
@@ -3626,6 +3703,7 @@
       // ── Agents tab ────────────────────────────────────────────────────
       async function loadAgents() {
         if (!token) return;
+        document.getElementById('agentsGrid').innerHTML = skeletonCardGrid(6);
         try {
           const [agentData, scheduleData, costData, cost7dData, runsData] = await Promise.all([
             api('GET', '/api/agents'),
@@ -4055,6 +4133,7 @@
       // ── Schedules tab ──────────────────────────────────────────────────
       async function loadSchedules() {
         if (!token) return;
+        document.getElementById('schedulesContainer').innerHTML = skeletonTableRows(5, 5);
         try {
           const [schedData, cronData] = await Promise.all([
             api('GET', '/api/schedules'),
@@ -4282,6 +4361,7 @@
       // ── Tasks tab ─────────────────────────────────────────────────────
       async function loadTasks() {
         if (!token) return;
+        document.getElementById('tasksContainer').innerHTML = skeletonTableRows(5, 5);
         try {
           const data = await api('GET', '/api/tasks');
           tasks = data.tasks || [];
@@ -4904,6 +4984,7 @@
 
       async function loadProjects() {
         if (!token) return;
+        document.getElementById('projectsGrid').innerHTML = skeletonCardGrid(6);
         try {
           const data = await api('GET', '/api/projects');
           projects = data.projects || [];
@@ -5332,6 +5413,7 @@
       // ── Tools tab ──────────────────────────────────────────────────────
       async function loadTools() {
         if (!token) return;
+        document.getElementById('toolsContainer').innerHTML = skeletonTableRows(4, 5);
         try {
           const data = await api('GET', '/api/tools');
           tools = data.tools || [];
@@ -5673,6 +5755,7 @@
 
       async function loadTemplates() {
         if (!token) return;
+        document.getElementById('templatesContainer').innerHTML = skeletonTableRows(4, 5);
         try {
           const data = await api('GET', '/api/templates');
           templates = data.templates || [];
@@ -5816,6 +5899,7 @@
 
       async function loadRuns() {
         if (!token) return;
+        document.getElementById('runsContainer').innerHTML = skeletonTableRows(6, 5);
         const agentId = document.getElementById('runsAgentFilter').value;
         const isError = document.getElementById('runsStatusFilter').value;
         const limit = parseInt(document.getElementById('runsLimitSelect').value || '50', 10);
@@ -6255,6 +6339,7 @@
 
       async function loadCosts() {
         if (!token) return;
+        document.getElementById('costsTable').innerHTML = skeletonTableRows(4, 5);
         const period = document.getElementById('costsPeriod').value || '7d';
 
         try {
