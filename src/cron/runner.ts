@@ -12,7 +12,33 @@ import { getLogger } from "../util/logger.js";
 
 const log = getLogger("cron-runner");
 
-/** Resolve a prompt string -- if it's a file path (.md), read the file. Otherwise return as-is. */
+/**
+ * Parsed frontmatter fields from an agent .md file.
+ * Only fields relevant to the runner are extracted here.
+ */
+export interface AgentFrontmatter {
+  /** Auto-submit this as the first user turn (Claude Code v2.1.83+). */
+  initialPrompt?: string;
+}
+
+/** Parse YAML-like frontmatter from a --- block. Only supports simple key: value pairs. */
+function parseFrontmatter(raw: string): AgentFrontmatter {
+  const fm: AgentFrontmatter = {};
+  for (const line of raw.split("\n")) {
+    const m = line.match(/^(\w+):\s*(.+)$/);
+    if (!m) continue;
+    const [, key, val] = m;
+    const unquoted = val.replace(/^["']|["']$/g, "").trim();
+    if (key === "initialPrompt") fm.initialPrompt = unquoted;
+  }
+  return fm;
+}
+
+/** Resolve a prompt string -- if it's a file path (.md), read the file. Otherwise return as-is.
+ *
+ * If the file has YAML frontmatter with `initialPrompt`, that value is used as the
+ * effective prompt (Claude Code v2.1.83+ convention). Falls back to the body text.
+ */
 function resolvePrompt(prompt: string): string {
   if (!prompt) return prompt;
   const trimmed = prompt.trim();
@@ -22,9 +48,17 @@ function resolvePrompt(prompt: string): string {
     if (existsSync(resolved)) {
       try {
         const content = readFileSync(resolved, "utf-8");
-        // Strip YAML frontmatter if present
+        // Parse YAML frontmatter if present
         const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-        return fmMatch ? fmMatch[2].trim() : content.trim();
+        if (fmMatch) {
+          const fm = parseFrontmatter(fmMatch[1]);
+          // If initialPrompt is declared in frontmatter, use it as the active prompt.
+          // This follows the Claude Code v2.1.83 convention where agent .md files can
+          // embed their first-turn prompt directly without a wrapper script.
+          if (fm.initialPrompt) return fm.initialPrompt;
+          return fmMatch[2].trim();
+        }
+        return content.trim();
       } catch (e) {
         log.warn({ path: resolved }, "failed to read prompt file, using path as prompt");
       }
@@ -393,6 +427,9 @@ export async function runCronJob(
 
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: augmentedPath };
   delete env.CLAUDECODE;
+  // Strip Anthropic and cloud provider credentials from all subprocess environments
+  // (Bash tool, hooks, MCP stdio). Claude Code v2.1.83+ feature.
+  env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1";
 
   log.debug({ jobId: job.id, claudeBin }, "spawning claude");
 
