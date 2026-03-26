@@ -3281,6 +3281,11 @@
         }
 
         if (msg.type === 'chat:message') {
+          // Skip user messages that were already shown optimistically on send
+          if (msg.role === 'user' && !msg.source && _chatOptimisticQueue.length > 0 && _chatOptimisticQueue[0] === msg.text) {
+            _chatOptimisticQueue.shift();
+            return;
+          }
           chatAppendMessage(msg.role, msg.text, null, msg.source);
           return;
         }
@@ -6525,6 +6530,7 @@
       // ── Chat ──────────────────────────────────────────────────────────────
 
       let chatDraftEls = {}; // keyed by 'tab' | 'panel'
+      let _chatOptimisticQueue = []; // texts sent optimistically, waiting for server echo to skip
 
       /** Minimal markdown-to-HTML for chat bubbles (safe: escape first, then apply patterns). */
       function chatMarkdown(text) {
@@ -6630,6 +6636,9 @@
           toast('Not connected — check WebSocket status', 'error');
           return;
         }
+        // Optimistic: show immediately, queue to skip the server echo
+        _chatOptimisticQueue.push(text);
+        chatAppendMessage('user', text);
         ws.send(JSON.stringify({ type: 'chat:send', text }));
         input.value = '';
         chatInputResize(input);
@@ -7012,6 +7021,9 @@
           toast('Not connected — check WebSocket status', 'error');
           return;
         }
+        // Optimistic: show immediately, queue to skip the server echo
+        _chatOptimisticQueue.push(text);
+        chatAppendMessage('user', text);
         ws.send(JSON.stringify({ type: 'chat:send', text }));
         input.value = '';
         chatInputResize(input);
