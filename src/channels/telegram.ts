@@ -518,12 +518,21 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    this.bot.command("stop", async (ctx) => {
+      const handler = this.commandHandlers.get("stop");
+      if (handler) {
+        const msg = this.normalizeMessage(ctx);
+        await handler(msg);
+      }
+    });
+
     this.bot.command("start", async (ctx) => {
       await ctx.reply(
         "Hello! I'm your AI familiar, powered by Claude Code.\n\n" +
           "Just send me a message and I'll respond.\n\n" +
           "Commands:\n" +
           "/new -- Start a fresh conversation\n" +
+          "/stop -- Stop current response\n" +
           "/status -- Session info\n" +
           "/model -- Switch model\n" +
           "/cost -- Usage costs\n" +

@@ -83,6 +83,8 @@ export class Bridge {
   /** Mirror channel: receives a copy of responses when the originating channel is not this one */
   private mirrorChannel: Channel | undefined;
   private mirrorChatId: string | undefined;
+  /** chatIds where the user requested an abort via /stop */
+  private stoppedChats = new Set<string>();
 
   constructor(
     channel: Channel | Channel[],
@@ -144,6 +146,17 @@ export class Bridge {
         "Session cleared. Next message starts a fresh conversation.",
         msg.replyContext,
       );
+    });
+
+    // Handle /stop — abort the current in-flight response
+    ch.onCommand("stop", async (msg) => {
+      this.chatChannelMap.set(msg.chatId, ch);
+      const stopped = this.stopChat(msg.chatId);
+      if (stopped) {
+        await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, "Stopped.");
+      } else {
+        await this.channelFor(msg.chatId).sendDirectMessage(msg.chatId, "Nothing to stop.");
+      }
     });
 
     // Handle /status — session info
@@ -597,6 +610,19 @@ export class Bridge {
     this.mirrorChatId = chatId;
   }
 
+  /**
+   * Abort the in-flight request for a chatId, if any.
+   * Returns true if a process was found and killed, false if nothing was running.
+   */
+  stopChat(chatId: string): boolean {
+    if (!this.processTracker?.isActive(chatId)) return false;
+    this.stoppedChats.add(chatId);
+    this.processTracker.kill(chatId);
+    // Notify dashboard clients immediately so the stop button hides
+    this.wsServer?.broadcast({ type: "chat:stopped" });
+    return true;
+  }
+
   private async handleMessage(msg: IncomingMessage): Promise<void> {
     if (!msg.text && (!msg.filePaths || msg.filePaths.length === 0)) {
       return;
@@ -823,6 +849,17 @@ export class Bridge {
             if (!typingStopped) {
               stopTyping();
               typingStopped = true;
+            }
+
+            // Check if this was a user-initiated stop
+            const wasStopped = this.stoppedChats.has(msg.chatId);
+            if (wasStopped) this.stoppedChats.delete(msg.chatId);
+
+            // If stopped before any streaming content arrived, suppress the error message
+            if (wasStopped && result.isError && !fullText) {
+              // Clear any active streaming draft bubble
+              if (this.wsServer) this.wsServer.broadcast({ type: "chat:draft", text: "", done: true });
+              break;
             }
 
             // Store/update session

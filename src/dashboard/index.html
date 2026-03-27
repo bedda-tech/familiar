@@ -1312,6 +1312,9 @@
       }
 
       .chat-input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .chat-stop-btn { display: none; background: transparent; border-color: var(--red); color: var(--red); flex-shrink: 0; }
+      .chat-stop-btn.visible { display: flex; }
+      .chat-stop-btn:hover { background: rgba(248,81,73,0.15); }
 
       .chat-empty {
         align-self: center;
@@ -2440,6 +2443,7 @@
         </div>
         <div class="chat-input-bar">
           <textarea id="chatInput" placeholder="Message your familiar... (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+          <button id="chatStopBtn" class="chat-stop-btn" onclick="chatStop()" title="Stop response">&#9632;</button>
           <button id="chatSendBtn" onclick="chatSend()">Send</button>
         </div>
       </div>
@@ -3292,6 +3296,11 @@
 
         if (msg.type === 'chat:draft') {
           chatUpdateDraft(msg.text, msg.done);
+          return;
+        }
+
+        if (msg.type === 'chat:stopped') {
+          _setChatStreaming(false);
           return;
         }
       }
@@ -6625,6 +6634,7 @@
         if (document.getElementById('chatPanelMessages')) {
           _chatUpdateDraftInContainer('chatPanelMessages', 'chatPanelEmpty', 'panel', text, done);
         }
+        _setChatStreaming(!done);
       }
 
       /** Send the chat input to the server via WebSocket. */
@@ -6645,6 +6655,21 @@
         const btn = document.getElementById('chatSendBtn');
         btn.disabled = true;
         setTimeout(() => { btn.disabled = false; }, 500);
+      }
+
+      /** Send a stop request to abort the current in-flight response. */
+      function chatStop() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'chat:stop' }));
+        _setChatStreaming(false);
+      }
+
+      /** Show or hide the stop button in all chat containers based on streaming state. */
+      function _setChatStreaming(streaming) {
+        const stopBtn = document.getElementById('chatStopBtn');
+        const panelStopBtn = document.getElementById('chatPanelStopBtn');
+        if (stopBtn) stopBtn.classList.toggle('visible', streaming);
+        if (panelStopBtn) panelStopBtn.classList.toggle('visible', streaming);
       }
 
       function chatInputResize(el) {
@@ -7408,6 +7433,7 @@
       </div>
       <div class="chat-input-bar">
         <textarea id="chatPanelInput" placeholder="Message your familiar..." rows="1"></textarea>
+        <button id="chatPanelStopBtn" class="chat-stop-btn" onclick="chatStop()" title="Stop response">&#9632;</button>
         <button id="chatPanelSendBtn" onclick="chatPanelSend()">Send</button>
       </div>
     </div>

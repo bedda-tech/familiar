@@ -31,11 +31,22 @@ export class DashboardChannel implements Channel {
   constructor(private wsServer: WsServer, private primaryChatId?: string) {
     // Wire incoming WebSocket messages from dashboard clients
     wsServer.onMessage((clientId, raw) => {
+      const chatId = this.primaryChatId ?? `dash:${clientId}`;
+
+      // Handle stop request
+      if (raw.type === "chat:stop") {
+        const handler = this.commandHandlers.get("stop");
+        if (handler) {
+          const msg: IncomingMessage = { chatId, userId: clientId, text: "", replyContext: clientId };
+          void handler(msg);
+        }
+        return;
+      }
+
       if (raw.type !== "chat:send" || typeof raw.text !== "string" || !raw.text.trim()) return;
 
       const text = raw.text.trim();
       // Use primary chatId (Telegram's chatId) to share session, falling back to per-client chatId
-      const chatId = this.primaryChatId ?? `dash:${clientId}`;
 
       // Echo user message to all dashboard clients so multiple tabs stay in sync
       wsServer.broadcast({ type: "chat:message", role: "user", text });

@@ -16,6 +16,7 @@ export type WsEvent =
   | { type: "activity"; entry: ActivityEntry }
   | { type: "chat:message"; role: string; text: string; source?: string }
   | { type: "chat:draft"; text: string; done: boolean }
+  | { type: "chat:stopped" }
   | { type: "connected"; clientId: string };
 
 export interface ActivityEntry {
