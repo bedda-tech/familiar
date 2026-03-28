@@ -34,6 +34,7 @@
  *   POST /api/notify                    — send a Telegram notification (body: {agent, message?, error_type?, timestamp?})
  *   GET  /api/memory/search             — semantic search over indexed memory (q, limit, category?)
  *   GET  /api/memory/categories         — list categories with chunk counts
+ *   GET  /api/memory/files              — list all indexed memory files (category? filter)
  *   POST /api/memory/write              — write a memory file to category subdir (body: {category, filename, content})
  */
 
@@ -576,6 +577,19 @@ export class ApiRouter {
         }
         const counts = this.memoryStore.categories();
         sendJson(res, 200, { categories: counts });
+        return true;
+      }
+
+      // ── Memory Files ──
+      if (path === "/api/memory/files") {
+        if (!this.memoryStore) {
+          sendJson(res, 503, { error: "Memory store not available (requires openai config)" });
+          return true;
+        }
+        const params = new URLSearchParams(queryString ?? "");
+        const category = params.get("category") ?? undefined;
+        const files = this.memoryStore.files(category);
+        sendJson(res, 200, { files, count: files.length });
         return true;
       }
 

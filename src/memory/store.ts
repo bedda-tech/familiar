@@ -594,6 +594,35 @@ export class MemoryStore {
     return data.data[0].embedding;
   }
 
+  /** List all indexed memory files, optionally filtered by category */
+  files(category?: string): Array<{
+    path: string;
+    category: string;
+    size: number;
+    mtime: number;
+    chunks: number;
+  }> {
+    let sql = `
+      SELECT mf.path, mf.category, mf.size, mf.mtime,
+             COUNT(mc.id) as chunks
+      FROM memory_files mf
+      LEFT JOIN memory_chunks mc ON mc.path = mf.path
+    `;
+    const params: unknown[] = [];
+    if (category) {
+      sql += ` WHERE mf.category = ?`;
+      params.push(category);
+    }
+    sql += ` GROUP BY mf.path ORDER BY mf.category, mf.path`;
+    return this.db.prepare(sql).all(...params) as Array<{
+      path: string;
+      category: string;
+      size: number;
+      mtime: number;
+      chunks: number;
+    }>;
+  }
+
   /** Get stats about the memory index */
   stats(): { chunks: number; files: number } {
     const chunkCount = (

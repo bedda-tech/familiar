@@ -2016,6 +2016,10 @@
               <span class="sidebar-icon">☰</span>
               <span class="sidebar-label">Documents</span>
             </div>
+            <div class="sidebar-item" data-tab="memory" data-label="Memory" onclick="showTab('memory')">
+              <span class="sidebar-icon">◉</span>
+              <span class="sidebar-label">Memory</span>
+            </div>
           </div>
           <!-- Analytics -->
           <div class="sidebar-group">
@@ -2347,6 +2351,41 @@
         </div>
         <div id="templatesContainer">
           <div class="loading">Loading templates...</div>
+        </div>
+      </div>
+
+      <!-- ── Memory ── -->
+      <div id="tab-memory" class="tab-panel">
+        <div class="section-header">
+          <h2>Memory</h2>
+          <span id="memoryFileCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <select class="filter-select" id="memoryCategoryFilter" onchange="loadMemoryFiles()">
+              <option value="">All categories</option>
+              <option value="profile">profile</option>
+              <option value="preferences">preferences</option>
+              <option value="entities">entities</option>
+              <option value="events">events</option>
+              <option value="cases">cases</option>
+              <option value="patterns">patterns</option>
+              <option value="tools">tools</option>
+              <option value="skills">skills</option>
+              <option value="general">general</option>
+            </select>
+            <button class="btn btn-sm" onclick="loadMemory()">Refresh</button>
+          </div>
+        </div>
+        <!-- Category breakdown -->
+        <div id="memoryCategoryBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+        <!-- Search -->
+        <div class="filter-row" style="margin-bottom:12px">
+          <input type="text" class="filter-select" id="memorySearchInput" placeholder="Search memory (requires OpenAI)..." style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')searchMemory()" />
+          <button class="btn btn-sm btn-primary" onclick="searchMemory()">Search</button>
+        </div>
+        <div id="memorySearchResults" style="display:none;margin-bottom:16px"></div>
+        <!-- File list -->
+        <div id="memoryContainer">
+          <div class="loading">Loading memory index...</div>
         </div>
       </div>
 
@@ -3350,6 +3389,7 @@
           loadTools();
           loadToolProfiles();
           loadTemplates();
+          loadMemory();
           loadOverview();
         });
       }
@@ -7389,6 +7429,127 @@
         _docsEditMode = false;
         if (_docsActiveFile) {
           loadDocument(_docsActiveFile.path, _docsActiveFile.name);
+        }
+      }
+
+      // ── Memory ───────────────────────────────────────────────
+      let _memoryFiles = [];
+      let _memoryCategories = [];
+
+      async function loadMemory() {
+        if (!token) return;
+        await Promise.all([loadMemoryFiles(), loadMemoryCategories()]);
+      }
+
+      async function loadMemoryCategories() {
+        try {
+          const data = await api('GET', '/api/memory/categories');
+          _memoryCategories = data.categories || [];
+          renderMemoryCategoryBar();
+        } catch (e) {
+          // Memory store not available — clear bar
+          document.getElementById('memoryCategoryBar').innerHTML = `<span style="color:var(--text-muted);font-size:11px">Category counts unavailable (requires OpenAI config)</span>`;
+        }
+      }
+
+      async function loadMemoryFiles() {
+        if (!token) return;
+        document.getElementById('memoryContainer').innerHTML = skeletonTableRows(3, 4);
+        const cat = document.getElementById('memoryCategoryFilter').value;
+        try {
+          const data = await api('GET', `/api/memory/files${cat ? `?category=${encodeURIComponent(cat)}` : ''}`);
+          _memoryFiles = data.files || [];
+          document.getElementById('memoryFileCount').textContent = data.count;
+          renderMemoryFiles();
+        } catch (e) {
+          document.getElementById('memoryContainer').innerHTML = `<div class="loading">Failed: ${esc(e.message)}</div>`;
+        }
+      }
+
+      function renderMemoryCategoryBar() {
+        const catColors = {
+          profile: 'badge-blue', preferences: 'badge-purple', entities: 'badge-orange',
+          events: 'badge-green', cases: 'badge-red', patterns: 'badge-yellow',
+          tools: 'badge-blue', skills: 'badge-purple', general: 'badge-gray',
+        };
+        const bar = document.getElementById('memoryCategoryBar');
+        if (_memoryCategories.length === 0) { bar.innerHTML = ''; return; }
+        bar.innerHTML = _memoryCategories.map(c => {
+          const color = catColors[c.category] || 'badge-gray';
+          return `<span class="badge ${color}" style="cursor:pointer;font-size:11px" onclick="filterMemoryCategory('${esc(c.category)}')">${esc(c.category)} <strong>${c.count}</strong></span>`;
+        }).join('');
+      }
+
+      function filterMemoryCategory(cat) {
+        document.getElementById('memoryCategoryFilter').value = cat;
+        loadMemoryFiles();
+      }
+
+      function renderMemoryFiles() {
+        const container = document.getElementById('memoryContainer');
+        if (_memoryFiles.length === 0) {
+          container.innerHTML = `<div class="empty-state"><div class="empty-icon">◉</div><div class="empty-title">No memory files indexed</div><div class="empty-desc">Run <code>familiar index-memory</code> to index your memory directory.</div></div>`;
+          return;
+        }
+        const catColors = {
+          profile: 'badge-blue', preferences: 'badge-purple', entities: 'badge-orange',
+          events: 'badge-green', cases: 'badge-red', patterns: 'badge-yellow',
+          tools: 'badge-blue', skills: 'badge-purple', general: 'badge-gray',
+        };
+        let html = `<table class="data-table"><thead><tr><th>Path</th><th>Category</th><th>Chunks</th><th>Size</th></tr></thead><tbody>`;
+        for (const f of _memoryFiles) {
+          const color = catColors[f.category] || 'badge-gray';
+          const name = f.path.split('/').pop() || f.path;
+          const sizeKb = (f.size / 1024).toFixed(1);
+          html += `<tr title="${esc(f.path)}">
+            <td style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</td>
+            <td><span class="badge ${color}">${esc(f.category)}</span></td>
+            <td style="color:var(--text-muted);font-size:11px">${f.chunks}</td>
+            <td style="color:var(--text-muted);font-size:11px">${sizeKb}K</td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      }
+
+      async function searchMemory() {
+        const q = document.getElementById('memorySearchInput').value.trim();
+        if (!q) return;
+        const cat = document.getElementById('memoryCategoryFilter').value;
+        const resultsEl = document.getElementById('memorySearchResults');
+        resultsEl.style.display = 'block';
+        resultsEl.innerHTML = '<div class="loading">Searching...</div>';
+        try {
+          let url = `/api/memory/search?q=${encodeURIComponent(q)}&limit=10`;
+          if (cat) url += `&category=${encodeURIComponent(cat)}`;
+          const data = await api('GET', url);
+          const results = data.results || [];
+          if (results.length === 0) {
+            resultsEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No results found.</div>';
+            return;
+          }
+          const catColors = {
+            profile: 'badge-blue', preferences: 'badge-purple', entities: 'badge-orange',
+            events: 'badge-green', cases: 'badge-red', patterns: 'badge-yellow',
+            tools: 'badge-blue', skills: 'badge-purple', general: 'badge-gray',
+          };
+          let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${results.length} results for "${esc(q)}"</div>`;
+          for (const r of results) {
+            const fname = r.path.split('/').pop() || r.path;
+            const color = catColors[r.category] || 'badge-gray';
+            const score = (r.score * 100).toFixed(0);
+            html += `<div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--bg-card)">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span class="badge ${color}">${esc(r.category)}</span>
+                <span style="font-size:11px;color:var(--text-muted)">${esc(fname)}</span>
+                <span style="font-size:10px;color:var(--text-muted);margin-left:auto">L${r.startLine}–${r.endLine} · score ${score}</span>
+              </div>
+              <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;color:var(--text);margin:0;max-height:120px;overflow:hidden">${esc(r.text)}</pre>
+            </div>`;
+          }
+          resultsEl.innerHTML = html;
+        } catch (e) {
+          resultsEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px 0">Search failed: ${esc(e.message)}</div>`;
         }
       }
     </script>
