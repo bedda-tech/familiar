@@ -214,9 +214,28 @@ async function cmdInit(): Promise<void> {
 
   const configDir = join(workspaceDir, ".familiar");
   mkdirSync(join(configDir, "agents"), { recursive: true });
-  mkdirSync(join(workspaceDir, "memory"), { recursive: true });
   mkdirSync(join(workspaceDir, "identity"), { recursive: true });
   mkdirSync(join(workspaceDir, "claude-memory"), { recursive: true });
+
+  // ── Memory category subdirectories ───────────────────────
+  const memoryCategories: Record<string, string> = {
+    profile: "Agent's own identity, role, and self-description.",
+    preferences: "User's stated preferences per facet: communication style, tool choices, formatting.",
+    entities: "People, projects, and organizations. One file per entity with facts and status.",
+    events: "Time-bound events: daily notes, incidents, meetings. Named YYYY-MM-DD[-topic].md.",
+    cases: "Problem + solution pairs. Documents challenges encountered and how they were resolved.",
+    patterns: "Reusable processes, runbooks, and strategies. Step-by-step workflows.",
+    tools: "Tool usage documentation, CLIs, integrations, and stats. One file per tool.",
+    skills: "Workflow optimization knowledge, research findings, and learned capabilities.",
+  };
+  for (const [cat, desc] of Object.entries(memoryCategories)) {
+    const catDir = join(workspaceDir, "memory", cat);
+    mkdirSync(catDir, { recursive: true });
+    const readmePath = join(catDir, "README.md");
+    if (!existsSync(readmePath)) {
+      writeFileSync(readmePath, `# ${cat.charAt(0).toUpperCase() + cat.slice(1)}\n\n${desc}\n`);
+    }
+  }
   console.log(`  Created ${workspaceDir}/`);
 
   // ── Symlink ~/.familiar -> workspace/.familiar ─────────────
@@ -297,7 +316,7 @@ async function cmdInit(): Promise<void> {
   if (!existsSync(claudeMdPath)) {
     writeFileSync(
       claudeMdPath,
-      `# Familiar Workspace\n\nYou are ${familiarName} — an AI familiar and persistent personal assistant communicating through a messaging platform.\n\n## Session Startup\n\nRead these files in order:\n1. identity/SOUL.md — who you are\n2. identity/IDENTITY.md — your name and nature\n3. identity/USER.md — who you're helping\n4. identity/AGENTS.md — behavioral rules\n5. identity/TOOLS.md — available tools\n\nCheck the \`memory/\` directory for recent daily notes.\n\nIf BOOTSTRAP.md exists, follow it — it's your first-run onboarding.\n`,
+      `# Familiar Workspace\n\nYou are ${familiarName} — an AI familiar and persistent personal assistant communicating through a messaging platform.\n\n## Session Startup\n\nRead these files in order:\n1. identity/SOUL.md — who you are\n2. identity/IDENTITY.md — your name and nature\n3. identity/USER.md — who you're helping\n4. identity/AGENTS.md — behavioral rules\n5. identity/TOOLS.md — available tools\n\nCheck \`memory/events/\` for recent daily notes (YYYY-MM-DD.md).\n\nIf BOOTSTRAP.md exists, follow it — it's your first-run onboarding.\n\n## Memory System\n\nOperational memory lives in \`memory/\` organized into 8 categories:\n\n| Category | Purpose |\n|----------|----------|\n| \`profile/\` | Agent identity, role, self-description |\n| \`preferences/\` | User preferences per facet |\n| \`entities/\` | People, projects, organizations |\n| \`events/\` | Daily notes, incidents (YYYY-MM-DD.md) |\n| \`cases/\` | Problem + solution pairs |\n| \`patterns/\` | Runbooks, processes, strategies |\n| \`tools/\` | Tool docs, CLI guides |\n| \`skills/\` | Research findings, workflow optimization |\n\nWrite new memory to the appropriate category subdir. Daily notes go in \`memory/events/YYYY-MM-DD.md\`.\nSearch memory: \`curl -s "http://localhost:3002/api/memory/search?q=<query>"\`\n`,
     );
     console.log(`  Created CLAUDE.md`);
   }

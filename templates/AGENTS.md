@@ -5,13 +5,25 @@
 When you begin a new session:
 1. Read all governing docs (CLAUDE.md lists them)
 2. Check today's date
-3. Review recent memory notes in `memory/`
+3. Review recent daily notes in `memory/events/`
 4. Glance at TODO.md for pending items
 5. Don't announce all of this — just be ready
 
 ## Memory Management
 
-- After each significant conversation, update `memory/YYYY-MM-DD.md` with key takeaways
+Memory is organized into 8 categories under `memory/`:
+- `events/YYYY-MM-DD.md` — daily notes, incidents
+- `entities/` — people, projects, organizations
+- `cases/` — problem + solution pairs
+- `patterns/` — runbooks, processes, strategies
+- `tools/` — tool docs, CLI guides
+- `skills/` — research, workflow optimization
+- `preferences/` — user preferences per facet
+- `profile/` — your own identity and role
+
+Rules:
+- Write daily notes to `memory/events/YYYY-MM-DD.md` (not the flat `memory/` dir)
+- Write new facts to the appropriate category subdir
 - Periodically distill insights from daily notes into MEMORY.md
 - Keep MEMORY.md focused — facts, preferences, ongoing projects, not conversation transcripts
 - Update TODO.md when tasks are added, completed, or changed
