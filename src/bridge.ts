@@ -12,6 +12,7 @@ import { type MessageBus, type BusSource } from "./bus.js";
 import { transcribeAudio } from "./voice/transcribe.js";
 import { chunkMessage } from "./streaming/chunker.js";
 import { createDraft, appendToDraft, finalizeDraft, type DraftContext } from "./streaming/draft.js";
+import { extractSessionMemories } from "./session/extractor.js";
 import { getLogger } from "./util/logger.js";
 import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -669,8 +670,15 @@ export class Bridge {
       }
     }
 
-    // Look up session
+    // Look up session — getSession() returns null when expired or rotated
+    const prevInfo = this.sessions.getSessionInfo(msg.chatId);
     const sessionId = this.sessions.getSession(msg.chatId);
+
+    // If the session just expired/rotated (had a row but getSession returned null),
+    // extract structured memories from that session before starting fresh.
+    if (sessionId === null && prevInfo !== null) {
+      this.triggerMemoryExtraction(msg.chatId, "session rotation/expiry");
+    }
 
     // Memory management: periodic saves and pre-compaction flush
     const flushEnabled = this.sessionConfig.preCompactionFlush !== false;
@@ -709,6 +717,7 @@ export class Bridge {
     if (this.processTracker?.isActive(msg.chatId)) {
       log.warn({ chatId: msg.chatId }, "killing stale in-flight request before new message");
       this.processTracker.kill(msg.chatId);
+      this.triggerMemoryExtraction(msg.chatId, "stale request killed");
       this.saveSessionContext(msg.chatId, "stale request killed before new message");
       this.sessions.clearSession(msg.chatId);
     }
@@ -766,7 +775,8 @@ export class Bridge {
         log.error({ chatId: msg.chatId, elapsed: Date.now() - lastActivity }, "response timeout -- killing hung session");
         clearInterval(watchdog);
         this.processTracker?.kill(msg.chatId);
-        // Save context and clear session so next message starts fresh
+        // Save context and extract memories before clearing session
+        this.triggerMemoryExtraction(msg.chatId, "response timeout (10 min)");
         this.saveSessionContext(msg.chatId, "response timeout (10 min)");
         this.sessions.clearSession(msg.chatId);
       }
@@ -940,6 +950,37 @@ export class Bridge {
       const chunks = chunkMessage(errorText);
       await finalizeDraft(draft, draftCtx, chunks);
     }
+  }
+
+  /**
+   * Fire-and-forget async memory extraction from a completed session.
+   * Fetches the most recent messages for the chatId and runs LLM extraction.
+   * Safe to call without awaiting — errors are logged and swallowed.
+   */
+  private triggerMemoryExtraction(chatId: string, reason: string): void {
+    if (!this.memoryStore || !this.workingDirectory) return;
+
+    const memoryStore = this.memoryStore;
+    const workingDirectory = this.workingDirectory;
+
+    // Fetch messages outside the async closure so we capture them before clearSession()
+    const rows = this.sessions
+      .getDb()
+      .prepare(
+        `SELECT role, content, created_at FROM message_log
+         WHERE chat_id = ? ORDER BY created_at ASC LIMIT 60`,
+      )
+      .all(chatId) as Array<{ role: string; content: string; created_at: string }>;
+
+    if (rows.length < 4) return;
+
+    log.info({ chatId, reason, messages: rows.length }, "triggering session memory extraction");
+
+    extractSessionMemories(rows, workingDirectory, memoryStore).then((written) => {
+      log.info({ chatId, reason, written }, "session memory extraction done");
+    }).catch((e) => {
+      log.error({ err: e, chatId, reason }, "session memory extraction failed");
+    });
   }
 
   /**
