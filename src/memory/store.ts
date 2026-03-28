@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, existsSync, statSync, readdirSync, lstatSync } from "node:fs";
-import { join, relative, extname, basename } from "node:path";
+import { readFileSync, existsSync, statSync, readdirSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, relative, extname, basename, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import type { OpenAIConfig } from "../config.js";
 import { getLogger } from "../util/logger.js";
@@ -13,12 +13,40 @@ const CHUNK_OVERLAP = 80;
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMS = 1536;
 
+/**
+ * The 8 memory categories (OpenViking pattern).
+ *
+ * User-facing:  profile | preferences | entities | events
+ * Agent-facing: cases   | patterns    | tools    | skills
+ *
+ * Files stored under memory/<category>/ get that category automatically.
+ * Legacy flat files get a category inferred from their filename.
+ */
+export const MEMORY_CATEGORIES = [
+  "profile",
+  "preferences",
+  "entities",
+  "events",
+  "cases",
+  "patterns",
+  "tools",
+  "skills",
+] as const;
+
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number] | "general";
+
 export interface SearchResult {
   text: string;
   path: string;
   score: number;
   startLine: number;
   endLine: number;
+  category: MemoryCategory;
+}
+
+export interface CategoryCount {
+  category: string;
+  count: number;
 }
 
 export class MemoryStore {
@@ -45,7 +73,8 @@ export class MemoryStore {
         path TEXT PRIMARY KEY,
         hash TEXT NOT NULL,
         mtime INTEGER NOT NULL,
-        size INTEGER NOT NULL
+        size INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'general'
       );
 
       CREATE TABLE IF NOT EXISTS memory_chunks (
@@ -56,10 +85,12 @@ export class MemoryStore {
         hash TEXT NOT NULL,
         text TEXT NOT NULL,
         embedding BLOB NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'general'
       );
 
       CREATE INDEX IF NOT EXISTS idx_memory_chunks_path ON memory_chunks(path);
+      CREATE INDEX IF NOT EXISTS idx_memory_chunks_category ON memory_chunks(category);
 
       CREATE VIRTUAL TABLE IF NOT EXISTS memory_chunks_fts USING fts5(
         text,
@@ -74,38 +105,135 @@ export class MemoryStore {
         embedding FLOAT[${EMBEDDING_DIMS}]
       );
     `);
+
+    // Add category column to existing tables if upgrading from old schema
+    const cols = this.db.prepare("PRAGMA table_info(memory_files)").all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "category")) {
+      this.db.exec(`ALTER TABLE memory_files ADD COLUMN category TEXT NOT NULL DEFAULT 'general'`);
+    }
+    const chunkCols = this.db.prepare("PRAGMA table_info(memory_chunks)").all() as Array<{ name: string }>;
+    if (!chunkCols.some((c) => c.name === "category")) {
+      this.db.exec(`ALTER TABLE memory_chunks ADD COLUMN category TEXT NOT NULL DEFAULT 'general'`);
+    }
   }
 
-  /** Search memories using hybrid FTS + vector similarity */
-  async search(query: string, limit = 10): Promise<SearchResult[]> {
+  /**
+   * Derive a memory category from a relative file path.
+   *
+   * Priority order:
+   *  1. Explicit subdirectory: memory/cases/foo.md → "cases"
+   *  2. Filename prefix heuristics for legacy flat files
+   *  3. Falls back to "general"
+   */
+  static detectCategory(relPath: string): MemoryCategory {
+    // 1. Explicit subdirectory under memory/ or .familiar/agents/*/memory/
+    const subdirMatch = relPath.match(/(?:^|\/|\\)memory[/\\]([^/\\]+)[/\\]/);
+    if (subdirMatch) {
+      const sub = subdirMatch[1] as MemoryCategory;
+      if ((MEMORY_CATEGORIES as readonly string[]).includes(sub)) return sub;
+    }
+
+    // 2. Heuristics based on filename
+    const fname = basename(relPath, extname(relPath)).toLowerCase();
+
+    // Daily notes and time-bound events
+    if (/^\d{4}-\d{2}-\d{2}/.test(fname)) return "events";
+
+    // Feedback = cases (problem + solution)
+    if (fname.startsWith("feedback_") || fname.startsWith("feedback-")) return "cases";
+
+    // Tool docs / CLIs / pipelines — check before project prefixes so "tools-inventory" wins
+    if (
+      fname.includes("tool") ||
+      fname.includes("-cli") ||
+      fname === "gog-cli" ||
+      fname.includes("inventory") ||
+      fname.includes("pipeline") ||
+      fname.includes("integration")
+    ) {
+      return "tools";
+    }
+
+    // Runbooks, strategies, processes — check before project prefixes so "krain-listing-strategy" → patterns
+    if (
+      fname.includes("runbook") ||
+      fname.includes("strategy") ||
+      fname.includes("pattern") ||
+      fname.includes("plan") ||
+      fname.includes("migration") ||
+      fname.includes("infra")
+    ) {
+      return "patterns";
+    }
+
+    // Research / competitive analysis / skills — before project prefixes so "crowdia-refactor-report" → skills
+    if (
+      fname.includes("research") ||
+      fname.includes("analysis") ||
+      fname.includes("evaluation") ||
+      fname.includes("report")
+    ) {
+      return "skills";
+    }
+
+    // Project-named files = entities (after functional heuristics)
+    if (
+      fname.startsWith("project_") ||
+      fname.startsWith("crowdia-") ||
+      fname.startsWith("nozio-") ||
+      fname.startsWith("krain-") ||
+      fname.startsWith("bedda-") ||
+      fname.startsWith("axon-") ||
+      fname.startsWith("omnivi-")
+    ) {
+      return "entities";
+    }
+
+    return "general";
+  }
+
+  /** Search memories using hybrid FTS + vector similarity, optionally filtered by category */
+  async search(query: string, limit = 10, category?: string): Promise<SearchResult[]> {
     // Get query embedding
     const embedding = await this.embed(query);
 
-    // Vector search
-    const vecResults = this.db
-      .prepare(
-        `
-      SELECT id, distance
-      FROM memory_chunks_vec
-      WHERE embedding MATCH ?
-      ORDER BY distance
-      LIMIT ?
-    `,
-      )
-      .all(new Float32Array(embedding), limit * 2) as Array<{ id: string; distance: number }>;
+    // Vector search (optionally filtered by category)
+    let vecSql = `
+      SELECT mc.id, mcv.distance
+      FROM memory_chunks_vec mcv
+      JOIN memory_chunks mc ON mc.id = mcv.id
+      WHERE mcv.embedding MATCH ?
+    `;
+    const vecParams: unknown[] = [new Float32Array(embedding)];
+    if (category) {
+      vecSql += ` AND mc.category = ?`;
+      vecParams.push(category);
+    }
+    vecSql += ` ORDER BY mcv.distance LIMIT ?`;
+    vecParams.push(limit * 2);
 
-    // FTS search
-    const ftsResults = this.db
-      .prepare(
-        `
-      SELECT id, rank
-      FROM memory_chunks_fts
+    const vecResults = this.db
+      .prepare(vecSql)
+      .all(...vecParams) as Array<{ id: string; distance: number }>;
+
+    // FTS search (optionally filtered by category)
+    let ftsSql = `
+      SELECT mcf.id, mcf.rank
+      FROM memory_chunks_fts mcf
+      JOIN memory_chunks mc ON mc.id = mcf.id
       WHERE memory_chunks_fts MATCH ?
-      ORDER BY rank
-      LIMIT ?
-    `,
-      )
-      .all(query.replace(/[^\w\s]/g, " "), limit * 2) as Array<{ id: string; rank: number }>;
+    `;
+    const ftsParams: unknown[] = [query.replace(/[^\w\s]/g, " ")];
+    if (category) {
+      ftsSql += ` AND mc.category = ?`;
+      ftsParams.push(category);
+    }
+    ftsSql += ` ORDER BY mcf.rank LIMIT ?`;
+    ftsParams.push(limit * 2);
+
+    const ftsResults = this.db
+      .prepare(ftsSql)
+      .all(...ftsParams) as Array<{ id: string; rank: number }>;
 
     // Merge results with reciprocal rank fusion
     const scores = new Map<string, number>();
@@ -131,12 +259,12 @@ export class MemoryStore {
     // Fetch full chunks
     const results: SearchResult[] = [];
     const stmt = this.db.prepare(
-      `SELECT text, path, start_line, end_line FROM memory_chunks WHERE id = ?`,
+      `SELECT text, path, start_line, end_line, category FROM memory_chunks WHERE id = ?`,
     );
 
     for (const { id, score } of topIds) {
       const row = stmt.get(id) as
-        | { text: string; path: string; start_line: number; end_line: number }
+        | { text: string; path: string; start_line: number; end_line: number; category: string }
         | undefined;
       if (row) {
         results.push({
@@ -145,11 +273,51 @@ export class MemoryStore {
           score,
           startLine: row.start_line,
           endLine: row.end_line,
+          category: row.category as MemoryCategory,
         });
       }
     }
 
     return results;
+  }
+
+  /** Return per-category chunk counts */
+  categories(): CategoryCount[] {
+    return this.db
+      .prepare(
+        `SELECT category, COUNT(*) as count
+         FROM memory_chunks
+         GROUP BY category
+         ORDER BY count DESC`,
+      )
+      .all() as CategoryCount[];
+  }
+
+  /**
+   * Write a memory file to the appropriate category subdirectory under memory/.
+   * Creates the directory if needed, then re-indexes the file.
+   * Returns the relative path of the written file.
+   */
+  async write(
+    category: MemoryCategory,
+    filename: string,
+    content: string,
+  ): Promise<{ relPath: string; category: MemoryCategory }> {
+    if (!(MEMORY_CATEGORIES as readonly string[]).includes(category)) {
+      throw new Error(`Invalid category: ${category}. Must be one of: ${MEMORY_CATEGORIES.join(", ")}`);
+    }
+
+    const safeFilename = basename(filename).replace(/[^a-z0-9._-]/gi, "-");
+    const relPath = `memory/${category}/${safeFilename}`;
+    const fullPath = join(this.workspaceDir, relPath);
+
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, "utf-8");
+
+    await this.indexFile(relPath, fullPath);
+    log.info({ relPath, category }, "wrote memory file");
+
+    return { relPath, category };
   }
 
   // Directories to skip entirely during indexing
@@ -290,6 +458,8 @@ export class MemoryStore {
       .get(relPath) as { hash: string } | undefined;
     if (existing?.hash === hash) return false;
 
+    const category = MemoryStore.detectCategory(relPath);
+
     // File changed — re-index
     const lines = content.split("\n");
     const chunks = this.chunkLines(lines);
@@ -317,8 +487,8 @@ export class MemoryStore {
       this.db
         .prepare(
           `
-        INSERT OR REPLACE INTO memory_chunks (id, path, start_line, end_line, hash, text, embedding, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO memory_chunks (id, path, start_line, end_line, hash, text, embedding, updated_at, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         )
         .run(
@@ -330,6 +500,7 @@ export class MemoryStore {
           chunk.text,
           Buffer.from(embeddingBlob.buffer),
           now,
+          category,
         );
 
       this.db
@@ -355,13 +526,13 @@ export class MemoryStore {
     this.db
       .prepare(
         `
-      INSERT OR REPLACE INTO memory_files (path, hash, mtime, size)
-      VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO memory_files (path, hash, mtime, size, category)
+      VALUES (?, ?, ?, ?, ?)
     `,
       )
-      .run(relPath, hash, stat.mtimeMs, stat.size);
+      .run(relPath, hash, stat.mtimeMs, stat.size, category);
 
-    log.info({ path: relPath, chunks: chunks.length }, "indexed memory file");
+    log.info({ path: relPath, chunks: chunks.length, category }, "indexed memory file");
     return true;
   }
 

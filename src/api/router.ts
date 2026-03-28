@@ -32,6 +32,9 @@
  *   GET  /api/documents/read?path=X     — read a specific document file
  *   PUT  /api/documents/write           — write/update a document file (body: {path, content})
  *   POST /api/notify                    — send a Telegram notification (body: {agent, message?, error_type?, timestamp?})
+ *   GET  /api/memory/search             — semantic search over indexed memory (q, limit, category?)
+ *   GET  /api/memory/categories         — list categories with chunk counts
+ *   POST /api/memory/write              — write a memory file to category subdir (body: {category, filename, content})
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, copyFileSync } from "node:fs";
@@ -546,6 +549,7 @@ export class ApiRouter {
         const params = new URLSearchParams(queryString ?? "");
         const query = params.get("q") ?? "";
         const limit = parseInt(params.get("limit") ?? "10", 10);
+        const category = params.get("category") ?? undefined;
         if (!query) {
           sendJson(res, 400, { error: "Missing required 'q' query parameter" });
           return true;
@@ -555,12 +559,23 @@ export class ApiRouter {
           return true;
         }
         try {
-          const results = await this.memoryStore.search(query, Math.min(Math.max(limit, 1), 50));
-          sendJson(res, 200, { results, query, count: results.length });
+          const results = await this.memoryStore.search(query, Math.min(Math.max(limit, 1), 50), category);
+          sendJson(res, 200, { results, query, count: results.length, category: category ?? null });
         } catch (e) {
           log.error({ err: e }, "memory search failed");
           sendJson(res, 500, { error: "Memory search failed" });
         }
+        return true;
+      }
+
+      // ── Memory Categories ──
+      if (path === "/api/memory/categories") {
+        if (!this.memoryStore) {
+          sendJson(res, 503, { error: "Memory store not available (requires openai config)" });
+          return true;
+        }
+        const counts = this.memoryStore.categories();
+        sendJson(res, 200, { categories: counts });
         return true;
       }
 
@@ -607,6 +622,27 @@ export class ApiRouter {
     }
 
     if (method === "POST") {
+      // ── Memory Write ──
+      if (path === "/api/memory/write" && body) {
+        if (!this.memoryStore) {
+          sendJson(res, 503, { error: "Memory store not available (requires openai config)" });
+          return true;
+        }
+        const { category, filename, content } = body as any;
+        if (!category || !filename || !content) {
+          sendJson(res, 400, { error: "Missing required fields: category, filename, content" });
+          return true;
+        }
+        try {
+          const result = await this.memoryStore.write(category, filename, content);
+          sendJson(res, 201, result);
+        } catch (e: any) {
+          log.error({ err: e }, "memory write failed");
+          sendJson(res, 400, { error: e?.message ?? "Memory write failed" });
+        }
+        return true;
+      }
+
       // ── Session Clear ──
       if (path === "/api/sessions/clear") {
         if (this.sessionClearHandler) {
