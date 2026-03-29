@@ -3420,6 +3420,32 @@
         return d.innerHTML;
       }
 
+      /** Parse a task result string as a structured TaskHandoff, or return null. */
+      function parseHandoff(result) {
+        if (!result) return null;
+        try {
+          const p = JSON.parse(result);
+          if (p && typeof p === 'object' && 'what_done' in p && 'quality_met' in p) return p;
+        } catch {}
+        return null;
+      }
+
+      /** Render a TaskHandoff object as formatted HTML. */
+      function renderHandoffHtml(h) {
+        const qBadge = h.quality_met
+          ? `<span class="badge badge-green" style="font-size:10px">✓ quality met</span>`
+          : `<span class="badge badge-red" style="font-size:10px">✗ quality not met</span>`;
+        const filesHtml = Array.isArray(h.files_touched) && h.files_touched.length
+          ? `<div style="margin-top:6px;font-size:10px;color:var(--text-muted)">${h.files_touched.map(f => `<code style="background:var(--bg);padding:0 3px;border-radius:2px;border:1px solid var(--border)">${esc(f)}</code>`).join(' ')}</div>`
+          : '';
+        return `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${qBadge}</div>
+          <div style="font-size:11px;color:var(--text-bright);margin-bottom:4px"><strong>Done:</strong> ${esc(h.what_done)}</div>
+          ${h.evidence ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px"><strong>Evidence:</strong> ${esc(h.evidence)}</div>` : ''}
+          ${h.next_steps ? `<div style="font-size:11px;color:var(--accent);margin-bottom:2px"><strong>Next:</strong> ${esc(h.next_steps)}</div>` : ''}
+          ${filesHtml}`;
+      }
+
       // ── Format helpers ────────────────────────────────────────────────
       function formatRelative(isoStr) {
         if (!isoStr) return '<span style="color:var(--text-muted)">—</span>';

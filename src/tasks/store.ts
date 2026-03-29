@@ -10,6 +10,29 @@ import { getLogger } from "../util/logger.js";
 
 const log = getLogger("task-store");
 
+/** Structured completion handoff — typed result from an agent run. */
+export interface TaskHandoff {
+  what_done: string;
+  files_touched: string[];
+  evidence: string;
+  next_steps: string;
+  quality_met: boolean;
+}
+
+/** Parse a task result string as a TaskHandoff, or return null if it's plain text. */
+export function parseHandoff(result: string | null): TaskHandoff | null {
+  if (!result) return null;
+  try {
+    const parsed = JSON.parse(result);
+    if (parsed && typeof parsed === "object" && "what_done" in parsed && "quality_met" in parsed) {
+      return parsed as TaskHandoff;
+    }
+  } catch {
+    // not JSON
+  }
+  return null;
+}
+
 export interface Task {
   id: number;
   title: string;
@@ -297,8 +320,10 @@ export class TaskStore {
     return claimed;
   }
 
-  /** Agent marks a task complete with a result. Recurring tasks with a schedule stay completed until the ticker resets them. Recurring tasks without a schedule reset immediately. */
-  complete(id: number, result: string): Task | undefined {
+  /** Agent marks a task complete with a result. Accepts a plain string or a
+   *  structured TaskHandoff object (serialized to JSON automatically). */
+  complete(id: number, result: string | TaskHandoff): Task | undefined {
+    const resultStr = typeof result === "object" ? JSON.stringify(result) : result;
     const task = this.get(id);
     if (!task) return undefined;
 
@@ -311,7 +336,7 @@ export class TaskStore {
            claimed_by = NULL, claimed_at = NULL, retry_count = 0, updated_at = datetime('now')
            WHERE id = ?`,
         )
-        .run(result, id);
+        .run(resultStr, id);
       log.info({ id }, "recurring task completed, reset to ready (no schedule)");
     } else {
       // Non-recurring or has recurrence_schedule -- mark completed
@@ -323,7 +348,7 @@ export class TaskStore {
            claimed_by = NULL, claimed_at = NULL, retry_count = 0, updated_at = datetime('now')
            WHERE id = ?`,
         )
-        .run(result, id);
+        .run(resultStr, id);
       log.info({ id, recurring: !!task.recurring }, "task completed");
     }
 

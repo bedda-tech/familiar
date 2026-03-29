@@ -46,7 +46,7 @@ import type Database from "better-sqlite3";
 import type { CronScheduler } from "../cron/scheduler.js";
 import type { AgentStore } from "../agents/store.js";
 import type { AgentCrudStore } from "../agents/agent-store.js";
-import type { TaskStore } from "../tasks/store.js";
+import type { TaskStore, TaskHandoff } from "../tasks/store.js";
 import type { ScheduleStore } from "../schedules/store.js";
 import type { ProjectStore } from "../projects/store.js";
 import type { RepoManager } from "../projects/repo-manager.js";
@@ -1661,8 +1661,8 @@ export class ApiRouter {
       sendJson(res, 503, { error: "Task store not available" });
       return;
     }
-    const result = (body.result as string) ?? "";
-    const task = this.taskStore.complete(id, result);
+    const result = body.result as string | TaskHandoff | undefined;
+    const task = this.taskStore.complete(id, result ?? "");
     if (!task) {
       sendJson(res, 404, { error: `Task ${id} not found` });
       return;
