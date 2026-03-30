@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
-import { TaskStore } from "./store.js";
+import { TaskStore, parseHandoff } from "./store.js";
 
 vi.mock("../util/logger.js", () => ({
   getLogger: () => ({ info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
@@ -205,5 +205,63 @@ describe("TaskStore — enrichWithDependencyStatus", () => {
     expect(enriched[0].dependency_status).toBeNull(); // a has no deps
     expect(enriched[1].dependency_status).toEqual({ total: 1, completed: 1 }); // b's dep (a) is completed
     expect(enriched[2].dependency_status).toBeNull(); // c has no deps
+  });
+});
+
+describe("TaskStore — complete() with TaskHandoff", () => {
+  let db: Database.Database;
+  let store: TaskStore;
+
+  beforeEach(() => {
+    db = makeDb();
+    store = makeStore(db);
+  });
+
+  it("stores a plain string result", () => {
+    const task = store.create({ title: "T" });
+    store.complete(task.id, "plain result");
+    const done = store.get(task.id)!;
+    expect(done.result).toBe("plain result");
+    expect(done.status).toBe("completed");
+  });
+
+  it("stores a TaskHandoff object as JSON", () => {
+    const task = store.create({ title: "T" });
+    store.complete(task.id, {
+      what_done: "Added feature X",
+      files_touched: ["src/foo.ts"],
+      evidence: "abc123",
+      next_steps: "Deploy to prod",
+      quality_met: true,
+    });
+    const done = store.get(task.id)!;
+    expect(done.status).toBe("completed");
+    const parsed = JSON.parse(done.result!);
+    expect(parsed.what_done).toBe("Added feature X");
+    expect(parsed.quality_met).toBe(true);
+    expect(parsed.files_touched).toEqual(["src/foo.ts"]);
+  });
+});
+
+describe("parseHandoff", () => {
+  it("returns null for null input", () => {
+    expect(parseHandoff(null)).toBeNull();
+  });
+
+  it("returns null for plain text", () => {
+    expect(parseHandoff("plain text result")).toBeNull();
+  });
+
+  it("returns null for JSON without required fields", () => {
+    expect(parseHandoff(JSON.stringify({ foo: "bar" }))).toBeNull();
+  });
+
+  it("returns a TaskHandoff for valid JSON", () => {
+    const h = { what_done: "done", files_touched: [], evidence: "abc", next_steps: "", quality_met: true };
+    expect(parseHandoff(JSON.stringify(h))).toEqual(h);
+  });
+
+  it("returns null for invalid JSON", () => {
+    expect(parseHandoff("{broken json")).toBeNull();
   });
 });

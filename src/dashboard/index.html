@@ -2701,6 +2701,10 @@
             <input class="form-control" id="taskFormRecurrenceSchedule" placeholder="0 */6 * * *" />
             <div class="form-hint">Cron expression — task resets to ready after this interval</div>
           </div>
+          <div id="taskResultSection" style="display:none;margin-top:12px;">
+            <div style="font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Result</div>
+            <div id="taskResultContent" style="padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;"></div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn" onclick="closeModal('taskModal')">Cancel</button>
@@ -4884,10 +4888,14 @@
         // Show last completed result
         const lastDone = tasks.find(t => t.status === 'completed' && t.result);
         if (lastDone) {
+          const lastHandoff = parseHandoff(lastDone.result);
+          const lastResultHtml = lastHandoff
+            ? renderHandoffHtml(lastHandoff)
+            : `<div class="result-preview">${esc(lastDone.result?.slice(0, 300) || '')}</div>`;
           html += `
             <div style="margin-top:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;">
               <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Last completed: ${esc(lastDone.title)}</div>
-              <div class="result-preview">${esc(lastDone.result?.slice(0, 300) || '')}</div>
+              ${lastResultHtml}
             </div>`;
         }
 
@@ -4930,6 +4938,16 @@
           const tags = Array.isArray(t.tags) ? t.tags : [];
           document.getElementById('taskFormTags').value = tags.join(', ');
           toggleRecurrenceField();
+          // Show result section if task has a result
+          const resultSection = document.getElementById('taskResultSection');
+          const resultContent = document.getElementById('taskResultContent');
+          if (t.result) {
+            const h = parseHandoff(t.result);
+            resultContent.innerHTML = h ? renderHandoffHtml(h) : `<pre style="white-space:pre-wrap;color:var(--text-muted);margin:0">${esc(t.result)}</pre>`;
+            resultSection.style.display = 'block';
+          } else {
+            resultSection.style.display = 'none';
+          }
         } else {
           document.getElementById('taskFormTitle').value = '';
           document.getElementById('taskFormDescription').value = '';
@@ -4941,6 +4959,7 @@
           document.getElementById('taskFormRecurrenceSchedule').value = '';
           document.getElementById('taskFormTags').value = '';
           document.getElementById('taskRecurrenceGroup').style.display = 'none';
+          document.getElementById('taskResultSection').style.display = 'none';
         }
 
         document.getElementById('taskModal').classList.add('visible');
