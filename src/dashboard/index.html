@@ -1929,6 +1929,119 @@
         .docs-container { flex-direction: column; }
         .docs-tree { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
       }
+
+      /* ── Onboarding tour ── */
+      #tour-spotlight {
+        position: fixed;
+        border-radius: var(--radius-md);
+        box-shadow: 0 0 0 9999px rgba(5, 8, 14, 0.82);
+        z-index: 9001;
+        pointer-events: none;
+        transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+      }
+      #tour-tooltip {
+        position: fixed;
+        z-index: 9002;
+        background: var(--bg-elevated);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-lg);
+        padding: var(--space-lg);
+        width: 280px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-glow);
+        transition: top 0.25s ease, left 0.25s ease, opacity 0.15s ease;
+      }
+      #tour-tooltip.tour-center {
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%);
+        width: 340px;
+      }
+      .tour-step-label {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: var(--space-xs);
+      }
+      .tour-title {
+        font-size: var(--text-lg);
+        font-weight: 700;
+        color: var(--text-bright);
+        margin-bottom: var(--space-sm);
+      }
+      .tour-body {
+        font-size: var(--text-base);
+        color: var(--text);
+        line-height: 1.618;
+        margin-bottom: var(--space-lg);
+      }
+      .tour-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+      }
+      .tour-btn-next {
+        background: var(--accent);
+        color: #0a0e14;
+        border: none;
+        border-radius: var(--radius-md);
+        padding: 6px 16px;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: 0.04em;
+      }
+      .tour-btn-next:hover { opacity: 0.88; }
+      .tour-btn-skip {
+        background: transparent;
+        color: var(--text-muted);
+        border: none;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        cursor: pointer;
+        padding: 6px 8px;
+      }
+      .tour-btn-skip:hover { color: var(--text); }
+      .tour-dots {
+        display: flex;
+        gap: 5px;
+        margin-left: auto;
+        align-items: center;
+      }
+      .tour-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--border);
+        transition: background 0.15s;
+      }
+      .tour-dot.active { background: var(--accent); }
+      .tour-restart-btn {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        width: 100%;
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        padding: var(--space-xs) var(--space-sm);
+        cursor: pointer;
+        text-align: left;
+        border-radius: var(--radius-md);
+        transition: color 0.15s, background 0.15s;
+        margin-top: var(--space-xs);
+      }
+      .tour-restart-btn:hover { color: var(--text); background: var(--bg-hover); }
+      .tour-restart-icon {
+        font-size: 12px;
+        width: 16px;
+        text-align: center;
+        flex-shrink: 0;
+        opacity: 0.7;
+      }
+      .sidebar.collapsed .tour-restart-label { opacity: 0; width: 0; overflow: hidden; }
     </style>
   </head>
   <body>
@@ -2045,6 +2158,13 @@
               <span class="sidebar-icon">✉</span>
               <span class="sidebar-label">Chat</span>
             </div>
+          </div>
+          <!-- Tour -->
+          <div class="sidebar-group">
+            <button class="tour-restart-btn" onclick="tourStart()" title="Restart tour">
+              <span class="tour-restart-icon sidebar-icon">?</span>
+              <span class="tour-restart-label sidebar-label">Take a tour</span>
+            </button>
           </div>
         </div>
       </nav>
@@ -7597,6 +7717,184 @@
           resultsEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px 0">Search failed: ${esc(e.message)}</div>`;
         }
       }
+
+      // ── Onboarding tour ───────────────────────────────────────────────
+      const _TOUR_STEPS = [
+        {
+          target: null,
+          title: 'Welcome to Familiar!',
+          body: "Let's take a quick tour of your dashboard. It'll only take a minute.",
+          position: 'center'
+        },
+        {
+          target: '#sidebar',
+          title: 'Navigation',
+          body: 'The sidebar gives you access to Fleet, Work, Analytics, and Infra. Click any section to switch views.',
+          position: 'right'
+        },
+        {
+          target: '#tab-overview .ov-stat-bar',
+          title: 'Overview',
+          body: 'Live stats: running agents, recent runs, task progress, and activity feed. Your command center.',
+          position: 'bottom'
+        },
+        {
+          target: '.sidebar-item[data-tab="agents"]',
+          title: 'Agents',
+          body: 'Your autonomous agent fleet. Each agent runs on a schedule and picks up tasks automatically.',
+          position: 'right'
+        },
+        {
+          target: '.sidebar-item[data-tab="tasks"]',
+          title: 'Tasks',
+          body: 'Create tasks here. Assign them to agents or yourself -- agents pick them up on their next run.',
+          position: 'right'
+        },
+        {
+          target: '#chatPanelToggle',
+          title: 'Chat',
+          body: 'Chat with your familiar from anywhere. This button opens the chat panel on any page.',
+          position: 'left'
+        },
+        {
+          target: '.sidebar-item[data-tab="services"]',
+          title: 'Services',
+          body: 'Add links to your self-hosted services here for quick access from the dashboard.',
+          position: 'right'
+        },
+        {
+          target: null,
+          title: "You're all set!",
+          body: "Try sending a message in the chat. Your familiar is ready.",
+          position: 'center',
+          last: true
+        }
+      ];
+
+      let _tourStep = 0;
+      let _tourActive = false;
+
+      function tourStart() {
+        _tourStep = 0;
+        _tourActive = true;
+        _tourRender();
+      }
+
+      function tourNext() {
+        _tourStep++;
+        if (_tourStep >= _TOUR_STEPS.length) {
+          tourEnd();
+        } else {
+          _tourRender();
+        }
+      }
+
+      function tourSkip() {
+        tourEnd();
+      }
+
+      function tourEnd() {
+        _tourActive = false;
+        try { localStorage.setItem('onboarding_complete', '1'); } catch {}
+        document.getElementById('tour-spotlight').style.display = 'none';
+        document.getElementById('tour-tooltip').style.display = 'none';
+      }
+
+      function _tourRender() {
+        const step = _TOUR_STEPS[_tourStep];
+        const total = _TOUR_STEPS.length;
+        const spotlight = document.getElementById('tour-spotlight');
+        const tooltip = document.getElementById('tour-tooltip');
+
+        // Update text
+        document.getElementById('tourStepLabel').textContent = `Step ${_tourStep + 1} of ${total}`;
+        document.getElementById('tourTitle').textContent = step.title;
+        document.getElementById('tourBody').textContent = step.body;
+
+        // Update button label
+        const nextBtn = document.getElementById('tourNextBtn');
+        nextBtn.textContent = step.last ? 'Done' : 'Next';
+
+        // Dots
+        const dotsEl = document.getElementById('tourDots');
+        dotsEl.innerHTML = _TOUR_STEPS.map((_, i) =>
+          `<div class="tour-dot${i === _tourStep ? ' active' : ''}"></div>`
+        ).join('');
+
+        // Show / position spotlight
+        if (step.target) {
+          const el = document.querySelector(step.target);
+          if (el) {
+            const r = el.getBoundingClientRect();
+            const pad = 6;
+            spotlight.style.display = 'block';
+            spotlight.style.top = (r.top - pad) + 'px';
+            spotlight.style.left = (r.left - pad) + 'px';
+            spotlight.style.width = (r.width + pad * 2) + 'px';
+            spotlight.style.height = (r.height + pad * 2) + 'px';
+          } else {
+            spotlight.style.display = 'none';
+          }
+        } else {
+          spotlight.style.display = 'none';
+        }
+
+        // Position tooltip
+        tooltip.style.display = 'block';
+        tooltip.className = '';
+        if (step.position === 'center' || !step.target) {
+          tooltip.classList.add('tour-center');
+          tooltip.style.top = '';
+          tooltip.style.left = '';
+          tooltip.style.transform = '';
+        } else {
+          tooltip.style.transform = '';
+          const el = step.target ? document.querySelector(step.target) : null;
+          if (el) {
+            const r = el.getBoundingClientRect();
+            const tw = 280, th = 180, gap = 16;
+            if (step.position === 'right') {
+              tooltip.style.left = (r.right + gap) + 'px';
+              tooltip.style.top = Math.max(8, r.top + r.height / 2 - th / 2) + 'px';
+            } else if (step.position === 'left') {
+              tooltip.style.left = (r.left - tw - gap) + 'px';
+              tooltip.style.top = Math.max(8, r.top + r.height / 2 - th / 2) + 'px';
+            } else if (step.position === 'bottom') {
+              tooltip.style.top = (r.bottom + gap) + 'px';
+              tooltip.style.left = Math.max(8, r.left + r.width / 2 - tw / 2) + 'px';
+            } else {
+              tooltip.style.top = (r.bottom + gap) + 'px';
+              tooltip.style.left = Math.max(8, r.left) + 'px';
+            }
+            // Clamp to viewport
+            const vw = window.innerWidth, vh = window.innerHeight;
+            let t = parseFloat(tooltip.style.top) || 0;
+            let l = parseFloat(tooltip.style.left) || 0;
+            if (l + tw > vw - 8) l = vw - tw - 8;
+            if (l < 8) l = 8;
+            if (t + th > vh - 8) t = vh - th - 8;
+            if (t < 8) t = 8;
+            tooltip.style.top = t + 'px';
+            tooltip.style.left = l + 'px';
+          } else {
+            tooltip.classList.add('tour-center');
+          }
+        }
+      }
+
+      // Auto-start tour for new users (no token set yet OR first time after auth)
+      (function _tourAutoCheck() {
+        if (localStorage.getItem('onboarding_complete')) return;
+        // Wait until after loadAll() has run so the page has content
+        const _waitForContent = () => {
+          if (document.getElementById('tab-overview')) {
+            setTimeout(tourStart, 800);
+          } else {
+            setTimeout(_waitForContent, 200);
+          }
+        };
+        _waitForContent();
+      })();
     </script>
 
     <!-- Agent detail backdrop (click-outside to close) -->
@@ -7613,6 +7911,19 @@
       </div>
       <div class="agent-detail-body" id="agentDetailBody">
         <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Onboarding tour -->
+    <div id="tour-spotlight" style="display:none"></div>
+    <div id="tour-tooltip" style="display:none">
+      <div class="tour-step-label" id="tourStepLabel">Step 1 of 8</div>
+      <div class="tour-title" id="tourTitle">Welcome!</div>
+      <div class="tour-body" id="tourBody"></div>
+      <div class="tour-actions">
+        <button class="tour-btn-next" id="tourNextBtn" onclick="tourNext()">Next</button>
+        <button class="tour-btn-skip" onclick="tourSkip()">Skip</button>
+        <div class="tour-dots" id="tourDots"></div>
       </div>
     </div>
 
