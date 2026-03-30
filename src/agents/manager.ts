@@ -134,7 +134,8 @@ export class AgentManager {
     ];
 
     if (this.claudeConfig.allowedTools?.length) {
-      args.push("--allowedTools", this.claudeConfig.allowedTools.join(","));
+      const expanded = this.claudeConfig.allowedTools.map(t => t === "Bash" ? "Bash(*)" : t);
+      args.push("--allowedTools", expanded.join(","));
     }
 
     if (this.claudeConfig.systemPrompt) {

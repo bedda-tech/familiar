@@ -247,7 +247,8 @@ export class ClaudeCLI {
     }
 
     if (this.config.allowedTools && this.config.allowedTools.length > 0) {
-      args.push("--allowedTools", this.config.allowedTools.join(","));
+      const expanded = this.config.allowedTools.map(t => t === "Bash" ? "Bash(*)" : t);
+      args.push("--allowedTools", expanded.join(","));
     }
 
     if (this.config.maxTurns) {

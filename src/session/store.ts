@@ -106,6 +106,11 @@ export class SessionStore {
     } catch {
       // Column already exists
     }
+    try {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN in_flight INTEGER DEFAULT 0");
+    } catch {
+      // Column already exists
+    }
   }
 
   /** Get the session ID for a chat, or null if expired/nonexistent */
@@ -163,6 +168,21 @@ export class SessionStore {
   clearSession(chatId: string): void {
     this.db.prepare("DELETE FROM sessions WHERE chat_id = ?").run(chatId);
     log.info({ chatId }, "session cleared");
+  }
+
+  /** Mark a session as actively processing a message (in_flight=1) or done (in_flight=0). */
+  setInFlight(chatId: string, active: boolean): void {
+    this.db
+      .prepare("UPDATE sessions SET in_flight = ? WHERE chat_id = ?")
+      .run(active ? 1 : 0, chatId);
+  }
+
+  /** Return sessions that were mid-flight when the process last exited (restart detection). */
+  getInterruptedSessions(): Array<{ chatId: string; sessionId: string }> {
+    const rows = this.db
+      .prepare("SELECT chat_id, session_id FROM sessions WHERE in_flight = 1")
+      .all() as Array<{ chat_id: string; session_id: string }>;
+    return rows.map((r) => ({ chatId: r.chat_id, sessionId: r.session_id }));
   }
 
   /** List all sessions ordered by most-recently-used */

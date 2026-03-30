@@ -386,8 +386,12 @@ export async function runCronJob(
     }
   }
 
-  // Per-agent tool override takes priority over default config
-  const effectiveTools = job.allowedTools ?? defaultConfig.allowedTools;
+  // Per-agent tool override takes priority over default config.
+  // Expand bare "Bash" to "Bash(*)" so all shell commands are pre-approved.
+  // Without the wildcard, claude -p treats "Bash" as "tool available" but
+  // still prompts for individual commands, which blocks headless agents.
+  const effectiveTools = (job.allowedTools ?? defaultConfig.allowedTools)
+    ?.map((t: string) => t === "Bash" ? "Bash(*)" : t);
   if (effectiveTools && effectiveTools.length > 0) {
     args.push("--allowedTools", effectiveTools.join(","));
   }

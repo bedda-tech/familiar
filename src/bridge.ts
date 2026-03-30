@@ -86,6 +86,8 @@ export class Bridge {
   private mirrorChatId: string | undefined;
   /** chatIds where the user requested an abort via /stop */
   private stoppedChats = new Set<string>();
+  /** Resume context for sessions interrupted by a process restart */
+  private pendingResumeContext = new Map<string, string>();
 
   constructor(
     channel: Channel | Channel[],
@@ -722,12 +724,23 @@ export class Bridge {
       this.sessions.clearSession(msg.chatId);
     }
 
+    // Inject restart resume context if this session was interrupted by a process restart
+    const resumeCtx = this.pendingResumeContext.get(msg.chatId);
+    if (resumeCtx) {
+      this.pendingResumeContext.delete(msg.chatId);
+      prompt = `[SYSTEM: ${resumeCtx}]\n\n${prompt}`;
+      log.info({ chatId: msg.chatId }, "injecting restart resume context");
+    }
+
     const request: ClaudeRequest = {
       prompt,
       sessionId: this.sessions.getSession(msg.chatId) ?? undefined,
       filePaths: msg.filePaths,
       chatId: msg.chatId,
     };
+
+    // Mark session as in-flight so a restart can detect interrupted sessions
+    this.sessions.setInFlight(msg.chatId, true);
 
     const channelSource = (origCh.id ?? "telegram") as BusSource;
 
@@ -932,6 +945,9 @@ export class Bridge {
               );
             }
 
+            // Clear in_flight flag — message processing complete
+            this.sessions.setInFlight(msg.chatId, false);
+
             // Post-completion: if this was a /save, clear the session now that
             // Claude has finished the save skill and the response is delivered.
             if (isSaveCommand) {
@@ -945,6 +961,7 @@ export class Bridge {
     } catch (e) {
       clearInterval(watchdog);
       stopTyping();
+      this.sessions.setInFlight(msg.chatId, false);
       log.error({ err: e, chatId: msg.chatId }, "error processing message");
       const errorText = `Error: ${e instanceof Error ? e.message : "Unknown error"}\n\nTry /new to start a fresh session.`;
       const chunks = chunkMessage(errorText);
@@ -987,6 +1004,45 @@ export class Bridge {
    * Save recent conversation context to daily memory file before clearing a session.
    * This preserves continuity so the next session can pick up where we left off.
    */
+  /**
+   * Check for sessions that were interrupted by a process restart (in_flight=1).
+   * For each, build a resume context string and store it so it's injected into
+   * the first incoming message from that chatId.
+   * Call this once during startup, before bridge.start().
+   */
+  loadInterruptedSessions(): void {
+    const interrupted = this.sessions.getInterruptedSessions();
+    for (const { chatId } of interrupted) {
+      // Clear the flag — we've detected it and will handle on next message
+      this.sessions.setInFlight(chatId, false);
+
+      const rows = this.sessions
+        .getDb()
+        .prepare(
+          `SELECT role, content FROM message_log WHERE chat_id = ? ORDER BY created_at DESC LIMIT 6`,
+        )
+        .all(chatId) as Array<{ role: string; content: string }>;
+
+      if (rows.length === 0) continue;
+
+      const msgs = rows.reverse(); // chronological order
+      const lastUser = [...msgs].filter((m) => m.role === "user").pop();
+      const lastAssistant = [...msgs].filter((m) => m.role === "assistant").pop();
+
+      const lines = [
+        "You were restarted mid-session. Here is what was happening before the restart:",
+        lastUser ? `- Last user message: ${lastUser.content.slice(0, 400)}` : null,
+        lastAssistant ? `- Last assistant response: ${lastAssistant.content.slice(0, 400)}` : null,
+        "Continue from where you left off if there was work in progress. If nothing was pending, greet normally.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      this.pendingResumeContext.set(chatId, lines);
+      log.info({ chatId }, "detected interrupted session — resume context prepared");
+    }
+  }
+
   private saveSessionContext(chatId: string, reason: string): void {
     if (!this.workingDirectory) return;
 
