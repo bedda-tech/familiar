@@ -309,4 +309,47 @@ describe("SessionStore", () => {
     // Should not throw
     store.clearSession("nonexistent");
   });
+
+  // ---------- in_flight / restart detection ----------
+  it("setInFlight marks a session as in-flight", () => {
+    store.upsertSession("chat-1", "sess-abc");
+    store.setInFlight("chat-1", true);
+
+    const db = store.getDb();
+    const row = db.prepare("SELECT in_flight FROM sessions WHERE chat_id = ?").get("chat-1") as { in_flight: number };
+    expect(row.in_flight).toBe(1);
+  });
+
+  it("setInFlight(false) clears the in-flight flag", () => {
+    store.upsertSession("chat-1", "sess-abc");
+    store.setInFlight("chat-1", true);
+    store.setInFlight("chat-1", false);
+
+    const db = store.getDb();
+    const row = db.prepare("SELECT in_flight FROM sessions WHERE chat_id = ?").get("chat-1") as { in_flight: number };
+    expect(row.in_flight).toBe(0);
+  });
+
+  it("getInterruptedSessions returns sessions with in_flight=1", () => {
+    store.upsertSession("chat-1", "sess-a");
+    store.upsertSession("chat-2", "sess-b");
+    store.upsertSession("chat-3", "sess-c");
+
+    store.setInFlight("chat-1", true);
+    store.setInFlight("chat-3", true);
+
+    const interrupted = store.getInterruptedSessions();
+    const chatIds = interrupted.map((r) => r.chatId).sort();
+    expect(chatIds).toEqual(["chat-1", "chat-3"]);
+    expect(interrupted.find((r) => r.chatId === "chat-1")?.sessionId).toBe("sess-a");
+    expect(interrupted.find((r) => r.chatId === "chat-3")?.sessionId).toBe("sess-c");
+  });
+
+  it("getInterruptedSessions returns empty when no in-flight sessions", () => {
+    store.upsertSession("chat-1", "sess-a");
+    store.setInFlight("chat-1", false);
+
+    const interrupted = store.getInterruptedSessions();
+    expect(interrupted).toHaveLength(0);
+  });
 });

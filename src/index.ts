@@ -862,6 +862,9 @@ async function cmdStart(configPath?: string): Promise<void> {
 
   // Wire up and start
   bridge.start();
+  // Detect sessions interrupted by a process restart (OOM kill, systemctl restart, etc.)
+  // and prepare resume context for the next incoming message from each affected chatId.
+  bridge.loadInterruptedSessions();
   await telegram.start();
 
   // Start webhook server if configured
