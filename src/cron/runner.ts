@@ -434,6 +434,10 @@ export async function runCronJob(
   // Strip Anthropic and cloud provider credentials from all subprocess environments
   // (Bash tool, hooks, MCP stdio). Claude Code v2.1.83+ feature.
   env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1";
+  // Skip MCP connection wait in -p (print/headless) mode. Claude Code v2.1.89+.
+  // --mcp-config server connections are still made but bounded at 5s.
+  // Reduces startup latency for all cron agent invocations.
+  env.MCP_CONNECTION_NONBLOCKING = "true";
 
   log.debug({ jobId: job.id, claudeBin }, "spawning claude");
 
