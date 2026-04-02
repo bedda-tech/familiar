@@ -407,7 +407,9 @@ export class CronScheduler {
                   }
                 }
               }
-              await this.executeJobWithScheduleId(jobConfig, scheduleId);
+              // Re-read agent config from DB to pick up any changes (max_turns, model, budget, etc.)
+              const freshConfig = this.refreshJobConfig(agentId, scheduleId);
+              await this.executeJobWithScheduleId(freshConfig ?? jobConfig, scheduleId);
             },
           );
 
@@ -459,6 +461,45 @@ export class CronScheduler {
     this.jobs.clear();
     this.db.close();
     log.info("cron scheduler stopped");
+  }
+
+  /** Re-read agent config from DB so cron callbacks pick up changes without a restart. */
+  private refreshJobConfig(agentId: string, scheduleId: string): CronJobConfig | null {
+    if (!this.sharedDb) return null;
+    try {
+      const schedule = this.sharedDb
+        .prepare("SELECT * FROM schedules WHERE id = ?")
+        .get(scheduleId) as Record<string, unknown> | undefined;
+      const agent = this.sharedDb
+        .prepare("SELECT * FROM agents WHERE id = ?")
+        .get(agentId) as Record<string, unknown> | undefined;
+      if (!schedule || !agent) return null;
+      return {
+        id: agent.id as string,
+        label: (agent.name as string) || (agent.id as string),
+        schedule: schedule.schedule as string,
+        timezone: (schedule.timezone as string) ?? "UTC",
+        prompt: schedule.prompt as string,
+        model: (agent.model as string) ?? undefined,
+        maxTurns: (agent.max_turns as number) ?? 25,
+        workingDirectory: (agent.working_directory as string) ?? undefined,
+        announce: (agent.announce as number) === 1,
+        suppressPattern: (agent.suppress_pattern as string) ?? undefined,
+        deliverTo: (agent.deliver_to as string) ?? undefined,
+        enabled: true,
+        systemPrompt: (agent.system_prompt as string) ?? undefined,
+        chrome: (agent.chrome as number) !== 0,
+        maxRunBudgetUsd: (agent.max_run_budget_usd as number) ?? undefined,
+        worktreeIsolation: (agent.worktree_isolation as number) === 1,
+        preHook: (agent.pre_hook as string) ?? undefined,
+        postHook: (agent.post_hook as string) ?? undefined,
+        allowedTools: parseJsonArray(agent.tools as string | null),
+        mcpConfig: (agent.mcp_config as string) ?? undefined,
+      };
+    } catch (e) {
+      log.warn({ agentId, scheduleId, err: e }, "failed to refresh job config, using cached");
+      return null;
+    }
   }
 
   /** Manually trigger a job by ID (supports schedule IDs, agent IDs, and legacy job IDs). */
