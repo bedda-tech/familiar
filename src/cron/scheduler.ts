@@ -409,7 +409,11 @@ export class CronScheduler {
               }
               // Re-read agent config from DB to pick up any changes (max_turns, model, budget, etc.)
               const freshConfig = this.refreshJobConfig(agentId, scheduleId);
-              await this.executeJobWithScheduleId(freshConfig ?? jobConfig, scheduleId);
+              const effectiveJobConfig = freshConfig ?? jobConfig;
+              if (freshConfig) {
+                log.info({ scheduleId, agentId, maxTurns: freshConfig.maxTurns, model: freshConfig.model }, "using fresh config from DB");
+              }
+              await this.executeJobWithScheduleId(effectiveJobConfig, scheduleId);
             },
           );
 
@@ -465,7 +469,10 @@ export class CronScheduler {
 
   /** Re-read agent config from DB so cron callbacks pick up changes without a restart. */
   private refreshJobConfig(agentId: string, scheduleId: string): CronJobConfig | null {
-    if (!this.sharedDb) return null;
+    if (!this.sharedDb) {
+      log.warn({ agentId, scheduleId }, "refreshJobConfig: no sharedDb");
+      return null;
+    }
     try {
       const schedule = this.sharedDb
         .prepare("SELECT * FROM schedules WHERE id = ?")
@@ -473,7 +480,10 @@ export class CronScheduler {
       const agent = this.sharedDb
         .prepare("SELECT * FROM agents WHERE id = ?")
         .get(agentId) as Record<string, unknown> | undefined;
-      if (!schedule || !agent) return null;
+      if (!schedule || !agent) {
+        log.warn({ agentId, scheduleId, hasSchedule: !!schedule, hasAgent: !!agent }, "refreshJobConfig: missing data");
+        return null;
+      }
       return {
         id: agent.id as string,
         label: (agent.name as string) || (agent.id as string),
