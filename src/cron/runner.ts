@@ -438,6 +438,9 @@ export async function runCronJob(
   // --mcp-config server connections are still made but bounded at 5s.
   // Reduces startup latency for all cron agent invocations.
   env.MCP_CONNECTION_NONBLOCKING = "true";
+  // Fail hung streams faster. Default is 90s; 30s is sufficient for cron agents
+  // and keeps stuck jobs from blocking the queue. Claude Code v2.1.84+.
+  env.CLAUDE_STREAM_IDLE_TIMEOUT_MS = "30000";
 
   log.debug({ jobId: job.id, claudeBin }, "spawning claude");
 
