@@ -32,7 +32,8 @@
  *   GET  /api/documents/read?path=X     — read a specific document file
  *   PUT  /api/documents/write           — write/update a document file (body: {path, content})
  *   POST /api/notify                    — send a Telegram notification (body: {agent, message?, error_type?, timestamp?})
- *   GET  /api/memory/search             — semantic search over indexed memory (q, limit, category?)
+ *   GET  /api/memory/search             — semantic search over indexed memory (q, limit, category?, type?)
+ *                                       type=messages: FTS5 keyword search over message_log grouped by session (q, limit?)
  *   GET  /api/memory/categories         — list categories with chunk counts
  *   GET  /api/memory/files              — list all indexed memory files (category? filter)
  *   POST /api/memory/write              — write a memory file to category subdir (body: {category, filename, content})
@@ -550,9 +551,15 @@ export class ApiRouter {
         const params = new URLSearchParams(queryString ?? "");
         const query = params.get("q") ?? "";
         const limit = parseInt(params.get("limit") ?? "10", 10);
+        const type = params.get("type") ?? undefined;
         const category = params.get("category") ?? undefined;
         if (!query) {
           sendJson(res, 400, { error: "Missing required 'q' query parameter" });
+          return true;
+        }
+        // type=messages: FTS5 keyword search over message_log, grouped by chat session
+        if (type === "messages") {
+          this.handleMessageSearch(query, Math.min(Math.max(limit, 1), 20), res);
           return true;
         }
         if (!this.memoryStore) {
@@ -2409,6 +2416,85 @@ When done, summarize what you did.`;
 
     this._chatFtsReady = true;
     log.info("Chat FTS5 index initialized");
+  }
+
+  // ── Message Search (session-grouped FTS5) ─────────────────────────
+
+  private handleMessageSearch(query: string, limit: number, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    try {
+      this.ensureChatFts();
+
+      // Sanitize for FTS5 (remove special chars that would cause parse errors)
+      const safeQuery = query.replace(/[^\w\s]/g, " ").trim();
+      if (!safeQuery) {
+        sendJson(res, 200, { results: [], query, count: 0 });
+        return;
+      }
+
+      // Get top 100 FTS matches with BM25 ranking + snippet
+      const rows = this.db
+        .prepare(
+          `SELECT m.id, m.chat_id, m.role, m.content, m.created_at, fts.rank,
+                  snippet(message_log_fts, 0, '', '', '...', 32) AS preview
+           FROM message_log_fts fts
+           JOIN message_log m ON m.id = fts.rowid
+           WHERE message_log_fts MATCH ?
+           ORDER BY rank
+           LIMIT 100`,
+        )
+        .all(safeQuery) as Array<{
+          id: number;
+          chat_id: string;
+          role: string;
+          content: string;
+          created_at: string;
+          rank: number;
+          preview: string;
+        }>;
+
+      // Group by chat_id, keep best-ranked match (lowest rank = best BM25)
+      const sessionMap = new Map<string, { rank: number; preview: string; chatId: string }>();
+      for (const row of rows) {
+        if (!sessionMap.has(row.chat_id)) {
+          sessionMap.set(row.chat_id, { rank: row.rank, preview: row.preview, chatId: row.chat_id });
+        }
+      }
+
+      // Sort sessions by best rank, take top N
+      const topSessions = [...sessionMap.values()]
+        .sort((a, b) => a.rank - b.rank)
+        .slice(0, limit);
+
+      // Fetch session metadata for each chat_id
+      const sessionStmt = this.db.prepare(
+        `SELECT chat_id, session_id, created_at, last_used_at, message_count
+         FROM sessions WHERE chat_id = ?`,
+      );
+
+      const results = topSessions.map((s) => {
+        const meta = sessionStmt.get(s.chatId) as {
+          chat_id: string;
+          session_id: string;
+          created_at: string;
+          last_used_at: string;
+          message_count: number;
+        } | undefined;
+        return {
+          chatId: s.chatId,
+          preview: s.preview,
+          session: meta ?? null,
+        };
+      });
+
+      sendJson(res, 200, { results, query, count: results.length });
+    } catch (e) {
+      log.error({ err: e }, "message search query failed");
+      sendJson(res, 500, { error: "Message search failed" });
+    }
   }
 
   // ── Config Handler ──────────────────────────────────────────────────

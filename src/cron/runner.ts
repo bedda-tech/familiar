@@ -545,10 +545,13 @@ export async function runCronJob(
   const finishedAt = new Date();
 
   if (!result) {
-    if (exitCode !== 0) {
+    // If we got accumulated text, the agent did work even if the exit code is non-zero
+    // (e.g. max_turns causes exit code 1 but the session was productive)
+    const didWork = !!accumulatedText;
+    if (exitCode !== 0 && !didWork) {
       log.error({ jobId: job.id, exitCode, stderr: stderr.slice(0, 500) }, "cron job failed");
       result = {
-        text: accumulatedText || `Cron job exited with code ${exitCode}: ${stderr.slice(0, 200)}`,
+        text: `Cron job exited with code ${exitCode}: ${stderr.slice(0, 200)}`,
         sessionId: "",
         costUsd: 0,
         durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -657,14 +660,19 @@ export async function runCronJob(
 }
 
 function parseResult(event: ResultEvent): BackendResult {
+  // max_turns is not an error -- the agent did work but ran out of turns.
+  // Only treat it as an error if it also has zero turns (never started).
+  const terminalReason = (event as any).terminal_reason ?? "";
+  const numTurns = event.num_turns ?? 0;
+  const isMaxTurns = terminalReason === "max_turns" && numTurns > 0;
   return {
     text: event.result ?? "",
     sessionId: event.session_id ?? "",
     // Claude CLI emits total_cost_usd (not cost_usd) in stream-json output
     costUsd: event.total_cost_usd ?? event.cost_usd ?? 0,
     durationMs: event.duration_ms ?? 0,
-    numTurns: event.num_turns ?? 0,
-    isError: event.is_error ?? false,
+    numTurns,
+    isError: isMaxTurns ? false : (event.is_error ?? false),
   };
 }
 
