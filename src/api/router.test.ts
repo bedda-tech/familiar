@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { ServerResponse } from "node:http";
+import Database from "better-sqlite3";
 import { ApiRouter } from "./router.js";
 
 vi.mock("../util/logger.js", () => ({
@@ -438,5 +439,112 @@ describe("ApiRouter — route matching", () => {
     await router.handle("GET", "/api/cron/jobs/my%20job", res);
     expect(result().status).toBe(200);
     expect((result().body as { job: { id: string } }).job.id).toBe("my job");
+  });
+});
+
+// ── FTS5 message search ──────────────────────────────────────────────────────
+
+function makeFtsDb(): Database.Database {
+  const db = new Database(":memory:");
+  db.exec(`
+    CREATE TABLE sessions (
+      chat_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      last_used_at TEXT DEFAULT (datetime('now')),
+      message_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE message_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      cost_usd REAL DEFAULT 0,
+      source TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  return db;
+}
+
+describe("ApiRouter — /api/memory/search?type=messages", () => {
+  let router: ApiRouter;
+  let db: Database.Database;
+
+  beforeEach(() => {
+    router = new ApiRouter();
+    db = makeFtsDb();
+    router.setDb(db);
+  });
+
+  it("returns 400 when q is missing", async () => {
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages", res);
+    expect(result().status).toBe(400);
+  });
+
+  it("returns empty results when no messages exist", async () => {
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages&q=hello", res);
+    expect(result().status).toBe(200);
+    const body = result().body as { results: unknown[]; count: number };
+    expect(body.count).toBe(0);
+    expect(body.results).toHaveLength(0);
+  });
+
+  it("finds messages by keyword and groups by chat_id", async () => {
+    db.exec(`
+      INSERT INTO sessions (chat_id, session_id, message_count) VALUES ('chat1', 'sess-1', 2);
+      INSERT INTO message_log (chat_id, role, content) VALUES ('chat1', 'user', 'hello world');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('chat1', 'assistant', 'hi there world');
+    `);
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages&q=world", res);
+    expect(result().status).toBe(200);
+    const body = result().body as { results: Array<{ chatId: string; session: unknown }>; count: number };
+    expect(body.count).toBe(1);
+    expect(body.results[0].chatId).toBe("chat1");
+    expect(body.results[0].session).not.toBeNull();
+  });
+
+  it("returns results from multiple sessions without cross-mixing", async () => {
+    db.exec(`
+      INSERT INTO sessions (chat_id, session_id) VALUES ('chat-a', 'sess-a');
+      INSERT INTO sessions (chat_id, session_id) VALUES ('chat-b', 'sess-b');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('chat-a', 'user', 'deploy the server');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('chat-b', 'user', 'deploy again please');
+    `);
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages&q=deploy&limit=10", res);
+    expect(result().status).toBe(200);
+    const body = result().body as { results: Array<{ chatId: string }>; count: number };
+    expect(body.count).toBe(2);
+    const chatIds = body.results.map((r) => r.chatId);
+    expect(chatIds).toContain("chat-a");
+    expect(chatIds).toContain("chat-b");
+  });
+
+  it("respects limit parameter", async () => {
+    db.exec(`
+      INSERT INTO sessions (chat_id, session_id) VALUES ('c1', 's1');
+      INSERT INTO sessions (chat_id, session_id) VALUES ('c2', 's2');
+      INSERT INTO sessions (chat_id, session_id) VALUES ('c3', 's3');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('c1', 'user', 'test query one');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('c2', 'user', 'test query two');
+      INSERT INTO message_log (chat_id, role, content) VALUES ('c3', 'user', 'test query three');
+    `);
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages&q=test&limit=2", res);
+    expect(result().status).toBe(200);
+    const body = result().body as { results: unknown[]; count: number };
+    expect(body.count).toBeLessThanOrEqual(2);
+  });
+
+  it("returns empty results for special-character-only query", async () => {
+    const { res, result } = makeMockRes();
+    await router.handle("GET", "/api/memory/search?type=messages&q=!!!!", res);
+    expect(result().status).toBe(200);
+    const body = result().body as { count: number };
+    expect(body.count).toBe(0);
   });
 });
