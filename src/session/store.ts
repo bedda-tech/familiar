@@ -111,6 +111,28 @@ export class SessionStore {
     } catch {
       // Column already exists
     }
+
+    // Content marketing queue
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS content_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL DEFAULT 'krain',
+        platform TEXT NOT NULL,
+        content TEXT NOT NULL,
+        content_type TEXT NOT NULL DEFAULT 'post',
+        pillar TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        scheduled_for TEXT,
+        posted_at TEXT,
+        post_url TEXT,
+        drafted_by TEXT,
+        reviewed_by TEXT,
+        review_note TEXT,
+        narrative_context TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
   }
 
   /** Get the session ID for a chat, or null if expired/nonexistent */

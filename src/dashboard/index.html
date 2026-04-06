@@ -2109,6 +2109,11 @@
               <span class="sidebar-label">Tasks</span>
               <span class="sidebar-badge" id="badge-tasks"></span>
             </div>
+            <div class="sidebar-item" data-tab="content" data-label="Content" onclick="showTab('content')">
+              <span class="sidebar-icon">✎</span>
+              <span class="sidebar-label">Content</span>
+              <span class="sidebar-badge" id="badge-content"></span>
+            </div>
             <div class="sidebar-item" data-tab="projects" data-label="Projects" onclick="showTab('projects')">
               <span class="sidebar-icon">⊡</span>
               <span class="sidebar-label">Projects</span>
@@ -2419,6 +2424,54 @@
         </div>
         <div id="tasksContainer">
           <div class="loading">Loading tasks...</div>
+        </div>
+      </div>
+
+      <!-- ── Content ── -->
+      <div id="tab-content" class="tab-panel">
+        <div class="section-header">
+          <h2>Content Queue</h2>
+          <span id="contentCount" class="count-badge">0</span>
+          <div class="section-actions">
+            <button class="btn btn-sm" onclick="loadContent()">Refresh</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <select class="filter-select" id="contentStatusFilter" onchange="loadContent()">
+            <option value="">All statuses</option>
+            <option value="pending_review" selected>Pending Review</option>
+            <option value="draft">Draft</option>
+            <option value="approved">Approved</option>
+            <option value="posted">Posted</option>
+            <option value="rejected">Rejected</option>
+            <option value="scheduled">Scheduled</option>
+          </select>
+          <select class="filter-select" id="contentPlatformFilter" onchange="loadContent()">
+            <option value="">All platforms</option>
+            <option value="twitter">Twitter</option>
+            <option value="twitter_thread">Twitter Thread</option>
+            <option value="discord">Discord</option>
+            <option value="telegram">Telegram</option>
+          </select>
+          <select class="filter-select" id="contentPillarFilter" onchange="loadContent()">
+            <option value="">All pillars</option>
+            <option value="building_in_public">Building in Public</option>
+            <option value="vision">Vision</option>
+            <option value="community">Community</option>
+            <option value="industry_commentary">Industry Commentary</option>
+          </select>
+        </div>
+        <!-- Stats row -->
+        <div id="contentStats" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap"></div>
+        <!-- Content cards -->
+        <div id="contentContainer">
+          <div class="loading">Loading content...</div>
+        </div>
+        <!-- Content detail modal -->
+        <div id="contentDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;max-width:700px;width:90%;max-height:85vh;overflow-y:auto">
+            <div id="contentDetailBody"></div>
+          </div>
         </div>
       </div>
 
@@ -3135,6 +3188,7 @@
       let confirmCallback = null;
       let runsData = [];   // cache for client-side sort
       let costsData = [];  // cache for client-side sort
+      let _contentData = [];
       let nowRunning = new Map(); // scheduleId -> { agentId, scheduleId, startedAt }
       let _agentRunStats7d = {}; // agentId -> { errorCount, runCount } for 7d window
       let _ovTimer = null;
@@ -3168,7 +3222,7 @@
       // ── Hash-based routing ─────────────────────────────────────────
       const VALID_TABS = new Set([
         'overview', 'activity', 'agents', 'schedules', 'runs', 'tasks',
-        'projects', 'tools', 'templates', 'documents', 'costs', 'services', 'chat'
+        'projects', 'tools', 'templates', 'documents', 'costs', 'services', 'chat', 'content'
       ]);
 
       let _suppressHashUpdate = false;
@@ -3256,6 +3310,7 @@
         if (tab === 'costs') loadCosts();
         if (tab === 'services') loadServices();
         if (tab === 'documents') loadDocuments();
+        if (tab === 'content') loadContent();
         if (tab === 'chat') loadChatHistory();
 
         // Update URL hash (unless we're responding to a hash change)
@@ -3315,6 +3370,10 @@
         const readyCount = tasks.filter(t => t.status === 'ready').length;
         const taskBadge = document.getElementById('badge-tasks');
         if (taskBadge) taskBadge.classList.toggle('visible', readyCount > 0 && activeTab !== 'tasks');
+
+        const pendingCount = _contentData.filter(c => c.status === 'pending_review').length;
+        const contentBadge = document.getElementById('badge-content');
+        if (contentBadge) contentBadge.classList.toggle('visible', pendingCount > 0 && activeTab !== 'content');
       }
 
       // Modal overlay click-to-close
@@ -3329,7 +3388,9 @@
       // Escape key closes modals
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-          if (document.getElementById('runDetailModal').classList.contains('visible')) {
+          if (document.getElementById('contentDetailModal').style.display === 'flex') {
+            closeContentDetail();
+          } else if (document.getElementById('runDetailModal').classList.contains('visible')) {
             closeRunDetail();
           } else {
             document.querySelectorAll('.modal-overlay.visible').forEach(m => m.classList.remove('visible'));
@@ -3514,6 +3575,7 @@
           loadToolProfiles();
           loadTemplates();
           loadMemory();
+          loadContent();
           loadOverview();
         });
       }
@@ -7880,6 +7942,227 @@
             tooltip.classList.add('tour-center');
           }
         }
+      }
+
+      // ── Content Queue ─────────────────────────────────────────
+
+      async function loadContent() {
+        const status = document.getElementById('contentStatusFilter').value;
+        const platform = document.getElementById('contentPlatformFilter').value;
+        const pillar = document.getElementById('contentPillarFilter').value;
+
+        let url = `/api/content?limit=50`;
+        if (status) url += `&status=${status}`;
+        if (platform) url += `&platform=${platform}`;
+        if (pillar) url += `&pillar=${pillar}`;
+
+        try {
+          const res = await fetch(url, { headers: { 'x-familiar-token': token } });
+          if (!res.ok) throw new Error('Failed to load content');
+          const data = await res.json();
+          _contentData = data.content || data.items || [];
+          document.getElementById('contentCount').textContent = _contentData.length;
+          renderContent();
+          loadContentStats();
+          updateSidebarBadges();
+        } catch (e) {
+          document.getElementById('contentContainer').innerHTML = `<div class="loading" style="color:var(--red)">Error: ${e.message}</div>`;
+        }
+      }
+
+      async function loadContentStats() {
+        try {
+          const res = await fetch(`/api/content/stats`, { headers: { 'x-familiar-token': token } });
+          if (!res.ok) return;
+          const stats = await res.json();
+          const el = document.getElementById('contentStats');
+          const byStatus = stats.by_status || {};
+          const badges = [
+            { label: 'Pending', count: byStatus.pending_review || 0, color: 'var(--yellow)' },
+            { label: 'Approved', count: byStatus.approved || 0, color: 'var(--green)' },
+            { label: 'Posted', count: byStatus.posted || 0, color: 'var(--blue)' },
+            { label: 'Draft', count: byStatus.draft || 0, color: 'var(--text-muted)' },
+            { label: 'Rejected', count: byStatus.rejected || 0, color: 'var(--red)' },
+          ];
+          el.innerHTML = badges.map(b =>
+            `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="document.getElementById('contentStatusFilter').value='${b.label.toLowerCase().replace(' ','_')}';loadContent()">
+              <span style="width:8px;height:8px;border-radius:50%;background:${b.color}"></span>
+              <span style="font-size:var(--text-sm);color:var(--text-muted)">${b.label}</span>
+              <span style="font-size:var(--text-lg);font-weight:600;color:var(--text-bright)">${b.count}</span>
+            </div>`
+          ).join('');
+        } catch {}
+      }
+
+      function renderContent() {
+        const container = document.getElementById('contentContainer');
+        if (!_contentData.length) {
+          container.innerHTML = '<div class="loading" style="color:var(--text-muted)">No content items found</div>';
+          return;
+        }
+
+        container.innerHTML = _contentData.map(item => {
+          const statusColors = {
+            draft: 'var(--text-muted)', pending_review: 'var(--yellow)', approved: 'var(--green)',
+            posted: 'var(--blue)', rejected: 'var(--red)', scheduled: 'var(--purple)'
+          };
+          const platformIcons = {
+            twitter: '\u{1D54F}', twitter_thread: '\u{1D54F}\u{1F9F5}', discord: '\u{1F4AC}', telegram: '\u2708'
+          };
+          const statusColor = statusColors[item.status] || 'var(--text-muted)';
+          const icon = platformIcons[item.platform] || '\u{1F4DD}';
+          const preview = (item.content || '').substring(0, 140) + ((item.content || '').length > 140 ? '...' : '');
+          const date = item.created_at ? new Date(item.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          const pillarLabel = (item.pillar || '').replace(/_/g, ' ');
+
+          const actions = item.status === 'pending_review' ? `
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-sm btn-success" onclick="event.stopPropagation();approveContent(${item.id})">&#10003; Approve</button>
+              <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();rejectContent(${item.id})">&#10007; Reject</button>
+              <button class="btn btn-sm" onclick="event.stopPropagation();editContent(${item.id})">Edit</button>
+            </div>` : item.status === 'approved' ? `
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-sm" style="background:var(--blue);color:#fff" onclick="event.stopPropagation();manualPost(${item.id})">Post Now</button>
+            </div>` : '';
+
+          return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:8px;cursor:pointer" onclick="showContentDetail(${item.id})">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:16px">${icon}</span>
+                <span style="font-size:var(--text-sm);color:${statusColor};font-weight:600;text-transform:uppercase">${(item.status || '').replace(/_/g, ' ')}</span>
+                ${pillarLabel ? `<span style="font-size:var(--text-xs);color:var(--text-muted);background:var(--bg);padding:2px 6px;border-radius:var(--radius-sm)">${pillarLabel}</span>` : ''}
+              </div>
+              <span style="font-size:var(--text-xs);color:var(--text-muted)">${date}</span>
+            </div>
+            <div style="font-size:var(--text-sm);color:var(--text);line-height:1.5;white-space:pre-wrap">${esc(preview)}</div>
+            ${item.drafted_by ? `<div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:6px">Drafted by: ${esc(item.drafted_by)}</div>` : ''}
+            ${item.post_url ? `<div style="font-size:var(--text-xs);margin-top:4px"><a href="${esc(item.post_url)}" target="_blank" style="color:var(--blue)">View post &rarr;</a></div>` : ''}
+            ${actions}
+          </div>`;
+        }).join('');
+      }
+
+      function showContentDetail(id) {
+        const item = _contentData.find(c => c.id === id);
+        if (!item) return;
+
+        const modal = document.getElementById('contentDetailModal');
+        const body = document.getElementById('contentDetailBody');
+
+        const statusColors = {
+          draft: 'var(--text-muted)', pending_review: 'var(--yellow)', approved: 'var(--green)',
+          posted: 'var(--blue)', rejected: 'var(--red)', scheduled: 'var(--purple)'
+        };
+
+        let content = item.content || '';
+        // For threads, try to parse as JSON array
+        let contentHtml;
+        try {
+          const tweets = JSON.parse(content);
+          if (Array.isArray(tweets)) {
+            contentHtml = tweets.map((t, i) =>
+              `<div style="background:var(--bg);padding:10px;border-radius:var(--radius-md);margin-bottom:6px">
+                <span style="font-size:var(--text-xs);color:var(--text-muted)">Tweet ${i+1}/${tweets.length}</span>
+                <div style="margin-top:4px;white-space:pre-wrap">${esc(t)}</div>
+                <div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:4px">${t.length}/280</div>
+              </div>`
+            ).join('');
+          } else {
+            contentHtml = `<div style="white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:var(--radius-md)">${esc(content)}</div>`;
+          }
+        } catch {
+          contentHtml = `<div style="white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:var(--radius-md)">${esc(content)}</div>`;
+        }
+
+        const actions = item.status === 'pending_review' ? `
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-sm btn-success" onclick="approveContent(${item.id})">&#10003; Approve</button>
+            <button class="btn btn-sm btn-danger" onclick="rejectContent(${item.id})">&#10007; Reject</button>
+            <button class="btn btn-sm" onclick="editContent(${item.id})">Edit</button>
+          </div>` : item.status === 'approved' ? `
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-sm" style="background:var(--blue);color:#fff" onclick="manualPost(${item.id})">Post Now</button>
+          </div>` : '';
+
+        body.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="color:var(--text-bright);font-size:var(--text-lg)">${esc(item.platform || '')} ${esc(item.content_type || '')}</h3>
+            <button class="btn btn-sm" onclick="closeContentDetail()">&times;</button>
+          </div>
+          <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+            <span style="font-size:var(--text-sm);color:${statusColors[item.status] || 'var(--text-muted)'};font-weight:600">${(item.status || '').replace(/_/g, ' ').toUpperCase()}</span>
+            ${item.pillar ? `<span style="font-size:var(--text-xs);color:var(--text-muted);background:var(--bg);padding:2px 8px;border-radius:var(--radius-sm)">${item.pillar.replace(/_/g, ' ')}</span>` : ''}
+            ${item.drafted_by ? `<span style="font-size:var(--text-xs);color:var(--text-muted)">by ${esc(item.drafted_by)}</span>` : ''}
+          </div>
+          ${contentHtml}
+          ${item.narrative_context ? `<div style="margin-top:12px;font-size:var(--text-xs);color:var(--text-muted)"><strong>Narrative context:</strong> ${esc(item.narrative_context)}</div>` : ''}
+          ${item.review_note ? `<div style="margin-top:8px;font-size:var(--text-xs);color:var(--red)"><strong>Review note:</strong> ${esc(item.review_note)}</div>` : ''}
+          ${item.post_url ? `<div style="margin-top:8px"><a href="${esc(item.post_url)}" target="_blank" style="color:var(--blue);font-size:var(--text-sm)">View posted content &rarr;</a></div>` : ''}
+          ${actions}
+        `;
+
+        modal.style.display = 'flex';
+        modal.onclick = (e) => { if (e.target === modal) closeContentDetail(); };
+      }
+
+      function closeContentDetail() {
+        document.getElementById('contentDetailModal').style.display = 'none';
+      }
+
+      async function approveContent(id) {
+        try {
+          const res = await fetch(`/api/content/${id}/approve`, { method: 'POST', headers: { 'x-familiar-token': token } });
+          if (!res.ok) throw new Error('Failed to approve');
+          closeContentDetail();
+          loadContent();
+        } catch (e) { alert('Error: ' + e.message); }
+      }
+
+      async function rejectContent(id) {
+        const note = prompt('Rejection reason (optional):');
+        if (note === null) return; // cancelled
+        try {
+          const res = await fetch(`/api/content/${id}/reject`, {
+            method: 'POST',
+            headers: { 'x-familiar-token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note })
+          });
+          if (!res.ok) throw new Error('Failed to reject');
+          closeContentDetail();
+          loadContent();
+        } catch (e) { alert('Error: ' + e.message); }
+      }
+
+      async function editContent(id) {
+        const item = _contentData.find(c => c.id === id);
+        if (!item) return;
+        const newContent = prompt('Edit content:', item.content);
+        if (newContent === null || newContent === item.content) return;
+        try {
+          const res = await fetch(`/api/content/${id}`, {
+            method: 'PUT',
+            headers: { 'x-familiar-token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: newContent })
+          });
+          if (!res.ok) throw new Error('Failed to update');
+          closeContentDetail();
+          loadContent();
+        } catch (e) { alert('Error: ' + e.message); }
+      }
+
+      async function manualPost(id) {
+        if (!confirm('Mark this as posted?')) return;
+        const url = prompt('Post URL (optional):') || '';
+        try {
+          const res = await fetch(`/api/content/${id}/post`, {
+            method: 'POST',
+            headers: { 'x-familiar-token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ post_url: url })
+          });
+          if (!res.ok) throw new Error('Failed');
+          closeContentDetail();
+          loadContent();
+        } catch (e) { alert('Error: ' + e.message); }
       }
 
       // Auto-start tour for new users (no token set yet OR first time after auth)

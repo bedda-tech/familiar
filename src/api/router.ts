@@ -37,6 +37,16 @@
  *   GET  /api/memory/categories         — list categories with chunk counts
  *   GET  /api/memory/files              — list all indexed memory files (category? filter)
  *   POST /api/memory/write              — write a memory file to category subdir (body: {category, filename, content})
+ *   GET  /api/content                   — list content queue (status?, platform?, project_id?, limit?, offset?)
+ *   GET  /api/content/:id               — get single content item
+ *   GET  /api/content/stats             — content queue statistics (by status, platform, pillar)
+ *   GET  /api/content/narrative          — read narrative state file
+ *   POST /api/content                   — create content queue item (body: {platform, content, ...})
+ *   POST /api/content/:id/approve       — approve content (sets reviewed_by='matt')
+ *   POST /api/content/:id/reject        — reject content (body: {note})
+ *   POST /api/content/:id/post          — mark as posted (body: {post_url?})
+ *   PUT  /api/content/:id               — update content item
+ *   PUT  /api/content/narrative          — update narrative state file (body: {content})
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, copyFileSync } from "node:fs";
@@ -640,6 +650,26 @@ export class ApiRouter {
         }
         return true;
       }
+
+      // ── Content Queue ──
+      if (path === "/api/content/stats") {
+        this.handleContentStats(res);
+        return true;
+      }
+      if (path === "/api/content/narrative") {
+        this.handleGetNarrative(res);
+        return true;
+      }
+      if (path === "/api/content") {
+        const params = new URLSearchParams(queryString ?? "");
+        this.handleListContent(params, res);
+        return true;
+      }
+      const contentIdMatch = path.match(/^\/api\/content\/(\d+)$/);
+      if (contentIdMatch) {
+        this.handleGetContent(parseInt(contentIdMatch[1], 10), res);
+        return true;
+      }
     }
 
     if (method === "POST") {
@@ -922,6 +952,27 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Content Queue ──
+      if (path === "/api/content" && body) {
+        this.handleCreateContent(body, res);
+        return true;
+      }
+      const contentApproveMatch = path.match(/^\/api\/content\/(\d+)\/approve$/);
+      if (contentApproveMatch) {
+        this.handleApproveContent(parseInt(contentApproveMatch[1], 10), res);
+        return true;
+      }
+      const contentRejectMatch = path.match(/^\/api\/content\/(\d+)\/reject$/);
+      if (contentRejectMatch) {
+        this.handleRejectContent(parseInt(contentRejectMatch[1], 10), body ?? {}, res);
+        return true;
+      }
+      const contentPostMatch = path.match(/^\/api\/content\/(\d+)\/post$/);
+      if (contentPostMatch) {
+        this.handleMarkContentPosted(parseInt(contentPostMatch[1], 10), body ?? {}, res);
+        return true;
+      }
+
       // ── Tasks ──
       if (path === "/api/tasks" && body) {
         this.handleCreateTask(body, res);
@@ -1038,6 +1089,19 @@ export class ApiRouter {
           if (!t) sendJson(res, 404, { error: "Template not found" });
           else sendJson(res, 200, { template: t });
         }
+        return true;
+      }
+
+      // ── Content Queue update ──
+      const contentUpdateMatch = path.match(/^\/api\/content\/(\d+)$/);
+      if (contentUpdateMatch && body) {
+        this.handleUpdateContent(parseInt(contentUpdateMatch[1], 10), body, res);
+        return true;
+      }
+
+      // ── Narrative state update ──
+      if (path === "/api/content/narrative" && body) {
+        this.handleUpdateNarrative(body, res);
         return true;
       }
 
@@ -1675,6 +1739,232 @@ export class ApiRouter {
       return;
     }
     sendJson(res, 200, { task });
+  }
+
+  // ── Content Queue Handlers ────────────────────────────────────────
+
+  private handleListContent(params: URLSearchParams, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    let sql = "SELECT * FROM content_queue WHERE 1=1";
+    const sqlParams: unknown[] = [];
+
+    const status = params.get("status");
+    if (status) {
+      sql += " AND status = ?";
+      sqlParams.push(status);
+    }
+    const platform = params.get("platform");
+    if (platform) {
+      sql += " AND platform = ?";
+      sqlParams.push(platform);
+    }
+    const projectId = params.get("project_id");
+    if (projectId) {
+      sql += " AND project_id = ?";
+      sqlParams.push(projectId);
+    }
+
+    sql += " ORDER BY created_at DESC";
+
+    const limit = Math.min(Math.max(parseInt(params.get("limit") ?? "50", 10), 1), 200);
+    const offset = Math.max(parseInt(params.get("offset") ?? "0", 10), 0);
+    sql += " LIMIT ? OFFSET ?";
+    sqlParams.push(limit, offset);
+
+    const items = this.db.prepare(sql).all(...sqlParams);
+    sendJson(res, 200, { content: items as unknown as Record<string, unknown>[], count: (items as unknown[]).length });
+  }
+
+  private handleGetContent(id: number, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const item = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    if (!item) {
+      sendJson(res, 404, { error: `Content item ${id} not found` });
+      return;
+    }
+    sendJson(res, 200, { content: item as unknown as Record<string, unknown> });
+  }
+
+  private handleCreateContent(body: Record<string, unknown>, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const { platform, content } = body as { platform?: string; content?: string };
+    if (!platform || !content) {
+      sendJson(res, 400, { error: "Missing required fields: platform, content" });
+      return;
+    }
+    const result = this.db.prepare(`
+      INSERT INTO content_queue (project_id, platform, content, content_type, pillar, status, scheduled_for, drafted_by, narrative_context)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      (body.project_id as string) ?? "krain",
+      platform,
+      content,
+      (body.content_type as string) ?? "post",
+      (body.pillar as string) ?? null,
+      (body.status as string) ?? "draft",
+      (body.scheduled_for as string) ?? null,
+      (body.drafted_by as string) ?? null,
+      (body.narrative_context as string) ?? null,
+    );
+    const created = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(result.lastInsertRowid);
+    sendJson(res, 201, { content: created as unknown as Record<string, unknown> });
+  }
+
+  private handleUpdateContent(id: number, body: Record<string, unknown>, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const existing = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    if (!existing) {
+      sendJson(res, 404, { error: `Content item ${id} not found` });
+      return;
+    }
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    if (body.platform !== undefined) { fields.push("platform = ?"); values.push(body.platform); }
+    if (body.content !== undefined) { fields.push("content = ?"); values.push(body.content); }
+    if (body.content_type !== undefined) { fields.push("content_type = ?"); values.push(body.content_type); }
+    if (body.pillar !== undefined) { fields.push("pillar = ?"); values.push(body.pillar); }
+    if (body.status !== undefined) { fields.push("status = ?"); values.push(body.status); }
+    if (body.scheduled_for !== undefined) { fields.push("scheduled_for = ?"); values.push(body.scheduled_for); }
+    if (body.posted_at !== undefined) { fields.push("posted_at = ?"); values.push(body.posted_at); }
+    if (body.post_url !== undefined) { fields.push("post_url = ?"); values.push(body.post_url); }
+    if (body.drafted_by !== undefined) { fields.push("drafted_by = ?"); values.push(body.drafted_by); }
+    if (body.reviewed_by !== undefined) { fields.push("reviewed_by = ?"); values.push(body.reviewed_by); }
+    if (body.review_note !== undefined) { fields.push("review_note = ?"); values.push(body.review_note); }
+    if (body.narrative_context !== undefined) { fields.push("narrative_context = ?"); values.push(body.narrative_context); }
+    if (body.project_id !== undefined) { fields.push("project_id = ?"); values.push(body.project_id); }
+
+    if (fields.length === 0) {
+      sendJson(res, 200, { content: existing as unknown as Record<string, unknown> });
+      return;
+    }
+
+    fields.push("updated_at = datetime('now')");
+    values.push(id);
+
+    this.db.prepare(`UPDATE content_queue SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+    const updated = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    sendJson(res, 200, { content: updated as unknown as Record<string, unknown> });
+  }
+
+  private handleApproveContent(id: number, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const existing = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    if (!existing) {
+      sendJson(res, 404, { error: `Content item ${id} not found` });
+      return;
+    }
+    this.db.prepare(`
+      UPDATE content_queue SET status = 'approved', reviewed_by = 'matt', updated_at = datetime('now')
+      WHERE id = ?
+    `).run(id);
+    const updated = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    sendJson(res, 200, { content: updated as unknown as Record<string, unknown> });
+  }
+
+  private handleRejectContent(id: number, body: Record<string, unknown>, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const existing = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    if (!existing) {
+      sendJson(res, 404, { error: `Content item ${id} not found` });
+      return;
+    }
+    this.db.prepare(`
+      UPDATE content_queue SET status = 'rejected', reviewed_by = 'matt', review_note = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run((body.note as string) ?? null, id);
+    const updated = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    sendJson(res, 200, { content: updated as unknown as Record<string, unknown> });
+  }
+
+  private handleMarkContentPosted(id: number, body: Record<string, unknown>, res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const existing = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    if (!existing) {
+      sendJson(res, 404, { error: `Content item ${id} not found` });
+      return;
+    }
+    this.db.prepare(`
+      UPDATE content_queue SET status = 'posted', post_url = ?, posted_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?
+    `).run((body.post_url as string) ?? null, id);
+    const updated = this.db.prepare("SELECT * FROM content_queue WHERE id = ?").get(id);
+    sendJson(res, 200, { content: updated as unknown as Record<string, unknown> });
+  }
+
+  private handleContentStats(res: ServerResponse): void {
+    if (!this.db) {
+      sendJson(res, 503, { error: "Database not available" });
+      return;
+    }
+    const byStatus = this.db.prepare(
+      "SELECT status, COUNT(*) as count FROM content_queue GROUP BY status"
+    ).all() as { status: string; count: number }[];
+    const byPlatform = this.db.prepare(
+      "SELECT platform, COUNT(*) as count FROM content_queue GROUP BY platform"
+    ).all() as { platform: string; count: number }[];
+    const byPillar = this.db.prepare(
+      "SELECT pillar, COUNT(*) as count FROM content_queue WHERE pillar IS NOT NULL GROUP BY pillar"
+    ).all() as { pillar: string; count: number }[];
+    const total = this.db.prepare("SELECT COUNT(*) as count FROM content_queue").get() as { count: number };
+
+    sendJson(res, 200, {
+      total: total.count,
+      by_status: byStatus,
+      by_platform: byPlatform,
+      by_pillar: byPillar,
+    });
+  }
+
+  private handleGetNarrative(res: ServerResponse): void {
+    const narrativePath = "/home/mwhit/oliver/projects/krain/docs/content-state.md";
+    try {
+      if (!existsSync(narrativePath)) {
+        sendJson(res, 200, { content: "", path: narrativePath });
+        return;
+      }
+      const content = readFileSync(narrativePath, "utf-8");
+      sendJson(res, 200, { content, path: narrativePath });
+    } catch (e: any) {
+      sendJson(res, 500, { error: e.message ?? "Failed to read narrative state" });
+    }
+  }
+
+  private handleUpdateNarrative(body: Record<string, unknown>, res: ServerResponse): void {
+    const narrativePath = "/home/mwhit/oliver/projects/krain/docs/content-state.md";
+    const content = body.content as string;
+    if (content === undefined || content === null) {
+      sendJson(res, 400, { error: "Missing required field: content" });
+      return;
+    }
+    try {
+      writeFileSync(narrativePath, content, "utf-8");
+      sendJson(res, 200, { status: "ok", path: narrativePath });
+    } catch (e: any) {
+      sendJson(res, 500, { error: e.message ?? "Failed to write narrative state" });
+    }
   }
 
   // ── Task Run Handler ─────────────────────────────────────────────
