@@ -131,6 +131,7 @@ Usage:
   familiar cron run <id>        Manually trigger a cron job
   familiar recall <query>       Search memories semantically
   familiar index-memory         Re-index memory files for search
+  familiar restart              Restart the systemd user service
   familiar doctor               Run system diagnostics
   familiar configure             Interactive configuration wizard
   familiar init                 Initialize config and workspace
@@ -1531,6 +1532,18 @@ switch (command) {
       process.exit(1);
     });
     break;
+
+  case "restart": {
+    const { execSync } = await import("node:child_process");
+    try {
+      execSync("systemctl --user restart familiar", { stdio: "inherit" });
+      console.log("familiar restarted.");
+      process.exit(0);
+    } catch {
+      console.error("Failed to restart. Is the systemd service installed? Run: familiar install-service");
+      process.exit(1);
+    }
+  }
 
   case "help":
   case "--help":
