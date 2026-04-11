@@ -546,43 +546,45 @@ export class TelegramChannel implements Channel {
     });
 
     // Photos
+    // Note: queue.add() is NOT awaited so Grammy's update loop stays free
+    // to process /stop and other commands while Claude is running.
     this.bot.on("message:photo", async (ctx) => {
       if (!this.messageHandler) return;
       const queue = this.getQueue(String(ctx.chat.id));
-      await queue.add(async () => {
+      queue.add(async () => {
         const msg = await this.normalizePhotoMessage(ctx);
         await this.messageHandler!(msg);
-      });
+      }).catch((err) => log.error({ err }, "photo handler error"));
     });
 
     // Documents/files
     this.bot.on("message:document", async (ctx) => {
       if (!this.messageHandler) return;
       const queue = this.getQueue(String(ctx.chat.id));
-      await queue.add(async () => {
+      queue.add(async () => {
         const msg = await this.normalizeDocumentMessage(ctx);
         await this.messageHandler!(msg);
-      });
+      }).catch((err) => log.error({ err }, "document handler error"));
     });
 
     // Voice messages
     this.bot.on("message:voice", async (ctx) => {
       if (!this.messageHandler) return;
       const queue = this.getQueue(String(ctx.chat.id));
-      await queue.add(async () => {
+      queue.add(async () => {
         const msg = await this.normalizeVoiceMessage(ctx);
         await this.messageHandler!(msg);
-      });
+      }).catch((err) => log.error({ err }, "voice handler error"));
     });
 
     // Text messages (catch-all for non-command text)
     this.bot.on("message:text", async (ctx) => {
       if (!this.messageHandler) return;
       const queue = this.getQueue(String(ctx.chat.id));
-      await queue.add(async () => {
+      queue.add(async () => {
         const msg = this.normalizeMessage(ctx);
         await this.messageHandler!(msg);
-      });
+      }).catch((err) => log.error({ err }, "text handler error"));
     });
 
     // Error handler
