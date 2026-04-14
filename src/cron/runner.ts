@@ -369,6 +369,18 @@ export async function runCronJob(
     args.push("--model", model);
   }
 
+  // Native agent definition: if .claude/agents/{id}.md exists in the working dir,
+  // use --agent flag instead of injecting system_prompt from DB.
+  const agentMdPath = effectiveWorkDir
+    ? join(effectiveWorkDir, ".claude", "agents", `${job.id}.md`)
+    : null;
+  const useNativeAgent = agentMdPath && existsSync(agentMdPath);
+
+  if (useNativeAgent) {
+    args.push("--agent", job.id);
+    log.info({ jobId: job.id, agentMdPath }, "using native agent definition");
+  }
+
   // Cron jobs are task-focused executors — do NOT inject the main session's
   // personality prompt. The main session persona causes cron agents to waste turns
   // reading governing docs (SOUL.md, IDENTITY.md, etc.) instead of executing
@@ -377,13 +389,19 @@ export async function runCronJob(
   //
   // When a workspace is available, we append the workspace prompt fragment so
   // the agent knows where its persistent state, memory, and output dirs live.
-  {
+  //
+  // When using a native agent definition (--agent), skip the DB system prompt
+  // injection — the .md file IS the system prompt. Workspace context is still appended.
+  if (!useNativeAgent) {
     const parts: string[] = [];
     if (job.systemPrompt) parts.push(resolvePrompt(job.systemPrompt));
     if (workspacePrompt) parts.push(workspacePrompt);
     if (parts.length > 0) {
       args.push("--append-system-prompt", parts.join("\n\n"));
     }
+  } else if (workspacePrompt) {
+    // Native agent mode: still append workspace context
+    args.push("--append-system-prompt", workspacePrompt);
   }
 
   // Per-agent tool override takes priority over default config.
