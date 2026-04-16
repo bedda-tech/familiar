@@ -969,6 +969,9 @@ async function cmdStart(configPath?: string): Promise<void> {
         wsServer.broadcast({ type: "task:updated", task: task as unknown as Record<string, unknown> });
       });
 
+      // Wire router to broadcast task:claimed events
+      webhooks.setWsServer(wsServer);
+
       // Wire dashboard chat channel
       // primaryChatId unifies dashboard sessions with Telegram (shared Claude context)
       const primaryChatId = String(config.telegram.allowedUsers[0]);

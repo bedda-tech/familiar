@@ -47,6 +47,7 @@ import type { ToolStore } from "../tools/store.js";
 import type { ToolAccountStore } from "../tools/account-store.js";
 import type { TemplateStore } from "../templates/store.js";
 import type { AgentTemplateStore } from "../templates/agent-store.js";
+import type { WsServer } from "../ws/server.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -97,6 +98,11 @@ export class WebhookServer {
   /** Register a callback for newly created tasks (e.g. to notify via Telegram). */
   onTaskCreated(handler: (task: Record<string, unknown>) => void): void {
     this.apiRouter.setTaskCreatedHandler(handler);
+  }
+
+  /** Attach the WebSocket server so the API can broadcast real-time events. */
+  setWsServer(ws: WsServer): void {
+    this.apiRouter.setWsServer(ws);
   }
 
   /** Register a handler for clearing sessions (used by /save skill via API). */

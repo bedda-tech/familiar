@@ -1637,6 +1637,12 @@
       .docs-breadcrumb span:last-child { color: var(--text); }
       .docs-meta { font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--border); display: flex; gap: var(--space-lg); }
       .docs-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: var(--text-base); }
+      .docs-back-btn { display: none; background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-sm); padding: 4px 10px; border-radius: var(--radius-sm); cursor: pointer; margin-bottom: var(--space-sm); }
+      .docs-back-btn:hover { background: var(--bg-hover); color: var(--text); }
+      .docs-focus-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-xs); padding: 2px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+      .docs-focus-btn:hover { background: var(--bg-hover); color: var(--text); }
+      .docs-container.doc-focused-desktop .docs-tree { display: none; }
+      .docs-container.doc-focused-desktop .docs-content { max-width: 100%; }
       /* Markdown content styling */
       .docs-rendered { line-height: 1.7; color: var(--text); }
       .docs-rendered h1 { font-size: 24px; margin: 24px 0 12px; color: var(--text-bright); }
@@ -1928,6 +1934,9 @@
         #tab-chat.active { height: calc(100vh - 49px - var(--space-lg)); }
         .docs-container { flex-direction: column; }
         .docs-tree { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+        .docs-container.doc-focused .docs-tree { display: none; }
+        .docs-container.doc-focused .docs-content { max-height: 100%; }
+        .docs-back-btn { display: block !important; }
       }
 
       /* ── Onboarding tour ── */
@@ -3506,6 +3515,57 @@
           if (idx >= 0) tasks[idx] = updated;
           else tasks.unshift(updated);
           if (activeTab === 'tasks') renderTasks();
+        }
+
+        if (msg.type === 'task:claimed') {
+          const task = tasks.find(t => t.id === msg.taskId);
+          const title = task?.title || `Task #${msg.taskId}`;
+          prependActivity({
+            type: 'task_claimed',
+            task_id: msg.taskId,
+            summary: `Task "${title}" claimed by ${msg.agent}`,
+            created_at: new Date().toISOString(),
+          }, true);
+          if (activeTab === 'tasks') renderTasks();
+        }
+
+        if (msg.type === 'task:rescued') {
+          const task = tasks.find(t => t.id === msg.taskId);
+          if (task) { task.status = 'ready'; task.retry_count = msg.retryCount; }
+          prependActivity({
+            type: 'task_rescued',
+            task_id: msg.taskId,
+            summary: `Task "${msg.title}" rescued (attempt ${msg.retryCount})`,
+            created_at: new Date().toISOString(),
+          }, true);
+          toast(`Task rescued: "${msg.title}" (attempt ${msg.retryCount})`, 'warning');
+          if (activeTab === 'tasks') renderTasks();
+        }
+
+        if (msg.type === 'task:failed_stale') {
+          const task = tasks.find(t => t.id === msg.taskId);
+          if (task) task.status = 'failed';
+          prependActivity({
+            type: 'task_failed_stale',
+            task_id: msg.taskId,
+            summary: `Task "${msg.title}" failed after ${msg.retryCount} attempts`,
+            created_at: new Date().toISOString(),
+          }, true);
+          toast(`Task failed: "${msg.title}" after ${msg.retryCount} attempts`, 'error');
+          if (activeTab === 'tasks') renderTasks();
+        }
+
+        if (msg.type === 'validation:failed') {
+          prependActivity({
+            type: 'validation_failed',
+            agent_id: msg.agentId,
+            task_id: msg.taskId,
+            summary: `Validation failed for agent ${msg.agentId}: ${msg.validationCommand}`,
+            details: msg.commits,
+            created_at: new Date().toISOString(),
+          }, true);
+          toast(`Validation failed: ${msg.agentId}`, 'error');
+          if (activeTab === 'activity') renderActivity();
         }
 
         if (msg.type === 'chat:message') {
@@ -7424,7 +7484,7 @@
 
         if (isFolder && hasChildren) {
           const wrapper = document.createElement('div');
-          wrapper.className = 'docs-tree-folder';
+          wrapper.className = 'docs-tree-folder collapsed';
           wrapper.dataset.name = node.name.toLowerCase();
 
           const item = document.createElement('div');
@@ -7511,20 +7571,45 @@
           }
 
           const isEditable = name.endsWith('.md') || name.endsWith('.yaml') || name.endsWith('.yml');
+          const isFocused = document.querySelector('.docs-container')?.classList.contains('doc-focused-desktop');
           content.innerHTML =
+            `<button class="docs-back-btn" onclick="docsUnfocus()">← Back</button>` +
             `<div class="docs-breadcrumb">${breadcrumb}</div>` +
             `<div class="docs-meta">` +
               `<span>Modified: ${modDate}</span>` +
               `<span>${lineCount} lines</span>` +
               `<span>${sizeStr}</span>` +
-              (isEditable ? `<div class="docs-toolbar" style="margin-left:auto;"><button class="btn btn-sm" onclick="docsEnterEdit()">Edit</button></div>` : '') +
+              `<div style="margin-left:auto;display:flex;gap:6px;">` +
+                `<button class="docs-focus-btn" onclick="docsToggleFocus()" title="Toggle fullscreen">${isFocused ? '⊡ Tree' : '⊞ Focus'}</button>` +
+                (isEditable ? `<button class="btn btn-sm" onclick="docsEnterEdit()">Edit</button>` : '') +
+              `</div>` +
             `</div>` +
             `<div class="docs-rendered" id="docsRendered">${rendered}</div>` +
             `<div id="docsEditArea" style="display:none;"></div>`;
+          // On mobile, auto-focus the document (hide tree)
+          if (window.innerWidth <= 900) {
+            document.querySelector('.docs-container')?.classList.add('doc-focused');
+          }
           _docsEditMode = false;
         } catch (e) {
           content.innerHTML = '<div style="color:var(--red)">Failed to load document</div>';
         }
+      }
+
+      function docsToggleFocus() {
+        const container = document.querySelector('.docs-container');
+        if (!container) return;
+        container.classList.toggle('doc-focused-desktop');
+        // Re-render the button text
+        const btn = container.querySelector('.docs-focus-btn');
+        if (btn) btn.textContent = container.classList.contains('doc-focused-desktop') ? '⊡ Tree' : '⊞ Focus';
+      }
+
+      function docsUnfocus() {
+        const container = document.querySelector('.docs-container');
+        if (!container) return;
+        container.classList.remove('doc-focused');
+        container.classList.remove('doc-focused-desktop');
       }
 
       function buildBreadcrumb(path) {

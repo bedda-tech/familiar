@@ -67,6 +67,7 @@ import type { TemplateStore } from "../templates/store.js";
 import type { AgentTemplateStore } from "../templates/agent-store.js";
 import { TOOL_PROFILES, getProfile } from "../tools/profiles.js";
 import { getLogger } from "../util/logger.js";
+import type { WsServer } from "../ws/server.js";
 
 const log = getLogger("api-router");
 
@@ -88,6 +89,11 @@ export class ApiRouter {
   private memoryStore: import("../memory/store.js").MemoryStore | null = null;
   private repoManager: RepoManager | null = null;
   private onTaskCreated: ((task: Record<string, unknown>) => void) | null = null;
+  private wsServer: WsServer | null = null;
+
+  setWsServer(ws: WsServer): void {
+    this.wsServer = ws;
+  }
 
   setCronScheduler(scheduler: CronScheduler): void {
     this.cronScheduler = scheduler;
@@ -1725,6 +1731,9 @@ export class ApiRouter {
       .run(agent, id);
     const updated = this.taskStore.get(id);
     sendJson(res, 200, { task: updated });
+    if (updated) {
+      this.wsServer?.broadcast({ type: "task:claimed", taskId: id, agent });
+    }
   }
 
   private handleCompleteTask(id: number, body: Record<string, unknown>, res: ServerResponse): void {
