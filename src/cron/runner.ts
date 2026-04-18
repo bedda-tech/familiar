@@ -219,10 +219,23 @@ function cleanupWorktree(
 }
 
 /**
+ * Exit code that a pre_hook can return to signal "no work — skip this run entirely,
+ * do not spawn Claude." Saves the cold-start cost (~$0.13/run for sonnet) when an
+ * agent's task queue is empty. Chosen to avoid common shell-meaningful codes.
+ */
+const PRE_HOOK_SKIP_EXIT_CODE = 99;
+
+/**
  * Run a pre/post hook shell command in the given working directory.
+ * Returns the exit status so callers can react (e.g. skip-run on a specific code).
  * Failures are logged as warnings and do not throw — hooks never block the main job.
  */
-function runHook(cmd: string, workDir: string | undefined, jobId: string, phase: "pre" | "post"): void {
+function runHook(
+  cmd: string,
+  workDir: string | undefined,
+  jobId: string,
+  phase: "pre" | "post",
+): number | null {
   log.info({ jobId, phase, cmd }, `running ${phase}_hook`);
   const result = spawnSync(cmd, {
     cwd: workDir,
@@ -245,6 +258,7 @@ function runHook(cmd: string, workDir: string | undefined, jobId: string, phase:
   } else {
     log.debug({ jobId, phase, stdout: result.stdout?.slice(0, 200) }, `${phase}_hook succeeded`);
   }
+  return result.status;
 }
 
 /**
@@ -340,9 +354,28 @@ export async function runCronJob(
     }
   }
 
-  // Execute pre_hook before anything else (runs in the original workDir, not the worktree)
+  // Execute pre_hook before anything else (runs in the original workDir, not the worktree).
+  // If the pre_hook exits with PRE_HOOK_SKIP_EXIT_CODE (99), skip the run entirely —
+  // do not spawn Claude. This is the cheap "no-work gate" for idle queue-driven agents.
   if (job.preHook) {
-    runHook(job.preHook, workDir, job.id, "pre");
+    const preStatus = runHook(job.preHook, workDir, job.id, "pre");
+    if (preStatus === PRE_HOOK_SKIP_EXIT_CODE) {
+      log.info({ jobId: job.id, preStatus }, "pre_hook requested skip — not spawning Claude");
+      if (worktreeInfo) {
+        forceRemoveWorktree(workDir as string, worktreeInfo, job.id);
+      }
+      const finishedAt = new Date();
+      return {
+        jobId: job.id,
+        text: "skipped by pre_hook (no work)",
+        costUsd: 0,
+        durationMs: finishedAt.getTime() - startedAt.getTime(),
+        numTurns: 0,
+        isError: false,
+        startedAt,
+        finishedAt,
+      };
+    }
   }
 
   // Set up agent workspace if provided

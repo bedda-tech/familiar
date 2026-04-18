@@ -197,14 +197,18 @@ export class MemoryStore {
     // Get query embedding
     const embedding = await this.embed(query);
 
-    // Vector search (optionally filtered by category)
+    // Vector search (optionally filtered by category).
+    // sqlite-vec ≥0.1.7 rejects knn queries that don't pin k via MATCH-clause
+    // `AND k = ?` — a JOIN+LIMIT combo no longer implicitly bounds the scan.
+    // k is overfetched so the post-JOIN category filter has headroom.
+    const k = category ? limit * 8 : limit * 2;
     let vecSql = `
       SELECT mc.id, mcv.distance
       FROM memory_chunks_vec mcv
       JOIN memory_chunks mc ON mc.id = mcv.id
-      WHERE mcv.embedding MATCH ?
+      WHERE mcv.embedding MATCH ? AND k = ?
     `;
-    const vecParams: unknown[] = [new Float32Array(embedding)];
+    const vecParams: unknown[] = [new Float32Array(embedding), k];
     if (category) {
       vecSql += ` AND mc.category = ?`;
       vecParams.push(category);
@@ -512,10 +516,13 @@ export class MemoryStore {
         )
         .run(id, relPath, chunk.startLine, chunk.endLine, chunk.text);
 
+      // OR REPLACE in case an orphan row from a prior crashed index run still
+      // occupies this id in the vec table — memory_chunks gets wiped above but
+      // vec rows can leak if indexing was interrupted between the two deletes.
       this.db
         .prepare(
           `
-        INSERT INTO memory_chunks_vec (id, embedding)
+        INSERT OR REPLACE INTO memory_chunks_vec (id, embedding)
         VALUES (?, ?)
       `,
         )
