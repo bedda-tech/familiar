@@ -507,6 +507,10 @@ export class MemoryStore {
           category,
         );
 
+      // Explicit pre-delete handles orphan rows from prior crashed runs.
+      // sqlite-vec 0.1.x INSERT OR REPLACE does not reliably resolve PRIMARY KEY
+      // conflicts on vec0 virtual tables, so we delete-then-insert instead.
+      this.db.prepare(`DELETE FROM memory_chunks_fts WHERE id = ?`).run(id);
       this.db
         .prepare(
           `
@@ -516,13 +520,11 @@ export class MemoryStore {
         )
         .run(id, relPath, chunk.startLine, chunk.endLine, chunk.text);
 
-      // OR REPLACE in case an orphan row from a prior crashed index run still
-      // occupies this id in the vec table — memory_chunks gets wiped above but
-      // vec rows can leak if indexing was interrupted between the two deletes.
+      this.db.prepare(`DELETE FROM memory_chunks_vec WHERE id = ?`).run(id);
       this.db
         .prepare(
           `
-        INSERT OR REPLACE INTO memory_chunks_vec (id, embedding)
+        INSERT INTO memory_chunks_vec (id, embedding)
         VALUES (?, ?)
       `,
         )
