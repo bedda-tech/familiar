@@ -661,10 +661,17 @@ export async function runCronJob(
     runHook(job.postHook, workDir, job.id, "post");
   }
 
-  // Build final text. When both accumulatedText and result.text are empty
-  // (common in tool-heavy sessions), generate a fallback summary so the
-  // delivery message isn't blank.
-  let finalText = accumulatedText || result.text;
+  // Build final text for the database / dashboard / delivery preview.
+  //
+  // Prefer `result.text` (the final assistant message from the result event)
+  // over `accumulatedText` (every turn concatenated). Concatenating every turn
+  // dumps "I'll do X / let me check Y" narration into the summary; result.text
+  // is the clean final report that the dashboard preview should show. The full
+  // transcript is still saved to the workspace output file for debugging.
+  //
+  // When both are empty (common in pure tool-use sessions), fall back to a
+  // generated session-completed summary.
+  let finalText = result.text || accumulatedText;
   if (!finalText && (result.numTurns > 0 || toolsUsed.size > 0)) {
     const parts = [`Session completed (${result.numTurns} turns)`];
     if (toolsUsed.size > 0) {

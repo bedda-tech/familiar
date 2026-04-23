@@ -224,7 +224,9 @@ export class AgentManager {
             costUsd = r.total_cost_usd ?? r.cost_usd ?? 0;
             durationMs = r.duration_ms ?? 0;
             numTurns = r.num_turns ?? 0;
-            if (r.result && !resultText) {
+            // Prefer the final `result` event text (clean closing message) over
+            // accumulated turn-by-turn text (which contains "I'll do X" narration).
+            if (r.result) {
               resultText = r.result;
             }
             break;
