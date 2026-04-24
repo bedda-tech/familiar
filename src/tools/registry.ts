@@ -87,9 +87,9 @@ export const TOOL_REGISTRY: CreateToolInput[] = [
     name: "Claude CLI",
     type: "cli",
     cli_command: "claude",
-    binary_path: "~/.local/bin/claude",
-    description: "Claude Code CLI (headless -p mode). Use for LLM calls in scripts: claude -p. OAuth auto-refreshed.",
-    version: "2.1.72",
+    binary_path: "~/.nvm/versions/node/v25.2.1/bin/claude",
+    description: "Claude Code CLI (headless -p mode). Use for LLM calls in scripts: claude -p. OAuth auto-refreshed. Installed via npm global.",
+    version: "2.1.119",
   },
   {
     id: "sqlite-utils",
