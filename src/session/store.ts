@@ -162,16 +162,18 @@ export class SessionStore {
     return row.session_id;
   }
 
-  /** Store or update session mapping */
+  /** Store or update session mapping. Resets message_count on a new session_id
+   *  so rotation-by-count actually rotates instead of being stuck above the threshold. */
   upsertSession(chatId: string, sessionId: string): void {
     this.db
       .prepare(
-        `INSERT INTO sessions (chat_id, session_id, message_count)
-         VALUES (?, ?, 1)
+        `INSERT INTO sessions (chat_id, session_id, message_count, created_at, last_used_at)
+         VALUES (?, ?, 1, datetime('now'), datetime('now'))
          ON CONFLICT(chat_id) DO UPDATE SET
            session_id = excluded.session_id,
+           created_at = CASE WHEN sessions.session_id = excluded.session_id THEN sessions.created_at ELSE datetime('now') END,
            last_used_at = datetime('now'),
-           message_count = message_count + 1`,
+           message_count = CASE WHEN sessions.session_id = excluded.session_id THEN sessions.message_count + 1 ELSE 1 END`,
       )
       .run(chatId, sessionId);
   }

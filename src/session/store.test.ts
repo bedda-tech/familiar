@@ -53,7 +53,7 @@ describe("SessionStore", () => {
   });
 
   // ---------- 3. upsertSession updates existing session ----------
-  it("upsertSession on existing chat updates session id and increments message count", () => {
+  it("upsertSession on existing chat replaces session id and resets message count", () => {
     store.upsertSession("chat-1", "sess-old");
     store.upsertSession("chat-1", "sess-new");
 
@@ -62,8 +62,19 @@ describe("SessionStore", () => {
 
     const info = store.getSessionInfo("chat-1");
     expect(info).not.toBeNull();
-    // First upsert sets count=1, second upsert increments to 2
-    expect(info!.messageCount).toBe(2);
+    // A different session_id is a true rotation: count must reset to 1, otherwise
+    // a chat that just rotated past rotateAfterMessages stays past the threshold and
+    // rotates again on every subsequent message.
+    expect(info!.messageCount).toBe(1);
+  });
+
+  it("upsertSession with same session_id increments message count", () => {
+    store.upsertSession("chat-1", "sess-abc");
+    store.upsertSession("chat-1", "sess-abc");
+    store.upsertSession("chat-1", "sess-abc");
+
+    const info = store.getSessionInfo("chat-1");
+    expect(info!.messageCount).toBe(3);
   });
 
   // ---------- 4. touchSession increments count ----------
@@ -271,17 +282,35 @@ describe("SessionStore", () => {
     expect(result.val).toBe(1);
   });
 
-  it("upsertSession replaces session id on conflict while preserving created_at", () => {
+  it("upsertSession resets created_at when session_id changes (new session = new lifetime)", () => {
     store.upsertSession("chat-1", "sess-first");
     const infoFirst = store.getSessionInfo("chat-1");
+
+    // Backdate the row so we can detect that created_at was actually updated
+    store.getDb()
+      .prepare("UPDATE sessions SET created_at = datetime('now', '-1 hour') WHERE chat_id = ?")
+      .run("chat-1");
+    const infoBackdated = store.getSessionInfo("chat-1");
 
     store.upsertSession("chat-1", "sess-second");
     const infoSecond = store.getSessionInfo("chat-1");
 
     expect(infoSecond!.sessionId).toBe("sess-second");
-    // created_at should remain unchanged since the ON CONFLICT UPDATE
-    // does not modify created_at
-    expect(infoSecond!.createdAt).toBe(infoFirst!.createdAt);
+    expect(infoSecond!.createdAt).not.toBe(infoBackdated!.createdAt);
+    expect(infoFirst).not.toBeNull();
+  });
+
+  it("upsertSession with same session_id preserves created_at", () => {
+    store.upsertSession("chat-1", "sess-abc");
+    store.getDb()
+      .prepare("UPDATE sessions SET created_at = datetime('now', '-1 hour') WHERE chat_id = ?")
+      .run("chat-1");
+    const before = store.getSessionInfo("chat-1");
+
+    store.upsertSession("chat-1", "sess-abc");
+    const after = store.getSessionInfo("chat-1");
+
+    expect(after!.createdAt).toBe(before!.createdAt);
   });
 
   it("session rotation boundary: count just below limit is still valid", () => {
