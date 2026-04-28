@@ -521,6 +521,9 @@ function cmdTui(subArgs: string[] = []): void {
 
   const env = { ...process.env };
   delete env.CLAUDECODE;
+  // Strip env-scrub or --dangerously-skip-permissions gets clamped back to default mode.
+  // Familiar TUI is interactive Matt-controlled; bypass-permissions is the desired UX.
+  delete env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB;
 
   const result = spawnSync("claude", args, {
     cwd: config.claude.workingDirectory,
