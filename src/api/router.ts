@@ -449,6 +449,12 @@ export class ApiRouter {
         return true;
       }
 
+      // ── Infra: hetzner-vpn ──
+      if (path === "/api/infra/hetzner-vpn") {
+        this.handleHetznerVpnStatus(res);
+        return true;
+      }
+
       // ── Tasks ──
       if (path === "/api/tasks") {
         const params = new URLSearchParams(queryString ?? "");
@@ -2829,6 +2835,62 @@ When done, summarize what you did.`;
     }
 
     sendJson(res, 200, { config: sanitized });
+  }
+
+  /**
+   * Get hetzner-vpn live status from Hetzner Cloud API.
+   * Reads HCLOUD_TOKEN from env or, as fallback, ~/.media-server-keys.env.
+   */
+  private async handleHetznerVpnStatus(res: ServerResponse): Promise<void> {
+    const SERVER_ID = 128443509;
+    let token = process.env.HCLOUD_TOKEN;
+    if (!token) {
+      try {
+        const envFile = readFileSync(`${process.env.HOME}/.media-server-keys.env`, "utf-8");
+        const m = envFile.match(/^[ \t]*export[ \t]+HCLOUD_TOKEN=["']?([^"'\s]+)/m);
+        if (m) token = m[1];
+      } catch {}
+    }
+    if (!token) {
+      sendJson(res, 503, { error: "HCLOUD_TOKEN not configured" });
+      return;
+    }
+    try {
+      const apiRes = await fetch(`https://api.hetzner.cloud/v1/servers/${SERVER_ID}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!apiRes.ok) {
+        sendJson(res, 502, { error: `Hetzner API ${apiRes.status}` });
+        return;
+      }
+      const data = (await apiRes.json()) as any;
+      const s = data.server;
+      sendJson(res, 200, {
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        created: s.created,
+        type: s.server_type?.name,
+        cores: s.server_type?.cores,
+        memory_gb: s.server_type?.memory,
+        disk_gb: s.server_type?.disk,
+        datacenter: s.datacenter?.name,
+        location: {
+          city: s.datacenter?.location?.city,
+          country: s.datacenter?.location?.country,
+        },
+        ipv4: s.public_net?.ipv4?.ip ?? null,
+        ipv6: s.public_net?.ipv6?.ip ?? null,
+        tailnet_ipv4: "100.83.97.14",
+        tailnet_ipv6: "fd7a:115c:a1e0::1437:610e",
+        outgoing_traffic: s.outgoing_traffic ?? 0,
+        ingoing_traffic: s.ingoing_traffic ?? 0,
+        included_traffic: s.included_traffic ?? 0,
+        fetched_at: new Date().toISOString(),
+      });
+    } catch (e: any) {
+      sendJson(res, 500, { error: e?.message ?? "fetch failed" });
+    }
   }
 
   /**

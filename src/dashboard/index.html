@@ -2633,6 +2633,7 @@
             <button class="btn btn-sm" onclick="loadServices()">Refresh</button>
           </div>
         </div>
+        <div id="infraGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:var(--space-md);margin-bottom:var(--space-lg);"></div>
         <div id="servicesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-md);"></div>
       </div>
 
@@ -6820,7 +6821,88 @@
 
       // ── Services ────────────────────────────────────────────────────────────
 
+      function fmtBytesShort(n) {
+        if (!n && n !== 0) return '—';
+        if (n < 1024) return n + ' B';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+        if (n < 1024 ** 3) return (n / 1024 ** 2).toFixed(1) + ' MB';
+        if (n < 1024 ** 4) return (n / 1024 ** 3).toFixed(2) + ' GB';
+        return (n / 1024 ** 4).toFixed(2) + ' TB';
+      }
+
+      function fmtUptimeShort(iso) {
+        const ms = Date.now() - new Date(iso).getTime();
+        const d = Math.floor(ms / 86400000);
+        const h = Math.floor((ms % 86400000) / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h ' + m + 'm';
+        return m + 'm';
+      }
+
+      async function loadInfra() {
+        const grid = document.getElementById('infraGrid');
+        if (!grid) return;
+        grid.innerHTML = '<div style="grid-column:1/-1;color:var(--text-muted);font-size:var(--text-sm)">Loading hetzner-vpn…</div>';
+        let data = null, err = null;
+        try {
+          data = await api('GET', '/api/infra/hetzner-vpn');
+        } catch (e) { err = String(e); }
+        if (!data || data.error) {
+          grid.innerHTML = `<div class="ov-empty">hetzner-vpn: ${esc(err || data?.error || 'unavailable')}</div>`;
+          return;
+        }
+        const incl = data.included_traffic || 0;
+        const used = (data.outgoing_traffic || 0) + (data.ingoing_traffic || 0);
+        const pct = incl ? (used / incl) * 100 : 0;
+        const barColor = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#10b981';
+        const dotColor = data.status === 'running' ? '#10b981' : '#ef4444';
+        grid.innerHTML = `
+          <div style="background:var(--bg-card);border:1px solid var(--bg-hover);border-radius:var(--radius-lg);padding:var(--space-lg);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md);">
+              <div style="display:flex;align-items:center;gap:var(--space-sm)">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dotColor}"></span>
+                <span style="font-weight:600;font-size:var(--text-base);color:var(--text-bright)">hetzner-vpn</span>
+                <span style="font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">${esc(data.status || 'unknown')}</span>
+              </div>
+              <span style="font-size:var(--text-xs);color:var(--text-muted)">${esc(data.type || '')} · ${esc(data.location?.city || '')}, ${esc(data.location?.country || '')}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md);font-size:var(--text-sm);margin-bottom:var(--space-md)">
+              <div>
+                <div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:2px">Public IPv4</div>
+                <div style="font-family:monospace">${esc(data.ipv4 || '—')}</div>
+              </div>
+              <div>
+                <div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:2px">Tailnet IPv4</div>
+                <div style="font-family:monospace">${esc(data.tailnet_ipv4 || '—')}</div>
+              </div>
+              <div>
+                <div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:2px">Spec</div>
+                <div style="font-family:monospace">${data.cores || '?'}c / ${data.memory_gb || '?'}GB / ${data.disk_gb || '?'}GB</div>
+              </div>
+              <div>
+                <div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:2px">Uptime</div>
+                <div style="font-family:monospace">${data.created ? esc(fmtUptimeShort(data.created)) : '—'}</div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:var(--text-muted);margin-bottom:4px">
+                <span>Monthly traffic</span>
+                <span>${esc(fmtBytesShort(used))} / ${esc(fmtBytesShort(incl))} (${pct.toFixed(2)}%)</span>
+              </div>
+              <div style="height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${Math.min(100, pct).toFixed(2)}%;background:${barColor}"></div>
+              </div>
+              <div style="display:flex;gap:var(--space-md);font-size:var(--text-xs);color:var(--text-muted);margin-top:6px">
+                <span>↑ ${esc(fmtBytesShort(data.outgoing_traffic))}</span>
+                <span>↓ ${esc(fmtBytesShort(data.ingoing_traffic))}</span>
+              </div>
+            </div>
+          </div>`;
+      }
+
       async function loadServices() {
+        loadInfra();
         const grid = document.getElementById('servicesGrid');
         let services = [];
         try {
